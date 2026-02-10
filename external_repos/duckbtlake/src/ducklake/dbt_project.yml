@@ -1,0 +1,11 @@
+# dbt_project.yml  – drop this beside your models/ folder
+name: 'hospital_lakehouse'      # any slug-safe name
+version: '1.0'
+config-version: 2               # always 2 for modern dbt
+
+profile: 'hospital_lakehouse'   # <- must match key in profiles.yml
+
+model-paths: ['models']         # where your .sql or .py models sit
+models:
+  hospital_lakehouse:           # same as name:  (scoping)
+    +materialized: table        # default; override per model if needed

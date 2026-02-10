@@ -1,0 +1,26 @@
+# DO NOT MODIFY THIS FILE MANUALLY.
+# This file contains the answers to the questions asked by the
+# v6-algorithm-template-creator (using the Copier package). The answers will
+# be updated if you re-run the template creator. Also, the answers in this file
+# may be used to submit your algorithm to a vantage6 algorithm store.
+_commit: 4.3.4
+_src_path: gh:vantage6/v6-algorithm-template.git
+advanced: true
+algorithm_description: container to test read write from local files through local
+    http server
+algorithm_name: http-folder-test
+author: Yannick Vinkesteijn
+copyright: ''
+has_central_function: false
+has_docs: false
+has_gh_pipeline: false
+has_partial_function: true
+open_source_license: no_license
+partial_args:
+- arg1
+partial_function_client: false
+partial_function_data: true
+partial_function_name: http_folders_test
+partial_function_number_databases: 1
+project_name: http-folder-test
+use_vpn: false

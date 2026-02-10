@@ -1,0 +1,9 @@
+services:
+  fastapi-app:
+    build: .
+    ports:
+      - "8082:8082"  # Map port 8082 on the host to port 8082 in the container
+    volumes:
+      - ./.db-data:/plugindb/db-data    # Mount local folder ./db-data to /plugindb/db-data inside the container
+      - /home/yannick/code/aioc/tests/test_data/dagopnamen:/plugindb/aioc-data  # Mount local folder ./aioc-data to /plugindb/aioc-data inside the container
+    restart: always

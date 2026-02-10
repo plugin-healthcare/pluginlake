@@ -1,0 +1,5 @@
+vantage6-algorithm-tools
+pandas
+aiohttp
+requests
+fsspec

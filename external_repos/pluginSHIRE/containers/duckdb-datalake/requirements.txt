@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+duckdb
+aiofiles
+pyarrow
+polars
+python-multipart

@@ -1,0 +1,25 @@
+services:
+  apache-server:
+    container_name: apache-server-plugin
+    build: 
+      context: ./apache-server
+      dockerfile: Dockerfile
+      args:
+        UID: "${UID:-1000}"
+        GID: "${GID:-1000}"
+    volumes:
+      - /home/yannick/code/pluginSHIRE/containers/webdav-network/TEST_DATA_MOUNT:/usr/local/apache2/htdocs/data
+    networks:
+      - plugin-network
+
+  webdav-client:
+    container_name: webdav-client-plugin
+    build: 
+      context: ./webdav-client
+      dockerfile: Dockerfile
+    networks:
+      - plugin-network
+
+networks:
+  plugin-network:
+    driver: bridge
