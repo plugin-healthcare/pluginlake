@@ -1,7 +1,159 @@
 [project]
 name = "pluginlake"
 version = "0.1.0"
-description = "Add your description here"
+description = "The federated lakehouse."
+license = { text = "MIT" }
+authors = [
+    { name = "Yannick Vinkesteijn" }
+]
 readme = "README.md"
-requires-python = ">=3.14"
-dependencies = []
+requires-python = ">=3.12"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Healthcare Industry",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+    "Typing :: Typed",
+]
+
+dependencies = [
+    "dagster>=1.12.14",
+    "duckdb>=1.4.4",
+    "fastapi>=0.128.7",
+    "polars>=1.38.1",
+    "pydantic>=2.12.5",
+]
+
+[project.urls]
+Homepage = "https://github.com/plugin-healthcare/pluginlake"
+Repository = "https://github.com/plugin-healthcare/pluginlake"
+Issues = "https://github.com/plugin-healthcare/pluginlake/issues"
+Documentation = "https://github.com/plugin-healthcare/pluginlake#readme"
+
+# Uncomment and adjust if pluginlake has a CLI or Dagster entry point
+# [project.scripts]
+# pluginlake = "pluginlake:main"
+
+# [project.entry-points."dagster"]
+# pluginlake = "pluginlake.definitions"
+
+[build-system]
+requires = ["uv_build>=0.10.0,<0.11.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.5.1",
+    "ruff>=0.15.0",
+    "ty>=0.0.15",
+]
+test = [
+    "pytest>=9.0.2",
+]
+docs = [
+    "zensical>=0.0.21",
+]
+nb = [
+    "marimo>=0.19.9",
+    "pyzmq>=27.1.0",
+]
+
+# --- Tool Configuration ---
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+fix = true
+# Skip non-source directories
+exclude = [
+    "examples/",
+    "docs/",
+    "scripts/",
+]
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "COM812",  # Trailing comma missing — conflicts with ruff formatter
+    "ISC001",  # Implicit string concat on single line — conflicts with ruff formatter
+    "D203",    # One blank line before class docstring — conflicts with D211
+    "D213",    # Multi-line docstring summary on second line — conflicts with D212
+    "E501",    # Line length regulated by formatter
+    "TD002",   # Missing author in TODO
+    "TD003",   # Missing issue link on the line following this TODO
+    "TRY003",  # Avoid specifying long messages outside the exception class
+    "SIM102",  # Use a single if statement instead of nested if statements
+    "SIM108",  # Use ternary operator
+]
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.isort]
+known-first-party = ["pluginlake"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.flake8-type-checking]
+strict = true
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "S101",    # Use of assert
+    "D100",    # Missing docstring in public module
+    "D103",    # Missing docstring in public function
+    "D104",    # Missing docstring in public package
+    "ANN",     # Type annotations (pytest fixtures are dynamic)
+]
+"notebooks/*.py" = [
+    "E402",    # Module level import not at top of file
+    "F401",    # Imported but unused
+    "F403",    # 'from module import *' used
+    "T201",    # print() statements
+    "S101",    # Use of assert
+    "D100",    # Missing docstring in public module
+    "D103",    # Missing docstring in public function
+    "ANN",     # Type annotations
+]
+
+[tool.ruff.format]
+quote-style = "double"
+docstring-code-format = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = [
+    "-ra",
+    "-q",
+    "--strict-config",
+    "--strict-markers",
+    "--import-mode=importlib",
+]
+xfail_strict = true
+filterwarnings = [
+    "error",
+]
+
+[tool.ty.environment]
+python-version = "3.14"
+
+[tool.ty.rules]
+unused-ignore-comment = "warn"
+invalid-return-type = "error"
+invalid-argument-type = "error"
+division-by-zero = "error"
+redundant-cast = "warn"
+invalid-method-override = "warn"
+
+[tool.uv-secure.maintainability_criteria]
+forbid_yanked = true
+forbid_archived = true
+forbid_quarantined = true
