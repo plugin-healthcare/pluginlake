@@ -22,6 +22,7 @@ Elk ziekenhuisserver draait een lokale lakehouse die klinische data intern behee
 - We gebruiken synthea data (FHIR, csv format) en de synthea OMOP dataset van AWS
 - OMOP controlled vocabularies inclusief volledige DHD thesaurus (VT + DT)
 
+![overzicht basis technisch design](./imgs/design_pluginlake.drawio.png)
 ---
 
 ## Implementatiefases
@@ -132,27 +133,14 @@ pluginlake/
     └── stress/
 ```
 
-Assets (`assets/`) bevatten **wat** er moet gebeuren — welke data, welke transformatie, welke dependencies. Orchestration (`orchestration/`) bevat **hoe** Dagster het uitvoert. Assets zijn los testbaar zonder Dagster runtime.
-
----
-
-## Belangrijke Beslissingen
-
-| Beslissing | Keuze | Onderbouwing |
-|------------|-------|--------------|
-| OMOP opslag | Relationele tabellen | Native DuckDB schemas; vocabulary joins werken natuurlijk |
-| IO manager per formaat | Ja | Schone scheiding; assets declareren formaat via `io_manager_key` |
-| FastAPI los van Dagster | Ja | Verschillende scaling profielen; API stateless, Dagster stateful |
-| Auth model | Placeholder nu → dataset-level ACL later | Dependency injection guard die later vervangen wordt |
-| Container updates | WUD of vergelijkbaar | Decentraal; geen centrale SSH toegang nodig |
-| Assets vs orchestration | Aparte modules | Assets als config-as-code los testbaar van Dagster runtime |
+Assets (`assets/`) bevatten **wat** er moet gebeuren; welke data, welke transformatie, welke dependencies. Orchestration (`orchestration/`) bevat **hoe** Dagster het uitvoert. Assets zijn los testbaar zonder Dagster runtime.
 
 ---
 
 ## Open Vragen
 
-1. **Vantage6 integratie** — moet FastAPI endpoints aanbieden voor Vantage6 algoritmes, of apart houden?
-2. **Centrale services** — wat pusht de lakehouse naar centraal vs. wat haalt centraal on-demand op?
-3. **OMOP versie** — alleen v5.4, of ook v5.3 backwards compatibility nodig?
-4. **dlt vs Dagster scheduler** — keuze voor ingestie tooling nog open
-5. **FHIR module** — nog niet als stories uitgewerkt; wanneer in scope?
+1. **Vantage6 integratie**: hoe communiceert/integreert vantage6 met de data lake
+2. **Centrale services**: push/pull centraal vs. decentraal?
+4. **dlt vs Dagster scheduler**: keuze voor ingestie tooling nog open
+5. **pluginlake intern data format**: wel format wordt gehanteerd? alles naar tabulair/dataframes/parquet of behouden in fhir/omop etc.
+6. **FHIR module**: nog niet als stories uitgewerkt, focus nu op OMOP; wanneer in scope?
