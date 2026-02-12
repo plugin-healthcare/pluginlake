@@ -7,8 +7,7 @@ SCHEMAS_ROOT = Path("schemas")
 
 
 def extract_code_system_schema(csv_path: Path, code_column: str, out_path: Path) -> dict:
-    """
-    Read a CSV, collect unique codes, and return a JSON-Schema dict
+    """Read a CSV, collect unique codes, and return a JSON-Schema dict
     whose $id is the path within the schemas directory (e.g. 'refs/agb_codes.json').
     """
     df = pl.read_csv(str(csv_path), separator=";", schema_overrides={code_column: pl.Utf8})
@@ -29,8 +28,7 @@ def write_schema_file(schema: dict, out_path: Path) -> None:
 
 
 def generate_schemas(tasks: list[tuple[Path, str, Path]]) -> None:
-    """
-    Given tasks = [(csv_path, code_column, output_schema_path), ...],
+    """Given tasks = [(csv_path, code_column, output_schema_path), ...],
     generate each JSON‐Schema file.
     """
     for csv_path, code_column, out_path in tasks:

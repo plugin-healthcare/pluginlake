@@ -1,13 +1,14 @@
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, Header, Form
-from cryptography.hazmat.primitives import serialization
-from blobprox.config import logger, settings
-from blobprox.utils import crypto
-from blobprox.utils.helpers import string_to_bool
-from blobprox.utils import blob
+import io
 import json
 import mimetypes
-import io
+
+from cryptography.hazmat.primitives import serialization
+from fastapi import Depends, FastAPI, Form, Header, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
+
+from blobprox.config import logger, settings
+from blobprox.utils import blob, crypto
+from blobprox.utils.helpers import string_to_bool
 
 app = FastAPI(name="BlobProx")
 
@@ -27,8 +28,7 @@ def authenticate(
 
         if decrypted_key == x_comparison_key:
             return True
-        else:
-            raise HTTPException(status_code=401, detail="Invalid key")
+        raise HTTPException(status_code=401, detail="Invalid key")
 
     except Exception as e:
         raise HTTPException(status_code=401, detail="Authentication failed") from e
@@ -40,7 +40,6 @@ def verify_authentication(
     x_comparison_key: str = Header(None, alias="x-comparison-key"),
 ) -> bool:
     """Dependency for authentication"""
-
     is_authenticated = authenticate(x_decryption_key, x_salt, x_comparison_key)
     logger.info(f"Authenticated: {is_authenticated}")
 
@@ -125,7 +124,6 @@ async def download_blob(
     auth: bool = Depends(verify_authentication),
 ) -> StreamingResponse:
     """Download a file from Azure Blob Storage, decrypt it, and return the decrypted file."""
-
     # Decrypt the symmetric key using RSA private key
     logger.info("Decrypting symmetric key")
     try:

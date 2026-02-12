@@ -53,6 +53,3 @@ dg dev
 ```
 
 Open http://localhost:3000 in your browser to see the project.
-
-
-

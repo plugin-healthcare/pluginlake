@@ -7,18 +7,13 @@ from azure.storage.blob import BlobServiceClient
 class AzureServiceClientError(Exception):
     """Custom exception for Azure Service Client errors."""
 
-    pass
-
 
 class AzureBlobClientError(Exception):
     """Custom exception for Azure Blob Client errors."""
 
-    pass
-
 
 def get_service_client(creds: dict[str, str]) -> ClientSecretCredential:
     """Create and return a ClientSecretCredential object using the provided credentials."""
-
     missing = [key for key in ["tenantId", "clientId", "clientSecret"] if key not in creds or not creds[key]]
     if missing:
         raise ValueError(f"Credentials must contain non-empty values for: {', '.join(missing)}")
@@ -46,8 +41,7 @@ def upload_blob(
     blob_service_client: BlobServiceClient,
     overwrite: bool = False,
 ) -> bool:
-    """
-    Upload a blob to Azure Blob Storage.
+    """Upload a blob to Azure Blob Storage.
 
     Parameters:
     - data (bytes): The data to upload.
@@ -67,8 +61,7 @@ def upload_blob(
 
 
 def download_blob(container_name: str, blob_name: str, blob_service_client: BlobServiceClient) -> BytesIO | None:
-    """
-    Download a blob from Azure Blob Storage and return it as a BytesIO object.
+    """Download a blob from Azure Blob Storage and return it as a BytesIO object.
 
     Parameters:
     - container_name (str): The name of the container.
@@ -86,8 +79,7 @@ def download_blob(container_name: str, blob_name: str, blob_service_client: Blob
 
 
 def list_blobs(container_name: str, blob_service_client: BlobServiceClient) -> list[str]:
-    """
-    List all blobs in a container.
+    """List all blobs in a container.
 
     Parameters:
     - container_name (str): The name of the container.
@@ -102,8 +94,7 @@ def list_blobs(container_name: str, blob_service_client: BlobServiceClient) -> l
 
 
 def delete_blob(container_name: str, blob_name: str, blob_service_client: BlobServiceClient) -> bool:
-    """
-    Delete a blob from Azure Blob Storage.
+    """Delete a blob from Azure Blob Storage.
 
     Parameters:
     - container_name (str): The name of the container.
@@ -121,8 +112,7 @@ def delete_blob(container_name: str, blob_name: str, blob_service_client: BlobSe
 
 
 def list_containers(blob_service_client: BlobServiceClient) -> list[str]:
-    """
-    List all containers in the Azure Blob Storage account.
+    """List all containers in the Azure Blob Storage account.
 
     Parameters:
     - blob_service_client (BlobServiceClient): The BlobServiceClient instance.

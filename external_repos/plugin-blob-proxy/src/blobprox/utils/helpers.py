@@ -4,10 +4,9 @@ import os
 
 def read_json(path: str) -> dict:
     """Read and return the contents of a JSON file."""
-
     if not os.path.exists(path):
         raise FileNotFoundError(f"File not found: {path}")
-    with open(path, "r") as file:
+    with open(path) as file:
         return json.load(file)
 
 

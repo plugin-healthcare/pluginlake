@@ -1,7 +1,7 @@
 services:
   apache-server:
     container_name: apache-server
-    build: 
+    build:
       context: .
       dockerfile: Dockerfile
     ports:

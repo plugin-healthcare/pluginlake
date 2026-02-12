@@ -34,4 +34,3 @@ docker-image:
 	-t v6-http-tag \
 	-t  drplugindhdprd.azurecr.io/v6-http-tag:latest \
 	./
-

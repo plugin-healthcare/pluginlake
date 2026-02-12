@@ -1,11 +1,9 @@
-import yaml
 from pathlib import Path
 
 import dagster as dg
-from dagster_polars import PolarsParquetIOManager
-import polars as pl
 import duckdb
-
+import polars as pl
+import yaml
 
 # Define root directory
 root = Path(__file__).parent.parent.parent.parent
@@ -22,8 +20,7 @@ def assets(context: dg.AssetExecutionContext) -> dg.MaterializeResult: ...
 
 
 def _discover_vocabulary_files() -> list[tuple[str, Path]]:
-    """
-    Discover all vocabulary files in the configured directories.
+    """Discover all vocabulary files in the configured directories.
 
     Returns:
         List of (table_name, file_path) tuples
@@ -48,8 +45,7 @@ def _discover_vocabulary_files() -> list[tuple[str, Path]]:
 
 
 def build_vocabulary_asset(table_name: str, file_path: Path) -> dg.AssetsDefinition:
-    """
-    Build a Dagster asset for a single vocabulary table.
+    """Build a Dagster asset for a single vocabulary table.
 
     Args:
         table_name: Name of the vocabulary table
@@ -87,12 +83,10 @@ def build_vocabulary_asset(table_name: str, file_path: Path) -> dg.AssetsDefinit
                 truncate_ragged_lines=True,  # Handle rows with extra columns
                 ignore_errors=True,  # Skip rows that can't be parsed
                 encoding="utf8-lossy",  # Handle encoding issues gracefully
-                quote_char=None # CSVs contain quotes!
+                quote_char=None,  # CSVs contain quotes!
             )
 
-            context.log.info(
-                f"✅ Loaded {table_name}: {len(df):,} rows, {len(df.columns)} columns"
-            )
+            context.log.info(f"✅ Loaded {table_name}: {len(df):,} rows, {len(df.columns)} columns")
 
             return df
 
@@ -129,8 +123,7 @@ def load_cbs_job_from_yaml(yaml_path: str) -> dg.Definitions:
 
 
 def build_omop_duckdb_asset(vocab_files: list[tuple[str, Path]]) -> dg.AssetsDefinition:
-    """
-    Build a DuckDB asset that combines all OMOP vocabulary tables.
+    """Build a DuckDB asset that combines all OMOP vocabulary tables.
 
     Args:
         vocab_files: List of (table_name, file_path) tuples
@@ -213,10 +206,7 @@ def vocab_defs():
         return dg.Definitions(assets=[])
 
     # Build an asset for each vocabulary file
-    vocab_assets = [
-        build_vocabulary_asset(table_name, file_path)
-        for table_name, file_path in vocab_files
-    ]
+    vocab_assets = [build_vocabulary_asset(table_name, file_path) for table_name, file_path in vocab_files]
 
     # Add the combined DuckDB asset
     vocab_assets.append(build_omop_duckdb_asset(vocab_files))

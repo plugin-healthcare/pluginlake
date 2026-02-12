@@ -4,7 +4,7 @@ Azure Blob Storage proxy for the pluginML package. This service provides secure 
 
 ## Overview
 
-The proxy offers fastAPI endpoints to upload and download files as blob to azure blob storage. Files are encrypted with a symmetric key (using Fernet from the [cryptography](https://cryptography.io) library), and the symmetric key itself is encrypted with RSA public keys provided by the client. This design ensures only authorized clients (in possession of the corresponding RSA private key) can decrypt the symmetric key and subsequently the file. 
+The proxy offers fastAPI endpoints to upload and download files as blob to azure blob storage. Files are encrypted with a symmetric key (using Fernet from the [cryptography](https://cryptography.io) library), and the symmetric key itself is encrypted with RSA public keys provided by the client. This design ensures only authorized clients (in possession of the corresponding RSA private key) can decrypt the symmetric key and subsequently the file.
 Each blob proxy container has it's own set of symmetric, and RSA public and private key.
 
 ### Authentication
@@ -13,16 +13,16 @@ The proxy uses a custom authentication mechanism to ensure secure communication 
 
 The client must provide three custom headers with each request:
 
-- **`x-decryption-key`:**  
+- **`x-decryption-key`:**
   A unique key used to decrypt the symmetric key. This key is stored in the Azure Blob Storage account and is used to encrypt the symmetric key.
-- **`x-salt`:**  
+- **`x-salt`:**
   A unique salt value used to generate the symmetric key. This salt is stored in the Azure Blob Storage account and is used to encrypt the symmetric key.
 - **`x-comparison-key`:**
   A unique key used to compare the decryption key with the key stored in the Azure Blob Storage account.
 
 The server verifies these headers in the [verify_authentication](src/blobprox/main.py) function before processing the request.
 
-> :warning: 
+> :warning:
 
 ### Key Generation
 
@@ -50,7 +50,7 @@ An example of the response of the upload endpoint:
 ```
 
 > :bulb: **Note:**
-> RSA encrypt always requires the public key from the recipient that will decrypt the message. 
+> RSA encrypt always requires the public key from the recipient that will decrypt the message.
 > The public key can be retrieved through the endpoint and is always send in the request to upload a file.
 
 
@@ -66,13 +66,13 @@ headers = {
 }
 ```
 
-- **GET `/key/public`:**  
+- **GET `/key/public`:**
   Returns the RSA public key in PEM format. Use this endpoint to get the public key needed to encrypt symmetric keys.
 
-- **POST `/upload/{blob_container}/{blob_name:path}`:**  
-  Encrypts and uploads a file to Azure Blob Storage. The file is encrypted with the symmetric key, and the symmetric key is encrypted with provided RSA public keys.  
-  **Parameters:**  
-  - `public-keys` (Form): JSON mapping of key identifiers to RSA public keys  
+- **POST `/upload/{blob_container}/{blob_name:path}`:**
+  Encrypts and uploads a file to Azure Blob Storage. The file is encrypted with the symmetric key, and the symmetric key is encrypted with provided RSA public keys.
+  **Parameters:**
+  - `public-keys` (Form): JSON mapping of key identifiers to RSA public keys
   - `overwrite` (Form): Indicates whether to overwrite an existing blob. Defaults to `false`.
   - `file` (UploadFile): The file to upload.
 
@@ -88,9 +88,9 @@ headers = {
   }
   response = requests.post("http://localhost:8082/upload/mycontainer/myfile.txt", headers=headers, data=data, files=files)
   print(response.json())
-  ```  
+  ```
 
-- **GET `/download/{blob_container}/{blob_name:path}`:**  
+- **GET `/download/{blob_container}/{blob_name:path}`:**
   Downloads an encrypted file, decrypts the symmetric key using the RSA private key, and then decrypts the file before streaming it back to the client.
   **Parameters:**
   - `decryption_key` (Form): The decryption key used to decrypt the symmetric key.
@@ -100,7 +100,7 @@ headers = {
   import requests
   import polars as pl
   response = requests.get(f"{base_url}/download/{blobcontainer}/{blobname}", headers=headers, data=data)
-  
+
   buffer = BytesIO(response.content)
   df = pl.read_parquet(buffer)
   ```
@@ -214,7 +214,7 @@ It is possible to run the proxy locally.
   - `<local-key-dir>` *path to the directory where the keys are stored*
   - `<api-key>` encrypted key for api server authentication
   - `<storage-url>`
-  - `<creds-path>` 
+  - `<creds-path>`
 The `docker-compose.yaml` file defines two services:
 
 - **keygen:** Generates the necessary RSA and symmetric keys.
@@ -222,7 +222,7 @@ The `docker-compose.yaml` file defines two services:
 
 - **blobprox:** Runs the main application.
   - **Ports:** Maps port `8082` on the host to port `8082` in the container.
-  - **Volumes:** 
+  - **Volumes:**
     - Mounts the `.keys` directory as read-only.
     - Mounts the Azure credentials file as read-only.
   - **Environment Variables:**
@@ -234,7 +234,7 @@ The `docker-compose.yaml` file defines two services:
 
 Once the application is running, you can access the endpoints using any HTTP client. Below are examples using Python's `requests` library.
 
-- **GET `/key/public`:**  
+- **GET `/key/public`:**
   Retrieve the RSA public key to encrypt symmetric keys.
 
   ```python
@@ -250,7 +250,7 @@ Once the application is running, you can access the endpoints using any HTTP cli
   print(response.json())
   ```
 
-- **POST `/upload/{blob_container}/{blob_name:path}`:**  
+- **POST `/upload/{blob_container}/{blob_name:path}`:**
   Upload and encrypt a file to Azure Blob Storage.
 
   ```python
@@ -275,7 +275,7 @@ Once the application is running, you can access the endpoints using any HTTP cli
   print(response.json())
   ```
 
-- **GET `/download/{blob_container}/{blob_name:path}`:**  
+- **GET `/download/{blob_container}/{blob_name:path}`:**
   Download and decrypt a file from Azure Blob Storage.
 
   ```python

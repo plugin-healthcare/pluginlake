@@ -1,15 +1,13 @@
-from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives import hashes
-
-import os
+import base64
 import hashlib
 import json
-import base64
+import os
 from datetime import datetime
+
+from cryptography.fernet import Fernet
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 
 def read_rsa_private(key_path: str) -> rsa.RSAPrivateKey:
@@ -24,7 +22,7 @@ def read_rsa_private(key_path: str) -> rsa.RSAPrivateKey:
 
 def read_symmetric_key(key_path: str, encode: bool = False) -> bytes:
     """Load a symmetric key from a file and return the decoded key."""
-    with open(key_path, "r", encoding="utf-8") as key_file:
+    with open(key_path, encoding="utf-8") as key_file:
         key_base64 = key_file.read().strip()
     try:
         return key_base64.encode("utf-8")
@@ -54,7 +52,7 @@ def read_rsa_public(key_path: str) -> rsa.RSAPublicKey:
 
 
 def rsa_encrypt(data: bytes, public_key: rsa.RSAPublicKey | str) -> bytes:
-    """load pem and encrypt data using an RSA public key."""
+    """Load pem and encrypt data using an RSA public key."""
     if isinstance(public_key, str):
         rsa_key = load_rsa_public(public_key)
     else:
@@ -125,8 +123,7 @@ def generate_credentials(dir: str, key_id: str) -> dict:
             json.dump(credentials, f)
 
         return credentials
-    else:
-        raise ValueError("Path does not exist")
+    raise ValueError("Path does not exist")
 
 
 def derive_key(key: str, salt: str) -> bytes:
@@ -152,8 +149,7 @@ def generate_encrypted_key(creds: dict[str, str], dir: str, key_id: str) -> str:
             f.write(encrypted_key)
 
         return encrypted_key
-    else:
-        raise ValueError("Path does not exist")
+    raise ValueError("Path does not exist")
 
 
 def main() -> None:

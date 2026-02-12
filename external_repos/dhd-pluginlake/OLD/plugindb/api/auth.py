@@ -3,6 +3,7 @@ from core.security import SECRET_TOKEN  # You can reuse the SECRET_TOKEN if need
 
 router = APIRouter()
 
+
 # Token generation endpoint (just returns the fixed secret token)
 @router.post("/auth/token")
 def login():

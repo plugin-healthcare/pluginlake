@@ -16,7 +16,7 @@ RUN groupadd -g ${GID} www-data || groupmod -g ${GID} www-data && \
 
 # Create necessary directories and files for WebDAV
 RUN mkdir -p /usr/local/apache2/var /usr/local/apache2/htdocs/data && \
-touch /usr/local/apache2/var/DavLock 
+touch /usr/local/apache2/var/DavLock
 
 # overwrite httpd config file
 COPY ./httpd-config.conf /usr/local/apache2/conf/httpd.conf

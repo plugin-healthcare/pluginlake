@@ -1,8 +1,9 @@
+import argparse
+import base64
 import os
+
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-import base64
-import argparse
 
 argparser = argparse.ArgumentParser(description="Generate RSA keys and a symmetric key for plugin-blob-proxy.")
 argparser.add_argument(

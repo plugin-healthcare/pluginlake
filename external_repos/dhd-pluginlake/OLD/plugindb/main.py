@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, status, Request
+from fastapi import FastAPI, Request
 from api import auth, routes
 from core.security import extract_and_validate_token
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,6 +14,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # Global middleware for token validation
 @app.middleware("http")
 async def token_middleware(request: Request, call_next):
@@ -26,6 +27,7 @@ async def token_middleware(request: Request, call_next):
 
     response = await call_next(request)
     return response
+
 
 # Include routes
 app.include_router(auth.router)

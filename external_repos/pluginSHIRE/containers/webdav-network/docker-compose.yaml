@@ -1,7 +1,7 @@
 services:
   apache-server:
     container_name: apache-server-plugin
-    build: 
+    build:
       context: ./apache-server
       dockerfile: Dockerfile
       args:
@@ -14,7 +14,7 @@ services:
 
   webdav-client:
     container_name: webdav-client-plugin
-    build: 
+    build:
       context: ./webdav-client
       dockerfile: Dockerfile
     networks:

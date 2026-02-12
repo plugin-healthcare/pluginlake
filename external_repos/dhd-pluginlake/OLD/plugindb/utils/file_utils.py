@@ -1,5 +1,5 @@
-import os
 from pathlib import Path
+
 
 def validate_path(path: str) -> Path:
     """Validate the path and return a Path object"""

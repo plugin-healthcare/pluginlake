@@ -18,7 +18,6 @@ def _():
 @app.cell
 def _(cbs):
     list(cbs.glob("*.parquet"))
-    return
 
 
 @app.cell
@@ -31,13 +30,11 @@ def _(cbs, pl):
 @app.cell
 def _(df):
     df.select("RegioS").unique()
-    return
 
 
 @app.cell
 def _(cbsodata):
     cbsodata.get_info("83982NED")
-    return
 
 
 @app.cell

@@ -22,6 +22,8 @@ classifiers = [
 ]
 
 dependencies = [
+    "azure-identity>=1.25.2",
+    "azure-storage-blob>=12.28.0",
     "dagster>=1.12.14",
     "duckdb>=1.4.4",
     "fastapi>=0.128.7",
@@ -34,6 +36,12 @@ Homepage = "https://github.com/plugin-healthcare/pluginlake"
 Repository = "https://github.com/plugin-healthcare/pluginlake"
 Issues = "https://github.com/plugin-healthcare/pluginlake/issues"
 Documentation = "https://github.com/plugin-healthcare/pluginlake#readme"
+
+[project.optional-dependencies]
+synthea = [
+    "boto3>=1.42.45",
+    "tqdm>=4.67.3",
+]
 
 # Uncomment and adjust if pluginlake has a CLI or Dagster entry point
 # [project.scripts]
@@ -48,9 +56,11 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "dagster-dg-cli>=1.12.14",
     "pre-commit>=4.5.1",
     "ruff>=0.15.0",
     "ty>=0.0.15",
+    "uv-secure>=0.15.4",
 ]
 test = [
     "pytest>=9.0.2",
@@ -122,6 +132,8 @@ strict = true
     "D100",    # Missing docstring in public module
     "D103",    # Missing docstring in public function
     "ANN",     # Type annotations
+    "EM102",   # Exception must not use an f-string literal
+    "F401",    # Imported but unused (common in test files for fixtures)
 ]
 
 [tool.ruff.format]
