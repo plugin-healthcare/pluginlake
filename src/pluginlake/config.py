@@ -1,7 +1,5 @@
 """Root settings for pluginlake."""
 
-from __future__ import annotations
-
 import logging
 from enum import StrEnum
 
