@@ -153,6 +153,9 @@ filterwarnings = [
     "error",
 ]
 
+[tool.ty.src]
+exclude = ["external_repos/", "notebooks/"]
+
 [tool.ty.environment]
 python-version = "3.13"
 
