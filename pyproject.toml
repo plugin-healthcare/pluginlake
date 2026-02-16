@@ -75,6 +75,7 @@ fix = true
 # Skip non-source directories
 exclude = [
     "examples/",
+    "external_repos/",
     "docs/",
     "scripts/",
 ]
