@@ -117,6 +117,7 @@ strict = true
     "D103",    # Missing docstring in public function
     "D104",    # Missing docstring in public package
     "ANN",     # Type annotations (pytest fixtures are dynamic)
+    "INP001",  # implicit namespace package (need __init__.py for test discovery)
 ]
 "notebooks/*.py" = [
     "E402",    # Module level import not at top of file
@@ -148,6 +149,9 @@ xfail_strict = true
 filterwarnings = [
     "error",
 ]
+
+[tool.ty.src]
+exclude = ["external_repos/"]
 
 [tool.ty.environment]
 python-version = "3.14"

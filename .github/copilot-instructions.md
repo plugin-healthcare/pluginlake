@@ -33,6 +33,7 @@
 ## Testing
 
 - Use `pytest` for all tests.
+- Write tests as plain functions, not inside classes. Use fixtures for shared setup.
 - Only test our own code, not functionality from external packages/libraries.
 - Test files mirror the source structure under `tests/unit/pluginlake/`.
 - Keep tests simple and focused on one behavior per test.
