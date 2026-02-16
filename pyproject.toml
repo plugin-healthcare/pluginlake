@@ -51,7 +51,7 @@ dev = [
 lint = [
     "ruff>=0.15.0",
     "ty>=0.0.15",
-]   
+]
 security = [
     "uv-secure>=0.15.4",
 ]
