@@ -10,7 +10,7 @@ from pluginlake.config import LogLevel, Settings
 def test_defaults(settings):
     assert settings.debug is False
     assert settings.verbose is False
-    assert settings.log_level == "INFO"
+    assert settings.log_level == LogLevel.INFO
 
 
 def test_debug_overrides_log_level():

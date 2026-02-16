@@ -31,7 +31,7 @@ from pluginlake.config import Settings
 
 class StorageSettings(Settings):
     model_config = SettingsConfigDict(env_prefix="STORAGE_")
-    
+
     blob_endpoint: str
     container_name: str = "data"
 ```
@@ -165,6 +165,3 @@ Dependabot is configured to check daily for updates to:
 - Docker base images
 
 All update PRs target the `dev` branch.
-
-
-

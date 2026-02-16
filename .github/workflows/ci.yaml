@@ -25,6 +25,9 @@ jobs:
       - name: Run ruff check
         run: uv run ruff check .
 
+      - name: Run ty check
+        run: uv run ty check .
+
   test:
     name: Pytest
     runs-on: ubuntu-latest
@@ -41,4 +44,4 @@ jobs:
         run: uv sync --group test
 
       - name: Run tests
-        run: uv run pytest
+        run: uv run pytest --cov=pluginlake

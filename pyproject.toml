@@ -76,7 +76,6 @@ fix = true
 # Skip non-source directories
 exclude = [
     "examples/",
-    "external_repos/",
     "docs/",
     "scripts/",
 ]
@@ -154,11 +153,8 @@ filterwarnings = [
     "error",
 ]
 
-[tool.ty.src]
-exclude = ["external_repos/"]
-
 [tool.ty.environment]
-python-version = "3.14"
+python-version = "3.13"
 
 [tool.ty.rules]
 unused-ignore-comment = "warn"

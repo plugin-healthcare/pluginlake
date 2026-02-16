@@ -1,12 +1,13 @@
 # External Repos Reference
 
 This document captures useful code, packages, and architectural decisions from the
-`external_repos/` directory before removal. These repos were prototypes and explorations
-that informed the design of pluginlake.
+external repositories that informed the design of pluginlake.
 
 ---
 
 ## 1. dagster-data-station
+
+> <https://github.com/dkapitan/dagster-data-station>
 
 **Purpose:** Dagster-orchestrated lakehouse processing CBS open data and OMOP vocabulary files
 into Parquet/DuckDB.
@@ -83,6 +84,8 @@ class CBSResource(dg.ConfigurableResource):
 ---
 
 ## 2. dhd-pluginlake
+
+> <https://github.com/DutchHospitalData/pluginlake>
 
 **Purpose:** FastAPI-based local data lake API for uploading/downloading Parquet files,
 with YAML-driven directory scaffolding. Has two generations: `OLD/plugindb/` (complete)
@@ -228,6 +231,8 @@ FROM {{ source('lake_raw', 'admissions') }}
 
 ## 4. plugin-blob-proxy
 
+> <https://github.com/DutchHospitalData/plugin-blob-proxy>
+
 **Purpose:** Azure Blob Storage encryption proxy using hybrid RSA + Fernet encryption.
 Each hospital node runs its own proxy with unique key pairs for secure data exchange.
 
@@ -311,6 +316,8 @@ def derive_key(key: str, salt: str) -> bytes:
 ---
 
 ## 5. pluginSHIRE
+
+> <https://github.com/DutchHospitalData/pluginSHIRE>
 
 **Purpose:** Composable data infrastructure framework for the PLUGIN healthcare project.
 Collection of container setups, prototype services, and exploration notebooks for
@@ -408,3 +415,15 @@ async def verify_api_key(api_key: str = Security(api_key_header)):
 | YAML-driven config/scaffolding | dagster-data-station, dhd | Partial (Pydantic Settings) |
 | JSON Schema for code systems | duckbtlake | To evaluate |
 | vantage6 federated execution | pluginSHIRE | Reference only |
+
+---
+
+## Related Repos (not in analysis)
+
+These repos are part of the broader PLUGIN/DHD ecosystem but were not included in this analysis.
+
+| Repo | Description |
+|---|---|
+| <https://github.com/DutchHospitalData/vantage6-ops> | vantage6 operations/deployment |
+| <https://github.com/dkapitan/srdp> | SRDP (related data project) |
+| <https://github.com/dkapitan/jortt-report> | Jortt reporting |

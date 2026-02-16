@@ -56,17 +56,17 @@ jobs:
         run: |
           MATRIX='{"include":['
           FIRST=true
-          
+
           if [[ "${{ steps.filter.outputs.dagster }}" == "true" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             MATRIX+='{"image":"dagster","dockerfile":"deploy/docker/dagster.Dockerfile","context":"."}'
             FIRST=false
           fi
-          
+
           if [[ "${{ steps.filter.outputs.pluginlake }}" == "true" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             if [[ "$FIRST" == "false" ]]; then MATRIX+=','; fi
             MATRIX+='{"image":"pluginlake","dockerfile":"deploy/docker/pluginlake.Dockerfile","context":"."}'
           fi
-          
+
           MATRIX+=']}'
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
 
