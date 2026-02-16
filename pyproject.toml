@@ -120,6 +120,7 @@ strict = true
     "INP001",  # implicit namespace package (need __init__.py for test discovery)
 ]
 "notebooks/*.py" = [
+    "INP001",  # Implicit namespace package
     "E402",    # Module level import not at top of file
     "F401",    # Imported but unused
     "F403",    # 'from module import *' used
@@ -129,7 +130,10 @@ strict = true
     "D103",    # Missing docstring in public function
     "ANN",     # Type annotations
     "EM102",   # Exception must not use an f-string literal
-    "F401",    # Imported but unused (common in test files for fixtures)
+    "PLC0415", # import not at top-level (marimo cells use inline imports)
+    "N803",    # Argument name should be lowercase (marimo passes module refs)
+    "N806",    # Variable should be lowercase (constants in notebook cells)
+    "PLR0913", # Too many arguments (marimo cell dependency injection)
 ]
 
 [tool.ruff.format]
