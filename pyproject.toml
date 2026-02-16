@@ -6,7 +6,7 @@ license = { text = "MIT" }
 authors = [
     { name = "Yannick Vinkesteijn" },
     { name = "Tim Hendriks" },
-    { name = "Marlou van de Sande"}
+    { name = "Marlou van de Sande" }
 ]
 readme = "README.md"
 requires-python = ">=3.13"
