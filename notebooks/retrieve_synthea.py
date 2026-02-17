@@ -20,13 +20,11 @@ def _():
     FHIR_DIR = DATA_DIR / "fhir"
     OMOP_DIR = DATA_DIR / "omop"
 
-
     def ensure_empty_dir(path: Path) -> None:
         """Ensure directory exists and is empty, raise error if not empty."""
         path.mkdir(parents=True, exist_ok=True)
         if any(path.iterdir()):
             raise FileExistsError(f"Directory not empty: {path}")
-
 
     return (
         Config,
@@ -45,7 +43,6 @@ def _():
 def _(FHIR_DIR, Path, ensure_empty_dir, requests, tqdm):
     SYNTHEA_FHIR_URL = "https://mitre.box.com/shared/static/3bo45m48ocpzp8fc0tp005vax7l93xji.gz"
 
-
     def download_fhir(url: str = SYNTHEA_FHIR_URL, chunk_size: int = 8 * 1024 * 1024) -> Path:
         """Download Synthea FHIR data (28GB tar.gz)."""
         ensure_empty_dir(FHIR_DIR)
@@ -57,9 +54,10 @@ def _(FHIR_DIR, Path, ensure_empty_dir, requests, tqdm):
             r.raise_for_status()
             total_size = int(r.headers.get("content-length", 0))
 
-            with dest.open("wb") as f, tqdm(
-                total=total_size, unit="B", unit_scale=True, desc="Downloading FHIR"
-            ) as pbar:
+            with (
+                dest.open("wb") as f,
+                tqdm(total=total_size, unit="B", unit_scale=True, desc="Downloading FHIR") as pbar,
+            ):
                 for chunk in r.iter_content(chunk_size=chunk_size):
                     if chunk:
                         f.write(chunk)
@@ -68,14 +66,12 @@ def _(FHIR_DIR, Path, ensure_empty_dir, requests, tqdm):
         print(f"Downloaded: {dest}")
         return dest
 
-
     return (download_fhir,)
 
 
 @app.cell
 def _(Config, OMOP_DIR, Path, UNSIGNED, boto3, ensure_empty_dir, tqdm):
     S3_BUCKET = "synthea-omop"
-
 
     def download_omop() -> Path:
         """Download Synthea OMOP data from S3 (1k, 100k, 2.8m patient datasets)."""
@@ -106,7 +102,6 @@ def _(Config, OMOP_DIR, Path, UNSIGNED, boto3, ensure_empty_dir, tqdm):
         print(f"Downloaded to: {OMOP_DIR}")
         return OMOP_DIR
 
-
     return (download_omop,)
 
 
@@ -114,14 +109,12 @@ def _(Config, OMOP_DIR, Path, UNSIGNED, boto3, ensure_empty_dir, tqdm):
 def _(download_fhir):
     # Download FHIR data
     download_fhir()
-    return
 
 
 @app.cell
 def _(download_omop):
     # Download OMOP data
     download_omop()
-    return
 
 
 @app.cell
@@ -142,9 +135,7 @@ def _(FHIR_DIR, OMOP_DIR):
                     print(f"  {rel_path} ({size_mb:.1f} MB)")
         print(f"\nTotal: {total_size / (1024**3):.2f} GB")
 
-
     list_data()
-    return
 
 
 if __name__ == "__main__":

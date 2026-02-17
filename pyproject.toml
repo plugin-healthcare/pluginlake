@@ -4,22 +4,12 @@ version = "0.1.0"
 description = "The federated lakehouse."
 license = { text = "MIT" }
 authors = [
-    { name = "Yannick Vinkesteijn" }
+    { name = "Yannick Vinkesteijn" },
+    { name = "Tim Hendriks" },
+    { name = "Marlou van de Sande" }
 ]
 readme = "README.md"
-requires-python = ">=3.12"
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: Healthcare Industry",
-    "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.14",
-    "Topic :: Scientific/Engineering :: Medical Science Apps.",
-    "Typing :: Typed",
-]
+requires-python = ">=3.13"
 
 dependencies = [
     "azure-identity>=1.25.2",
@@ -29,6 +19,7 @@ dependencies = [
     "fastapi>=0.128.7",
     "polars>=1.38.1",
     "pydantic>=2.12.5",
+    "pydantic-settings>=2.9.1",
 ]
 
 [project.urls]
@@ -43,13 +34,6 @@ synthea = [
     "tqdm>=4.67.3",
 ]
 
-# Uncomment and adjust if pluginlake has a CLI or Dagster entry point
-# [project.scripts]
-# pluginlake = "pluginlake:main"
-
-# [project.entry-points."dagster"]
-# pluginlake = "pluginlake.definitions"
-
 [build-system]
 requires = ["uv_build>=0.10.0,<0.11.0"]
 build-backend = "uv_build"
@@ -58,12 +42,22 @@ build-backend = "uv_build"
 dev = [
     "dagster-dg-cli>=1.12.14",
     "pre-commit>=4.5.1",
+    { include-group = "lint" },
+    { include-group = "test" },
+    { include-group = "security" },
+    { include-group = "docs" },
+    { include-group = "nb" },
+]
+lint = [
     "ruff>=0.15.0",
     "ty>=0.0.15",
+]
+security = [
     "uv-secure>=0.15.4",
 ]
 test = [
     "pytest>=9.0.2",
+    "pytest-cov>=6.0.0",
 ]
 docs = [
     "zensical>=0.0.21",
@@ -122,8 +116,10 @@ strict = true
     "D103",    # Missing docstring in public function
     "D104",    # Missing docstring in public package
     "ANN",     # Type annotations (pytest fixtures are dynamic)
+    "INP001",  # implicit namespace package (need __init__.py for test discovery)
 ]
 "notebooks/*.py" = [
+    "INP001",  # Implicit namespace package
     "E402",    # Module level import not at top of file
     "F401",    # Imported but unused
     "F403",    # 'from module import *' used
@@ -133,7 +129,10 @@ strict = true
     "D103",    # Missing docstring in public function
     "ANN",     # Type annotations
     "EM102",   # Exception must not use an f-string literal
-    "F401",    # Imported but unused (common in test files for fixtures)
+    "PLC0415", # import not at top-level (marimo cells use inline imports)
+    "N803",    # Argument name should be lowercase (marimo passes module refs)
+    "N806",    # Variable should be lowercase (constants in notebook cells)
+    "PLR0913", # Too many arguments (marimo cell dependency injection)
 ]
 
 [tool.ruff.format]
@@ -154,8 +153,11 @@ filterwarnings = [
     "error",
 ]
 
+[tool.ty.src]
+exclude = ["external_repos/", "notebooks/"]
+
 [tool.ty.environment]
-python-version = "3.14"
+python-version = "3.13"
 
 [tool.ty.rules]
 unused-ignore-comment = "warn"
