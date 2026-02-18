@@ -119,6 +119,8 @@ strict = true
     "D104",    # Missing docstring in public package
     "ANN",     # Type annotations (pytest fixtures are dynamic)
     "INP001",  # implicit namespace package (need __init__.py for test discovery)
+    "PLR2004", # Magic values acceptable in test assertions
+    "PLR0913", # Many fixture arguments acceptable in test fixtures
 ]
 "notebooks/*.py" = [
     "INP001",  # Implicit namespace package
@@ -139,6 +141,12 @@ strict = true
 "src/pluginlake/omop/queries.py" = [
     "PLR0913", # Too many arguments acceptable for filter functions with optional criteria
     "S608",    # SQL queries use parameterized values with ? placeholders; string concatenation for structure only
+]
+"notebooks/**/*.py" = [
+    "N807",    # Marimo uses __ for anonymous cell functions
+    "D415",    # First line ending with period not required for notebooks
+    "W293",    # Blank line whitespace from marimo formatting
+    "DTZ005",  # datetime.now() without tz acceptable for age calculation in notebooks
 ]
 
 [tool.ruff.format]

@@ -308,6 +308,29 @@ class Specimen(BaseModel):
     disease_status_source_value: str | None = Field(default=None, description="Disease status source value")
 
 
+class ConditionEra(BaseModel):
+    """OMOP Condition Era table schema."""
+
+    condition_era_id: int = Field(description="Unique condition era identifier")
+    person_id: int = Field(description="Person foreign key")
+    condition_concept_id: int = Field(description="Condition concept from vocabulary")
+    condition_era_start_date: date = Field(description="Start date of condition era")
+    condition_era_end_date: date = Field(description="End date of condition era")
+    condition_occurrence_count: int | None = Field(default=None, description="Number of condition occurrences")
+
+
+class DrugEra(BaseModel):
+    """OMOP Drug Era table schema."""
+
+    drug_era_id: int = Field(description="Unique drug era identifier")
+    person_id: int = Field(description="Person foreign key")
+    drug_concept_id: int = Field(description="Drug concept from vocabulary")
+    drug_era_start_date: date = Field(description="Start date of drug era")
+    drug_era_end_date: date = Field(description="End date of drug era")
+    drug_exposure_count: int | None = Field(default=None, description="Number of drug exposures")
+    gap_days: int | None = Field(default=None, description="Gap days")
+
+
 class FactRelationship(BaseModel):
     """OMOP Fact Relationship table schema."""
 
@@ -333,6 +356,8 @@ OMOP_SCHEMAS: dict[str, type[BaseModel]] = {
     "note": Note,
     "note_nlp": NoteNlp,
     "specimen": Specimen,
+    "condition_era": ConditionEra,
+    "drug_era": DrugEra,
     "fact_relationship": FactRelationship,
 }
 

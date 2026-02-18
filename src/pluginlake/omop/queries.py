@@ -6,6 +6,7 @@ Provides ergonomic Python functions for common OMOP analytical queries.
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from datetime import UTC, date, datetime
+from pathlib import Path
 
 import duckdb
 import polars as pl
@@ -22,11 +23,15 @@ logger = get_logger(__name__)
 
 
 @contextmanager
-def _ensure_connection(con: duckdb.DuckDBPyConnection | None) -> Generator[duckdb.DuckDBPyConnection, None, None]:
+def _ensure_connection(
+    con: duckdb.DuckDBPyConnection | None,
+    data_dir: Path | None = None,
+) -> Generator[duckdb.DuckDBPyConnection, None, None]:
     """Ensure a DuckDB connection exists, creating one if needed.
 
     Args:
         con: Existing connection or None.
+        data_dir: Data directory path or None to use config default.
 
     Yields:
         DuckDB connection that will be closed if created here.
@@ -35,7 +40,7 @@ def _ensure_connection(con: duckdb.DuckDBPyConnection | None) -> Generator[duckd
     if con is None:
         settings = get_omop_settings()
         con = get_duckdb_connection()
-        register_omop_tables(con, data_dir=settings.storage_dir)
+        register_omop_tables(con, data_dir=data_dir or settings.storage_dir)
 
     try:
         yield con
@@ -119,6 +124,7 @@ def _add_filter(
 def get_persons(
     con: duckdb.DuckDBPyConnection | None = None,
     *,
+    data_dir: Path | None = None,
     gender_concept_id: int | None = None,
     year_of_birth_min: int | None = None,
     year_of_birth_max: int | None = None,
@@ -130,6 +136,7 @@ def get_persons(
 
     Args:
         con: DuckDB connection. Creates new connection if None.
+        data_dir: Data directory path or None to use config default.
         gender_concept_id: Filter by gender concept (e.g., 8507 for male).
         year_of_birth_min: Minimum birth year (inclusive).
         year_of_birth_max: Maximum birth year (inclusive).
@@ -151,7 +158,7 @@ def get_persons(
 
     query, params = _build_filter_query("person", conditions, params, limit=limit)
 
-    with _ensure_connection(con) as conn:
+    with _ensure_connection(con, data_dir) as conn:
         return _execute_query(
             conn,
             query,
@@ -164,6 +171,7 @@ def get_conditions_for_person(
     person_id: int,
     con: duckdb.DuckDBPyConnection | None = None,
     *,
+    data_dir: Path | None = None,
     condition_concept_id: int | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
@@ -173,6 +181,7 @@ def get_conditions_for_person(
     Args:
         person_id: Person identifier.
         con: DuckDB connection. Creates new connection if None.
+        data_dir: Data directory path or None to use config default.
         condition_concept_id: Filter by specific condition concept.
         start_date: Minimum condition start date.
         end_date: Maximum condition start date.
@@ -190,7 +199,7 @@ def get_conditions_for_person(
 
     query, params = _build_filter_query("condition_occurrence", conditions, params)
 
-    with _ensure_connection(con) as conn:
+    with _ensure_connection(con, data_dir) as conn:
         return _execute_query(
             conn,
             query,
@@ -206,6 +215,7 @@ def get_observations_for_person(
     person_id: int,
     con: duckdb.DuckDBPyConnection | None = None,
     *,
+    data_dir: Path | None = None,
     observation_concept_id: int | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
@@ -215,6 +225,7 @@ def get_observations_for_person(
     Args:
         person_id: Person identifier.
         con: DuckDB connection. Creates new connection if None.
+        data_dir: Data directory path or None to use config default.
         observation_concept_id: Filter by specific observation concept.
         start_date: Minimum observation date.
         end_date: Maximum observation date.
@@ -232,7 +243,7 @@ def get_observations_for_person(
 
     query, params = _build_filter_query("observation", conditions, params)
 
-    with _ensure_connection(con) as conn:
+    with _ensure_connection(con, data_dir) as conn:
         return _execute_query(
             conn,
             query,
@@ -248,6 +259,7 @@ def get_visits_for_person(
     person_id: int,
     con: duckdb.DuckDBPyConnection | None = None,
     *,
+    data_dir: Path | None = None,
     visit_concept_id: int | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
@@ -257,6 +269,7 @@ def get_visits_for_person(
     Args:
         person_id: Person identifier.
         con: DuckDB connection. Creates new connection if None.
+        data_dir: Data directory path or None to use config default.
         visit_concept_id: Filter by specific visit concept.
         start_date: Minimum visit start date.
         end_date: Maximum visit start date.
@@ -274,7 +287,7 @@ def get_visits_for_person(
 
     query, params = _build_filter_query("visit_occurrence", conditions, params)
 
-    with _ensure_connection(con) as conn:
+    with _ensure_connection(con, data_dir) as conn:
         return _execute_query(
             conn,
             query,
@@ -289,6 +302,7 @@ def get_visits_for_person(
 def get_cohort(
     con: duckdb.DuckDBPyConnection | None = None,
     *,
+    data_dir: Path | None = None,
     has_condition_concept_id: int | None = None,
     has_drug_concept_id: int | None = None,
     min_age: int | None = None,
@@ -299,6 +313,7 @@ def get_cohort(
 
     Args:
         con: DuckDB connection. Creates new connection if None.
+        data_dir: Data directory path or None to use config default.
         has_condition_concept_id: Persons with this condition.
         has_drug_concept_id: Persons exposed to this drug.
         min_age: Minimum age in years (calculated from current year).
@@ -340,7 +355,7 @@ def get_cohort(
     where_clause = " AND ".join(where_clauses) if where_clauses else "1=1"
     query = "SELECT DISTINCT p.* FROM " + from_clause + " WHERE " + where_clause
 
-    with _ensure_connection(con) as conn:
+    with _ensure_connection(con, data_dir) as conn:
         return _execute_query(
             conn,
             query,
@@ -361,6 +376,7 @@ def get_measurement_values(
     measurement_concept_id: int,
     con: duckdb.DuckDBPyConnection | None = None,
     *,
+    data_dir: Path | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
 ) -> pl.DataFrame:
@@ -370,6 +386,7 @@ def get_measurement_values(
         person_id: Person identifier.
         measurement_concept_id: Measurement concept (e.g., lab test).
         con: DuckDB connection. Creates new connection if None.
+        data_dir: Data directory path or None to use config default.
         start_date: Minimum measurement date.
         end_date: Maximum measurement date.
 
@@ -386,7 +403,7 @@ def get_measurement_values(
 
     query, params = _build_filter_query("measurement", conditions, params, order_by="measurement_date")
 
-    with _ensure_connection(con) as conn:
+    with _ensure_connection(con, data_dir) as conn:
         return _execute_query(
             conn,
             query,

@@ -70,6 +70,7 @@ def load_omop_table(
             encoding=encoding,
             null_values=["", "NULL"],
             try_parse_dates=True,
+            infer_schema_length=settings.infer_schema_length,
         )
 
         duration = time.time() - start_time
@@ -116,12 +117,15 @@ def load_omop_table(
 def load_omop_dataset(
     data_dir: Path | None = None,
     table_names: list[str] | None = None,
+    *,
+    validate: bool = True,
 ) -> dict[str, pl.DataFrame]:
     """Load multiple OMOP tables from directory.
 
     Args:
         data_dir: Directory containing OMOP CSV files. Uses config default if None.
         table_names: List of table names to load. Loads all CSV files if None.
+        validate: Whether to validate schemas during loading.
 
     Returns:
         Dictionary mapping table names to DataFrames.
@@ -154,7 +158,7 @@ def load_omop_dataset(
             continue
 
         try:
-            tables[table_name] = load_omop_table(csv_file, table_name)
+            tables[table_name] = load_omop_table(csv_file, table_name, validate=validate)
         except (FileNotFoundError, ValueError, OSError):
             logger.exception(
                 "Skipping table %s due to error",

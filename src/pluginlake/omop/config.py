@@ -52,6 +52,10 @@ class OMOPSettings(BaseSettings):
         default="utf-8",
         description="CSV file encoding",
     )
+    infer_schema_length: int = Field(
+        default=10_000,
+        description="Number of rows to scan for CSV schema inference",
+    )
 
     cdm_version: str = Field(
         default="5.4",

@@ -1,5 +1,7 @@
 """OMOP data validation functions."""
 
+from datetime import date, datetime
+
 import polars as pl
 
 from pluginlake.omop.schemas import get_omop_schema
@@ -21,10 +23,9 @@ def _get_expected_polars_type(annotation: type) -> type[pl.DataType] | None:
         return pl.Int64
     if annotation is str:
         return pl.Utf8
-    annotation_str = str(annotation)
-    if "datetime" in annotation_str:
+    if annotation is datetime:
         return pl.Datetime
-    if "date" in annotation_str:
+    if annotation is date:
         return pl.Date
     return None
 
