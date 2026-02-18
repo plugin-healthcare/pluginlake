@@ -15,6 +15,7 @@ dependencies = [
     "azure-identity>=1.25.2",
     "azure-storage-blob>=12.28.0",
     "dagster>=1.12.14",
+    "dagster-postgres>=0.28.14",
     "duckdb>=1.4.4",
     "fastapi>=0.128.7",
     "polars>=1.38.1",
@@ -41,6 +42,7 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "dagster-dg-cli>=1.12.14",
+    "dagster-webserver>=1.12.14",
     "pre-commit>=4.5.1",
     { include-group = "lint" },
     { include-group = "test" },
