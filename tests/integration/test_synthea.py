@@ -86,7 +86,7 @@ def loaded_tables(synthea_data_dir: Path, parquet_output_dir: Path) -> dict[str,
 
 
 @pytest.fixture(scope="module")
-def duckdb_con(parquet_output_dir: Path):
+def duckdb_con(parquet_output_dir: Path, loaded_tables: dict[str, pl.DataFrame]):  # noqa: ARG001
     """DuckDB connection with registered OMOP tables."""
     con = get_duckdb_connection()
     register_omop_tables(con, data_dir=parquet_output_dir)
@@ -254,7 +254,7 @@ def test_query_cohort_with_age_range(duckdb_con):
         assert all(result["year_of_birth"] >= current_year - 60)
 
 
-def test_parquet_files_created(parquet_output_dir: Path):
+def test_parquet_files_created(parquet_output_dir: Path, loaded_tables: dict[str, pl.DataFrame]):  # noqa: ARG001
     """Test that Parquet files were created correctly."""
     parquet_files = list(parquet_output_dir.glob("*.parquet"))
 
