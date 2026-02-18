@@ -112,5 +112,6 @@ Data stations with custom assets can import pluginlake and extend it. See [docs/
 
 - [Getting started](docs/guides/getting-started.md) — Tutorial with the Titanic example
 - [Using as a package](docs/guides/using-as-package.md) — Extend pluginlake in your own repo
+- [Docker guide](docs/guides/docker.md) — Images, builds, and secrets management
 - [Development guidelines](docs/develop-guidelines.md) — Coding standards and workflow
 - [Architecture decisions](docs/decisions/README.md) — ADRs
