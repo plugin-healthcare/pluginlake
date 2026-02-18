@@ -207,19 +207,24 @@ def load_parquet_as_polars(
 def query_duckdb(
     con: duckdb.DuckDBPyConnection,
     query: str,
+    parameters: list | dict | None = None,
 ) -> pl.DataFrame:
     """Execute SQL query and return Polars DataFrame.
 
     Args:
         con: DuckDB connection.
-        query: SQL query string.
+        query: SQL query string with ? placeholders or $name parameters.
+        parameters: Query parameters as list (for ?) or dict (for $name).
 
     Returns:
         Query results as Polars DataFrame.
     """
     logger.debug("Executing DuckDB query", extra={"query": query[:200]})
 
-    result = con.execute(query)
+    if parameters:
+        result = con.execute(query, parameters)
+    else:
+        result = con.execute(query)
     columns = [desc[0] for desc in result.description]
     data = result.fetchall()
 

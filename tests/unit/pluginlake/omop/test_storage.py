@@ -73,21 +73,18 @@ def test_get_duckdb_connection_with_file(tmp_path):
 
 def test_register_omop_tables(tmp_path):
     """Test registering Parquet files as DuckDB views."""
-    # Create test Parquet files
     df_person = pl.DataFrame({"person_id": [1, 2], "year_of_birth": [1980, 1990]})
     df_condition = pl.DataFrame({"condition_id": [1, 2], "person_id": [1, 2]})
 
     save_omop_table(df_person, "person", output_dir=tmp_path)
     save_omop_table(df_condition, "condition_occurrence", output_dir=tmp_path)
 
-    # Register tables
     con = get_duckdb_connection()
     registered = register_omop_tables(con, data_dir=tmp_path)
 
     assert "person" in registered
     assert "condition_occurrence" in registered
 
-    # Query registered table
     result = con.execute("SELECT COUNT(*) FROM person").fetchone()
     assert result is not None
     expected_count = 2

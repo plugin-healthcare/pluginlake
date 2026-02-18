@@ -136,6 +136,10 @@ strict = true
     "N806",    # Variable should be lowercase (constants in notebook cells)
     "PLR0913", # Too many arguments (marimo cell dependency injection)
 ]
+"src/pluginlake/omop/queries.py" = [
+    "PLR0913", # Too many arguments acceptable for filter functions with optional criteria
+    "S608",    # SQL queries use parameterized values with ? placeholders; string concatenation for structure only
+]
 
 [tool.ruff.format]
 quote-style = "double"
