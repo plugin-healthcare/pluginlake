@@ -1510,6 +1510,9 @@ synthea = [
 ]
 
 [package.dev-dependencies]
+dagster-infra = [
+    { name = "dagster-webserver" },
+]
 dev = [
     { name = "dagster-dg-cli" },
     { name = "dagster-webserver" },
@@ -1559,6 +1562,7 @@ requires-dist = [
 provides-extras = ["synthea"]
 
 [package.metadata.requires-dev]
+dagster-infra = [{ name = "dagster-webserver", specifier = ">=1.12.14" }]
 dev = [
     { name = "dagster-dg-cli", specifier = ">=1.12.14" },
     { name = "dagster-webserver", specifier = ">=1.12.14" },

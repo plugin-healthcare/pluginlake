@@ -74,6 +74,8 @@ services:
     build:
       context: ../../
       dockerfile: deploy/docker/pluginlake.Dockerfile
+    ports:
+      - "8000:8000"
     command: ["python", "-m", "pluginlake"]
 
 volumes:

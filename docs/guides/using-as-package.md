@@ -40,31 +40,22 @@ def patient_summary() -> pl.DataFrame:
 
 ## Compose definitions
 
-Create a `definitions.py` that combines pluginlake's core assets with your own:
+Create a `definitions.py` that combines pluginlake assets with your own:
 
 ```python
 # my_station/definitions.py
 
 from dagster import Definitions
-
-# Import individual core assets from pluginlake
 from pluginlake.assets.omop import omop_condition, omop_observation
 
-# Import your station-specific assets
 from my_station.assets.patient_summary import patient_summary
 
 defs = Definitions(
-    assets=[
-        # Core assets from pluginlake
-        omop_condition,
-        omop_observation,
-        # Station-specific assets
-        patient_summary,
-    ],
+    assets=[omop_condition, omop_observation, patient_summary],
 )
 ```
 
-You pick exactly which core assets you need — no all-or-nothing.
+You pick exactly which core assets you need — not every station uses all of them.
 
 ## Using pluginlake utilities
 

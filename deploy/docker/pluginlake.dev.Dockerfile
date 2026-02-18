@@ -15,4 +15,4 @@ RUN uv sync --frozen
 
 ENV PATH="/app/.venv/bin:$PATH"
 
-CMD ["python", "-m", "pluginlake"]
+CMD ["uvicorn", "pluginlake.__main__:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
