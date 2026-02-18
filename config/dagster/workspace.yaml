@@ -1,0 +1,4 @@
+load_from:
+  - grpc_server:
+      host: dagster-code-server
+      port: 4000

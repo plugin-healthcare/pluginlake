@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
-# Dockerfile for pluginlake (FastAPI + dagster code-server).
-# Both services use the same image with different commands.
+# Dockerfile for dagster-webserver and dagster-daemon.
+# Does not include source code — connects to code-server via gRPC.
 
 # --- Build stage ---
 FROM dhi.io/python:3.13-debian13-dev AS builder
@@ -9,17 +9,17 @@ FROM dhi.io/python:3.13-debian13-dev AS builder
 COPY --from=dhi.io/uv:0-debian13-dev /usr/local/bin/uv /usr/local/bin/uvx /usr/local/bin/
 
 WORKDIR /app
-COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
-
-COPY src/ src/
-RUN uv sync --frozen --no-dev
+RUN uv venv && uv pip install dagster-webserver
 
 # --- Runtime stage ---
 FROM dhi.io/python:3.13-debian13
 
 WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
-COPY --from=builder /app/src /app/src
 
-ENV PATH="/app/.venv/bin:$PATH"
+ENV PATH="/app/.venv/bin:$PATH" \
+    DAGSTER_HOME="/app/config/dagster"
+
+COPY config/dagster/ /app/config/dagster/
+
+EXPOSE 3000

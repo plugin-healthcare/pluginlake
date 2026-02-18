@@ -15,6 +15,7 @@ dependencies = [
     "azure-identity>=1.25.2",
     "azure-storage-blob>=12.28.0",
     "dagster>=1.12.14",
+    "dagster-postgres>=0.28.14",
     "duckdb>=1.4.4",
     "fastapi>=0.128.7",
     "polars>=1.38.1",
@@ -41,6 +42,7 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "dagster-dg-cli>=1.12.14",
+    "dagster-webserver>=1.12.14",
     "pre-commit>=4.5.1",
     { include-group = "lint" },
     { include-group = "test" },
@@ -117,6 +119,8 @@ strict = true
     "D104",    # Missing docstring in public package
     "ANN",     # Type annotations (pytest fixtures are dynamic)
     "INP001",  # implicit namespace package (need __init__.py for test discovery)
+    "PLR2004", # Magic values acceptable in test assertions
+    "PLR0913", # Many fixture arguments acceptable in test fixtures
 ]
 "notebooks/*.py" = [
     "INP001",  # Implicit namespace package
@@ -133,6 +137,16 @@ strict = true
     "N803",    # Argument name should be lowercase (marimo passes module refs)
     "N806",    # Variable should be lowercase (constants in notebook cells)
     "PLR0913", # Too many arguments (marimo cell dependency injection)
+]
+"src/pluginlake/omop/queries.py" = [
+    "PLR0913", # Too many arguments acceptable for filter functions with optional criteria
+    "S608",    # SQL queries use parameterized values with ? placeholders; string concatenation for structure only
+]
+"notebooks/**/*.py" = [
+    "N807",    # Marimo uses __ for anonymous cell functions
+    "D415",    # First line ending with period not required for notebooks
+    "W293",    # Blank line whitespace from marimo formatting
+    "DTZ005",  # datetime.now() without tz acceptable for age calculation in notebooks
 ]
 
 [tool.ruff.format]

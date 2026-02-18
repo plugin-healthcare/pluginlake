@@ -1,6 +1,16 @@
 .DS_Store
 .python-version
 
+# Local data volumes
+.data/
+
+# Dagster local artifacts
+config/dagster/.telemetry/
+config/dagster/logs/
+config/dagster/storage/
+config/dagster/history/
+config/dagster/compute_logs/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

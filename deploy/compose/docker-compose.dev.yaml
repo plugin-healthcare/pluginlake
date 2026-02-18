@@ -1,0 +1,53 @@
+services:
+  postgres:
+    image: dhi.io/postgres:17-alpine3.22
+    environment:
+      POSTGRES_USER: dagster
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dagster}
+      POSTGRES_DB: dagster
+    ports:
+      - "5432:5432"
+    volumes:
+      - ${POSTGRES_DATA:-../../.data/postgres}:/var/lib/postgresql/data
+    env_file:
+      - ../../.env
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dagster"]
+      interval: 3s
+      timeout: 1s
+      retries: 10
+
+  dagster:
+    build:
+      context: ../../
+      dockerfile: deploy/docker/dagster.dev.Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      DAGSTER_HOME: /app/config/dagster
+      DAGSTER_MODULE: ${DAGSTER_MODULE:-pluginlake.definitions}
+      DAGSTER_PG_HOST: postgres
+      DAGSTER_PG_USER: dagster
+      DAGSTER_PG_PASSWORD: ${POSTGRES_PASSWORD:-dagster}
+      DAGSTER_PG_DB: dagster
+    env_file:
+      - ../../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../../src:/app/src
+      - ../../examples:/app/examples
+      - ../../config/dagster:/app/config/dagster
+      - ../../data:/app/data
+      - ${DAGSTER_COMPUTE_LOGS:-../../.data/dagster/compute_logs}:/app/compute_logs
+
+  pluginlake:
+    build:
+      context: ../../
+      dockerfile: deploy/docker/pluginlake.dev.Dockerfile
+    env_file:
+      - ../../.env
+    volumes:
+      - ../../src:/app/src
+      - ../../data:/app/data
