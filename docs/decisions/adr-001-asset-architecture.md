@@ -20,25 +20,29 @@ The `pluginlake` package includes a standard set of assets that every data stati
 
 Data stations that need custom assets have two options:
 
-1. **Import and extend**: Create a separate repo/package that depends on `pluginlake`, import the core assets, and add station-specific assets alongside them:
+1. **Import and extend**: Create a separate repo/package that depends on `pluginlake`, import individual assets, and add station-specific assets alongside them:
 
     ```python
     from dagster import Definitions
-    from pluginlake.definitions import core_assets
+    from pluginlake.assets.omop import omop_condition, omop_observation
 
     from station_x.assets import custom_asset_a, custom_asset_b
 
-    defs = Definitions(assets=[*core_assets, custom_asset_a, custom_asset_b])
+    defs = Definitions(assets=[omop_condition, omop_observation, custom_asset_a, custom_asset_b])
     ```
 
 2. **Use only core**: Use `pluginlake` directly if the standard assets are sufficient. No custom repo needed.
 
 ### What this means for the code
 
-- `pluginlake.assets` contains core assets shared by all stations.
-- `pluginlake.definitions` provides a `Definitions` object and exposes `core_assets` for reuse.
+- `pluginlake.assets` contains core assets shared by all stations, organized by data model (e.g. `assets.omop`, `assets.fhir`).
+- `pluginlake.definitions` is a package with pre-composed Definitions per data model:
+  - `pluginlake.definitions.omop` — OMOP CDM assets
+  - `pluginlake.definitions.fhir` — FHIR assets
+  - `pluginlake.definitions` (root) — default/empty Definitions
+- Stations pick a definition module (`dagster dev -m pluginlake.definitions.omop`) or compose their own.
 - `pluginlake.core` and `pluginlake.utils` provide shared logic (resources, IO, helpers) usable by both core and custom assets.
-- Each data station is a **Dagster code location**, either using `pluginlake.definitions` directly or a custom definitions module.
+- Each data station is a **Dagster code location**, either using a `pluginlake.definitions.*` module directly or a custom definitions module.
 
 ### Container architecture
 

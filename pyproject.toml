@@ -40,10 +40,13 @@ requires = ["uv_build>=0.10.0,<0.11.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
+dagster-infra = [
+    "dagster-webserver>=1.12.14",
+]
 dev = [
     "dagster-dg-cli>=1.12.14",
-    "dagster-webserver>=1.12.14",
     "pre-commit>=4.5.1",
+    { include-group = "dagster-infra" },
     { include-group = "lint" },
     { include-group = "test" },
     { include-group = "security" },
@@ -73,7 +76,7 @@ nb = [
 
 [tool.ruff]
 line-length = 120
-target-version = "py312"
+target-version = "py313"
 fix = true
 # Skip non-source directories
 exclude = [
