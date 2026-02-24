@@ -5,6 +5,7 @@ from datetime import date, datetime
 import polars as pl
 
 from pluginlake.omop.schemas import get_omop_schema
+from pluginlake.omop.vocabulary_schemas import get_vocabulary_schema
 from pluginlake.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -68,6 +69,55 @@ def validate_omop_table_schema(
     schema = get_omop_schema(table_name)
     if not schema:
         logger.warning("No schema definition for table: %s", table_name)
+        return []
+
+    errors = []
+    schema_fields = schema.model_fields
+    df_columns = set(df.columns)
+    expected_columns = set(schema_fields.keys())
+
+    missing = expected_columns - df_columns
+    for col in missing:
+        field = schema_fields[col]
+        if field.is_required():
+            errors.append(ValidationError(col, "Required column missing"))
+
+    unexpected = df_columns - expected_columns
+    errors.extend(ValidationError(col, "Unexpected column not in schema") for col in unexpected)
+
+    for col in df_columns & expected_columns:
+        field = schema_fields[col]
+        df_type = df[col].dtype
+
+        expected_type = _get_expected_polars_type(field.annotation)
+
+        if expected_type and df_type != expected_type:
+            errors.append(
+                ValidationError(
+                    col,
+                    f"Type mismatch: expected {expected_type}, got {df_type}",
+                )
+            )
+
+    return errors
+
+
+def validate_vocabulary_table_schema(
+    df: pl.DataFrame,
+    table_name: str,
+) -> list[ValidationError]:
+    """Check DataFrame matches OMOP vocabulary schema.
+
+    Args:
+        df: DataFrame to validate.
+        table_name: Vocabulary table name.
+
+    Returns:
+        List of validation errors (empty if valid).
+    """
+    schema = get_vocabulary_schema(table_name)
+    if not schema:
+        logger.warning("No schema definition for vocabulary table: %s", table_name)
         return []
 
     errors = []

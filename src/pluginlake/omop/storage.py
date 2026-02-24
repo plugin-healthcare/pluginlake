@@ -229,3 +229,135 @@ def query_duckdb(
     data = result.fetchall()
 
     return pl.DataFrame(data, schema=columns, orient="row")
+
+
+def save_vocabulary_table(
+    df: pl.DataFrame,
+    table_name: str,
+    *,
+    output_dir: Path | None = None,
+    overwrite: bool = False,
+) -> Path:
+    """Save vocabulary table as Parquet file.
+
+    Args:
+        df: DataFrame to save.
+        table_name: Vocabulary table name (used for filename).
+        output_dir: Output directory. Uses config vocabulary_dir if None.
+        overwrite: Whether to overwrite existing file.
+
+    Returns:
+        Path to saved Parquet file.
+
+    Raises:
+        FileExistsError: If file exists and overwrite is False.
+    """
+    settings = get_omop_settings()
+    output_dir = output_dir or settings.vocabulary_dir / "parquet"
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / f"{table_name}.parquet"
+
+    if output_path.exists() and not overwrite:
+        msg = f"Vocabulary Parquet file already exists: {output_path}"
+        logger.error(msg)
+        raise FileExistsError(msg)
+
+    start_time = time.time()
+    logger.info(
+        "Saving vocabulary table to Parquet: %s",
+        table_name,
+        extra={"table_name": table_name, "output_path": str(output_path)},
+    )
+
+    df.write_parquet(output_path, compression="zstd")
+
+    duration = time.time() - start_time
+    file_size_mb = output_path.stat().st_size / (1024 * 1024)
+
+    logger.info(
+        "Saved %s rows to %s (%.1f MB) in %.2fs",
+        f"{len(df):,}",
+        output_path.name,
+        file_size_mb,
+        duration,
+        extra={
+            "table_name": table_name,
+            "row_count": len(df),
+            "file_size_mb": file_size_mb,
+            "duration_seconds": duration,
+        },
+    )
+
+    return output_path
+
+
+def register_vocabulary_tables(
+    con: duckdb.DuckDBPyConnection,
+    data_dir: Path | None = None,
+    *,
+    table_names: list[str] | None = None,
+    schema: str | None = None,
+) -> list[str]:
+    """Register vocabulary Parquet files as DuckDB views.
+
+    Args:
+        con: DuckDB connection.
+        data_dir: Directory containing vocabulary Parquet files. Uses config default if None.
+        table_names: Specific tables to register. Registers all if None.
+        schema: DuckDB schema name. Uses config vocabulary_schema if None.
+
+    Returns:
+        List of registered table names.
+    """
+    settings = get_omop_settings()
+    data_dir = data_dir or settings.vocabulary_dir / "parquet"
+    schema = schema or settings.vocabulary_schema
+
+    con.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
+
+    if not data_dir.exists():
+        logger.warning("Vocabulary directory not found: %s", data_dir)
+        return []
+
+    parquet_files = list(data_dir.glob("*.parquet"))
+    if not parquet_files:
+        logger.warning("No vocabulary Parquet files found in %s", data_dir)
+        return []
+
+    registered = []
+    for parquet_file in parquet_files:
+        table_name = parquet_file.stem
+
+        if table_names and table_name not in table_names:
+            continue
+
+        view_sql = f"""
+            CREATE OR REPLACE VIEW {schema}.{table_name} AS
+            SELECT * FROM read_parquet('{parquet_file}')
+        """  # noqa: S608
+
+        try:
+            con.execute(view_sql)
+            registered.append(table_name)
+            logger.debug(
+                "Registered vocabulary table: %s.%s",
+                schema,
+                table_name,
+                extra={"schema": schema, "table_name": table_name, "file_path": str(parquet_file)},
+            )
+        except Exception:
+            logger.exception(
+                "Failed to register vocabulary table: %s",
+                table_name,
+                extra={"table_name": table_name},
+            )
+
+    logger.info(
+        "Registered %d vocabulary tables in schema %s",
+        len(registered),
+        schema,
+        extra={"registered_tables": registered, "schema": schema},
+    )
+
+    return registered

@@ -62,6 +62,27 @@ class OMOPSettings(BaseSettings):
         description="OMOP CDM version to validate against",
     )
 
+    vocabulary_dir: Path = Field(
+        default=Path("data/omop_vocabularies"),
+        description="Directory containing OMOP vocabulary files",
+    )
+    vocabulary_schema: str = Field(
+        default="omop_vocab",
+        description="DuckDB schema name for vocabulary tables",
+    )
+    vocabulary_auto_load: bool = Field(
+        default=True,
+        description="Automatically load vocabularies on first query",
+    )
+    vocabulary_download_enabled: bool = Field(
+        default=False,
+        description="Enable automatic download from ATHENA",
+    )
+    athena_api_key: str | None = Field(
+        default=None,
+        description="ATHENA API key for vocabulary downloads",
+    )
+
 
 def get_omop_settings() -> OMOPSettings:
     """Get OMOP module settings.

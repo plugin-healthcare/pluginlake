@@ -26,7 +26,7 @@ logger = get_logger(__name__)
 def _ensure_connection(
     con: duckdb.DuckDBPyConnection | None,
     data_dir: Path | None = None,
-) -> Generator[duckdb.DuckDBPyConnection, None, None]:
+) -> Generator[duckdb.DuckDBPyConnection]:
     """Ensure a DuckDB connection exists, creating one if needed.
 
     Args:
