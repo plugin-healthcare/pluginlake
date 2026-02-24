@@ -9,6 +9,7 @@
 - Prefer returning values over mutating arguments.
 - Use `logging` via `get_logger(__name__)` from `pluginlake.utils.logger`, never `print()`.
 - Use Google-style docstrings.
+- always scan pyproject.toml for preferred code style and linting settings.
 
 ## Project tooling
 
@@ -29,6 +30,8 @@
 - `pluginlake/utils/` contains generic, reusable functions and helpers used across the project.
 - Do not put reusable code inside submodules if it will be shared elsewhere.
 - Each submodule should be self-contained with clear boundaries.
+- Assets and definitions go in `src/pluginlake/assets/` and `src/pluginlake/definitions/`, not in core or utils.
+- Don't use `__init__.py` files for logic. They should only contain imports and module-level docstrings.
 
 ## Testing
 
@@ -43,3 +46,10 @@
 - Use Polars for DataFrame operations, not pandas.
 - Prefer lazy evaluation where possible.
 - Only reuse data assets between pipelines if they are the exact same dataset.
+
+## Markdown
+
+- Do not hard-wrap lines to a fixed column width. Write each sentence or logical phrase as a single line.
+- Use em dashes sparingly; prefer commas, colons, or parentheses.
+- Don't overuse bold, italics or emojis. Use them only for emphasis when necessary.
+- check for mkdocs or zensical configs in zensical.toml, pyproject.tom or mkdocs.yaml before suggesting markdown formatting or structure.
