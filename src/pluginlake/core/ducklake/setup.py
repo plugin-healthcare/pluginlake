@@ -85,21 +85,15 @@ def create_connection(
     return conn
 
 
-def setup_ducklake(
-    settings: DuckLakeSettings | None = None,
-) -> duckdb.DuckDBPyConnection:
+def setup_ducklake() -> duckdb.DuckDBPyConnection:
     """Run the full DuckLake setup: ensure database exists, then connect.
 
-    This is the main entry point called at server startup.
-
-    Args:
-        settings: DuckLake settings. Loaded from environment if None.
+    This is the main entry point called at server startup. Settings are
+    always loaded from environment variables (``DUCKLAKE_`` prefix).
 
     Returns:
         A ready-to-use DuckDB connection with the ``ducklake`` catalog attached.
     """
-    if settings is None:
-        settings = DuckLakeSettings()  # type: ignore[call-arg]  # pydantic-settings loads from env
-
+    settings = DuckLakeSettings()  # ty: ignore[missing-argument]  # pydantic-settings loads from env
     ensure_database(settings)
     return create_connection(settings)
