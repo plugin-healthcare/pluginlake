@@ -70,3 +70,13 @@ def test_default_settings_when_none():
     mgr = StorageLayerManager()
     assert mgr.settings.base_dir.is_absolute()
     assert mgr.settings.backend == "local"
+
+
+def test_layer_dirs_writable_after_initialize(manager: StorageLayerManager):
+    manager.initialize()
+    for layer in StorageLayer:
+        layer_dir = manager.get_path(layer)
+        test_file = layer_dir / "_write_test"
+        test_file.write_text("ok")
+        assert test_file.read_text() == "ok"
+        test_file.unlink()
