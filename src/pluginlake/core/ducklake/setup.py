@@ -1,31 +1,15 @@
 """DuckLake database setup and connection management."""
 
+from pathlib import Path
+
 import duckdb
 import psycopg2
 from psycopg2 import sql
 
-from pluginlake.core.ducklake.config import DuckLakeSettings
-from pluginlake.core.storage.base import StorageBackend
-from pluginlake.core.storage.local import LocalStorageBackend
+from pluginlake.core.config import DuckLakeSettings
 from pluginlake.utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-
-def _resolve_storage_backend(settings: DuckLakeSettings) -> StorageBackend:
-    """Return a storage backend instance based on the configured backend type.
-
-    Args:
-        settings: DuckLake settings containing the backend type and data path.
-
-    Raises:
-        ValueError: If the configured storage backend is not supported.
-    """
-    backend = settings.storage_backend.lower()
-    if backend == "local":
-        return LocalStorageBackend(settings.data_path)
-    msg = f"Unsupported storage backend: {backend!r}. Supported: 'local'."
-    raise ValueError(msg)
 
 
 def ensure_database(settings: DuckLakeSettings) -> None:
@@ -65,40 +49,38 @@ def ensure_database(settings: DuckLakeSettings) -> None:
 
 def create_connection(
     settings: DuckLakeSettings,
-    backend: StorageBackend | None = None,
 ) -> duckdb.DuckDBPyConnection:
     """Create a DuckDB connection with DuckLake attached.
 
-    Installs and loads the DuckLake extension, applies any storage-specific
-    DuckDB configuration, and attaches the DuckLake catalog.
+    Installs and loads the DuckLake extension, ensures the data
+    directory exists, and attaches the DuckLake catalog.
 
     Args:
         settings: DuckLake settings with PostgreSQL connection details.
-        backend: Storage backend to use. If None, one is resolved from settings.
 
     Returns:
         A ready-to-use DuckDB connection with the ``ducklake`` catalog attached.
     """
-    if backend is None:
-        backend = _resolve_storage_backend(settings)
+    data_path = Path(settings.data_path)
+    if not data_path.is_absolute():
+        # Resolve relative paths from the project root
+        project_root = Path(__file__).resolve().parents[4]
+        data_path = project_root / data_path
+    data_path = data_path.resolve()
+    data_path.mkdir(parents=True, exist_ok=True)
 
     conn = duckdb.connect()
 
     conn.execute("INSTALL ducklake")
     conn.execute("LOAD ducklake")
 
-    backend.configure_duckdb(conn)
-
-    attach_query = (
-        f"ATTACH 'ducklake:postgres:{settings.pg_connection_string}' "
-        f"AS ducklake (DATA_PATH '{backend.get_base_path()}')"
-    )
+    attach_query = f"ATTACH 'ducklake:postgres:{settings.pg_connection_string}' AS ducklake (DATA_PATH '{data_path}')"
     conn.execute(attach_query)
 
     logger.info(
         "Attached DuckLake catalog (db=%s, data_path=%s).",
         settings.pg_db,
-        backend.get_base_path(),
+        data_path,
     )
     return conn
 
@@ -117,8 +99,7 @@ def setup_ducklake(
         A ready-to-use DuckDB connection with the ``ducklake`` catalog attached.
     """
     if settings is None:
-        settings = DuckLakeSettings()
+        settings = DuckLakeSettings()  # type: ignore[call-arg]  # pydantic-settings loads from env
 
     ensure_database(settings)
-    backend = _resolve_storage_backend(settings)
-    return create_connection(settings, backend)
+    return create_connection(settings)
