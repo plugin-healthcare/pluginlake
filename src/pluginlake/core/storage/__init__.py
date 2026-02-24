@@ -1,1 +1,1 @@
-"""Pluggable storage backends for DuckLake data files."""
+"""Pluggable storage backends and medallion-architecture layer management."""
