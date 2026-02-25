@@ -74,14 +74,6 @@ class OMOPSettings(BaseSettings):
         default=True,
         description="Automatically load vocabularies on first query",
     )
-    vocabulary_download_enabled: bool = Field(
-        default=False,
-        description="Enable automatic download from ATHENA",
-    )
-    athena_api_key: str | None = Field(
-        default=None,
-        description="ATHENA API key for vocabulary downloads",
-    )
 
 
 def get_omop_settings() -> OMOPSettings:
