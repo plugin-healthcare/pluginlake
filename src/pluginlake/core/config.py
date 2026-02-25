@@ -1,5 +1,6 @@
 """Configuration for the DuckLake data catalog."""
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,13 +18,13 @@ class DuckLakeSettings(BaseSettings):
         extra="ignore",
     )
 
-    pg_host: str
-    pg_port: int = 5432
-    pg_user: str
-    pg_password: str
-    pg_db: str
-    catalog_name: str = "lakehouse"
-    data_path: str = ".data/lakehouse"
+    pg_host: str = Field(validation_alias="PG_HOST")
+    pg_port: int = Field(default=5432, validation_alias="PG_PORT")
+    pg_user: str = Field(validation_alias="PG_USER")
+    pg_password: str = Field(validation_alias="PG_PASSWORD")
+    pg_db: str = Field(validation_alias="PG_DB")
+    catalog_name: str = Field(default="lakehouse", validation_alias="CATALOG_NAME")
+    data_path: str = Field(default=".data/lakehouse", validation_alias="DATA_PATH")
 
     @property
     def pg_connection_string(self) -> str:

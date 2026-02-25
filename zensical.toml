@@ -8,6 +8,7 @@ nav = [
     { "Guides" = [
         { "Getting Started" = "guides/getting-started.md" },
         { "Docker" = "guides/docker.md" },
+        { "API" = "guides/api.md" },
         { "Using as Package" = "guides/using-as-package.md" },
     ]},
     { "Decisions" = [
