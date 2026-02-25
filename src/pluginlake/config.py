@@ -15,7 +15,6 @@ from typing import Literal
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 # ---------------------------------------------------------------------------
 # Enums
 # ---------------------------------------------------------------------------
@@ -239,3 +238,4 @@ class DagsterSettings(BaseSettings):
     pg_user: SecretStr = Field(description="Dagster PostgreSQL user.")
     pg_password: SecretStr = Field(description="Dagster PostgreSQL password.")
     pg_db: str = Field(default="dagster", description="Dagster PostgreSQL database name.")
+    DAGSTER_HOME: Path = Field(default=Path.home(), description="Directory for Dagster to store instance data.")

@@ -117,7 +117,7 @@ def setup_ducklake(
         A ready-to-use DuckDB connection with the ``ducklake`` catalog attached.
     """
     if settings is None:
-        settings = DuckLakeSettings()
+        settings = DuckLakeSettings()  # type: ignore[missing-argument]
 
     ensure_database(settings)
     backend = _resolve_storage_backend(settings)

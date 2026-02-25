@@ -1,18 +1,11 @@
 """Entry point for pluginlake FastAPI service (`python -m pluginlake`)."""
 
 import uvicorn
-from fastapi import FastAPI
 
+from pluginlake.api.app import create_app
 from pluginlake.config import ServerSettings
 
-app = FastAPI(title="pluginlake")
-
-
-@app.get("/health")
-def health() -> dict[str, str]:
-    """Health check endpoint."""
-    return {"status": "ok"}
-
+app = create_app()
 
 if __name__ == "__main__":
     server = ServerSettings()

@@ -17,11 +17,6 @@ from pluginlake.config import (
 )
 
 
-# ---------------------------------------------------------------------------
-# Settings (base)
-# ---------------------------------------------------------------------------
-
-
 def test_defaults(settings):
     assert settings.debug is False
     assert settings.verbose is False
@@ -51,11 +46,6 @@ def test_from_env(monkeypatch: pytest.MonkeyPatch):
     assert s.debug is True
 
 
-# ---------------------------------------------------------------------------
-# StorageLayer enum
-# ---------------------------------------------------------------------------
-
-
 def test_storage_layer_values():
     assert StorageLayer.RAW == "raw"
     assert StorageLayer.PROCESSED == "processed"
@@ -64,12 +54,7 @@ def test_storage_layer_values():
 
 def test_storage_layer_iteration():
     layers = list(StorageLayer)
-    assert len(layers) == 3
-
-
-# ---------------------------------------------------------------------------
-# StorageSettings
-# ---------------------------------------------------------------------------
+    assert len(layers) == len(StorageLayer)
 
 
 def test_storage_settings_defaults():
@@ -120,7 +105,7 @@ def test_storage_settings_ensure_directories_idempotent(tmp_path: Path):
 def test_storage_settings_layer_dirs_property(tmp_path: Path):
     s = StorageSettings(base_dir=tmp_path / "lake")
     dirs = s.layer_dirs
-    assert len(dirs) == 3
+    assert len(dirs) == len(StorageLayer)
     assert dirs[StorageLayer.RAW] == tmp_path / "lake" / "raw"
     assert dirs[StorageLayer.PROCESSED] == tmp_path / "lake" / "processed"
     assert dirs[StorageLayer.OUTPUT] == tmp_path / "lake" / "output"
@@ -134,15 +119,10 @@ def test_storage_settings_from_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     assert s.backend == "local"
 
 
-# ---------------------------------------------------------------------------
-# ServerSettings
-# ---------------------------------------------------------------------------
-
-
 def test_server_settings_defaults():
     s = ServerSettings()
     assert s.host == "0.0.0.0"  # noqa: S104
-    assert s.port == 8000
+    assert s.port == ServerSettings.model_fields["port"].default
 
 
 def test_server_settings_from_env(monkeypatch: pytest.MonkeyPatch):
@@ -150,65 +130,50 @@ def test_server_settings_from_env(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("PLUGINLAKE_SERVER_PORT", "9090")
     s = ServerSettings()
     assert s.host == "127.0.0.1"
-    assert s.port == 9090
-
-
-# ---------------------------------------------------------------------------
-# PostgresSettings — validation errors
-# ---------------------------------------------------------------------------
+    assert s.port == 9090  # noqa: PLR2004
 
 
 def test_postgres_settings_missing_required_fields():
     with pytest.raises(ValidationError):
-        PostgresSettings()
+        PostgresSettings()  # type: ignore[missing-argument]
 
 
 def test_postgres_settings_from_env(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("PLUGINLAKE_POSTGRES_USER", "admin")
     monkeypatch.setenv("PLUGINLAKE_POSTGRES_PASSWORD", "secret")
-    s = PostgresSettings()
+    s = PostgresSettings()  # type: ignore[missing-argument]
     assert s.user.get_secret_value() == "admin"
     assert s.password.get_secret_value() == "secret"
 
 
 def test_postgres_settings_error_lists_missing_fields():
     with pytest.raises(ValidationError) as exc_info:
-        PostgresSettings()
+        PostgresSettings()  # type: ignore[missing-argument]
     errors = exc_info.value.errors()
     missing_fields = {e["loc"][0] for e in errors}
     assert "user" in missing_fields
     assert "password" in missing_fields
 
 
-# ---------------------------------------------------------------------------
-# DagsterSettings — validation errors
-# ---------------------------------------------------------------------------
-
-
 def test_dagster_settings_missing_required_fields():
     with pytest.raises(ValidationError):
-        DagsterSettings()
+        DagsterSettings()  # type: ignore[missing-argument]
 
 
 def test_dagster_settings_from_env(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("PLUGINLAKE_DAGSTER_PG_USER", "dagster")
     monkeypatch.setenv("PLUGINLAKE_DAGSTER_PG_PASSWORD", "secret")
-    s = DagsterSettings()
+    s = DagsterSettings()  # type: ignore[missing-argument]
     assert s.pg_user.get_secret_value() == "dagster"
 
 
 def test_dagster_settings_error_lists_missing_fields():
     with pytest.raises(ValidationError) as exc_info:
-        DagsterSettings()
+        DagsterSettings()  # type: ignore[missing-argument]
     errors = exc_info.value.errors()
     missing_fields = {e["loc"][0] for e in errors}
     assert "pg_user" in missing_fields
     assert "pg_password" in missing_fields
-
-
-# ---------------------------------------------------------------------------
-# Valid config startup
-# ---------------------------------------------------------------------------
 
 
 def test_all_default_configs_load():
@@ -218,24 +183,14 @@ def test_all_default_configs_load():
     ServerSettings()
 
 
-# ---------------------------------------------------------------------------
-# Invalid / missing env vars give clear errors
-# ---------------------------------------------------------------------------
-
-
 def test_invalid_log_level_gives_clear_error():
     with pytest.raises(ValidationError, match="log_level"):
-        Settings(log_level="NONEXISTENT")
+        Settings(log_level="NONEXISTENT")  # type: ignore[invalid-argument-type]
 
 
 def test_invalid_storage_backend_gives_clear_error():
     with pytest.raises(ValidationError, match="backend"):
-        StorageSettings(backend="s3")
-
-
-# ---------------------------------------------------------------------------
-# Storage layer paths exist and are writable
-# ---------------------------------------------------------------------------
+        StorageSettings(backend="s3")  # type: ignore[invalid-argument-type]
 
 
 def test_storage_layers_writable_after_ensure(tmp_path: Path):
@@ -255,4 +210,3 @@ def test_storage_layers_writable_via_get_layer_path(tmp_path: Path):
     target = s.get_layer_path(StorageLayer.RAW, "test.parquet")
     target.write_text("data")
     assert target.read_text() == "data"
-
