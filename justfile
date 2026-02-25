@@ -7,6 +7,7 @@ default:
 init:
     uv sync --all-groups --all-extras
     uv run pre-commit install
+    mkdir -p .data
 
 test:
     uv run pytest --cov=pluginlake
@@ -38,7 +39,7 @@ dev-down *args='':
 
 # Start local dev with titanic example (no Docker)
 dev-local:
-    uv run dagster dev -f examples/titanic.py
+    uv run dg dev -f examples/titanic.py
 
 # Start production environment
 up *args='':

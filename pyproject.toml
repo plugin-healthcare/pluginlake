@@ -19,6 +19,7 @@ dependencies = [
     "duckdb>=1.4.4",
     "fastapi>=0.128.7",
     "polars>=1.38.1",
+    "pyarrow>=23.0.1",
     "pydantic>=2.12.5",
     "pydantic-settings>=2.9.1",
 ]
@@ -117,6 +118,7 @@ strict = true
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [
     "S101",    # Use of assert
+    "S608",    # SQL injection — test assertions use f-strings with constants
     "D100",    # Missing docstring in public module
     "D103",    # Missing docstring in public function
     "D104",    # Missing docstring in public package
@@ -150,6 +152,11 @@ strict = true
     "D415",    # First line ending with period not required for notebooks
     "W293",    # Blank line whitespace from marimo formatting
     "DTZ005",  # datetime.now() without tz acceptable for age calculation in notebooks
+]
+
+"examples/*.py" = [
+    "INP001",  # Implicit namespace package
+    "S105",    # Possible hardcoded password (example config)
 ]
 
 [tool.ruff.format]

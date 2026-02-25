@@ -26,14 +26,14 @@ class Settings(BaseSettings):
     debug: bool = False
     log_level: str = "INFO"
 
-# pluginlake/storage/config.py (submodule settings)
-from pluginlake.config import Settings
+# pluginlake/core/config.py (submodule settings)
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-class StorageSettings(Settings):
-    model_config = SettingsConfigDict(env_prefix="STORAGE_")
+class DuckLakeSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="DUCKLAKE_")
 
-    blob_endpoint: str
-    container_name: str = "data"
+    pg_host: str
+    pg_user: str
 ```
 
 ### Modularity

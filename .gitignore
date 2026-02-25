@@ -229,3 +229,4 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+.tmp_dagster_home_*

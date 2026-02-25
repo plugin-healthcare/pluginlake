@@ -20,7 +20,7 @@ pluginlake uses DuckLake as its data catalog and Dagster for orchestration. This
 
 **All Dagster assets are persisted via a custom DuckLake IO manager.**
 
-Assets return data; the IO manager handles storage. Asset code contains no storage logic. The IO manager maps asset keys to DuckLake schemas and tables automatically.
+Assets return data and the IO manager handles storage and catalog registration. Asset code contains no storage logic for data that is persisted. The IO manager maps asset keys to DuckLake schemas and tables automatically.
 
 ```python
 @asset(key_prefix="omop")
@@ -45,12 +45,12 @@ For the initial scope of pluginlake, we focus on the following clinical data for
 - **FHIR**: bundles and resources are stored as JSON columns. Dagster assets then extract, flatten, and map them to OMOP-compatible tabular form.
 - **OMOP**: tabular by definition. Assets produce Polars DataFrames that the IO manager writes directly as Parquet-backed DuckLake tables.
 
-**Out of scope** - acknowledged for future work, not implemented now:
-
-| Format       | Example            | Notes                                        |
-|--------------|--------------------|----------------------------------------------|
-| Binary files | DICOM, NIfTI       | Needs file-reference pattern/object storage. |
-| ML artifacts | pickle, safetensor | Needs file-reference pattern/object storage. |
+> **Out of scope** acknowledged for future work, not implemented now:
+>
+>| Format       | Example            | Notes                                        |
+>|--------------|--------------------|----------------------------------------------|
+>| Binary files | DICOM, NIfTI       | Needs file-reference pattern/object storage. |
+>| ML artifacts | pickle, safetensor | Needs file-reference pattern/object storage. |
 
 ### Why not a Dagster resource instead?
 
