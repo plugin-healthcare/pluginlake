@@ -4,7 +4,7 @@ import duckdb
 import psycopg2
 from psycopg2 import sql
 
-from pluginlake.core.ducklake.config import DuckLakeSettings
+from pluginlake.core.config import DuckLakeSettings
 from pluginlake.core.storage.base import StorageBackend
 from pluginlake.core.storage.local import LocalStorageBackend
 from pluginlake.utils.logger import get_logger
@@ -13,19 +13,15 @@ logger = get_logger(__name__)
 
 
 def _resolve_storage_backend(settings: DuckLakeSettings) -> StorageBackend:
-    """Return a storage backend instance based on the configured backend type.
+    """Return a LocalStorageBackend for the given settings.
 
     Args:
-        settings: DuckLake settings containing the backend type and data path.
+        settings: DuckLake settings containing the data path.
 
-    Raises:
-        ValueError: If the configured storage backend is not supported.
+    Returns:
+        A local storage backend using the configured data path.
     """
-    backend = settings.storage_backend.lower()
-    if backend == "local":
-        return LocalStorageBackend(settings.data_path)
-    msg = f"Unsupported storage backend: {backend!r}. Supported: 'local'."
-    raise ValueError(msg)
+    return LocalStorageBackend(settings.data_path)
 
 
 def ensure_database(settings: DuckLakeSettings) -> None:
