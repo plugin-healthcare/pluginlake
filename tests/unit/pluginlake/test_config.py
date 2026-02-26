@@ -98,7 +98,7 @@ def test_storage_settings_ensure_directories(tmp_path: Path):
 def test_storage_settings_ensure_directories_idempotent(tmp_path: Path):
     s = StorageSettings(base_dir=tmp_path / "lake")
     s.ensure_directories()
-    s.ensure_directories()  # should not raise
+    s.ensure_directories()
     assert (tmp_path / "lake" / "raw").is_dir()
 
 
@@ -130,7 +130,7 @@ def test_server_settings_from_env(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("PLUGINLAKE_SERVER_PORT", "9090")
     s = ServerSettings()
     assert s.host == "127.0.0.1"
-    assert s.port == 9090  # noqa: PLR2004
+    assert s.port == 9090
 
 
 def test_postgres_settings_missing_required_fields():

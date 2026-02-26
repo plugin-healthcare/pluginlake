@@ -18,10 +18,12 @@ dependencies = [
     "dagster-postgres>=0.28.14",
     "duckdb>=1.4.4",
     "fastapi>=0.128.7",
+    "httpx>=0.28.0",
     "polars>=1.38.1",
     "pyarrow>=23.0.1",
     "pydantic>=2.12.5",
     "pydantic-settings>=2.9.1",
+    "python-multipart>=0.0.18",
 ]
 
 [project.urls]
@@ -124,6 +126,11 @@ strict = true
     "D104",    # Missing docstring in public package
     "ANN",     # Type annotations (pytest fixtures are dynamic)
     "INP001",  # implicit namespace package (need __init__.py for test discovery)
+    "SLF001",  # Private member access (testing internals)
+    "ARG001",  # Unused function argument (fixtures for side effects)
+    "PLR2004", # Magic values in assertions
+    "PLC0415", # Inline imports (scoped test helpers)
+    "ASYNC240",# pathlib in async tests (sync assertions are fine)
 ]
 "notebooks/*.py" = [
     "INP001",  # Implicit namespace package
