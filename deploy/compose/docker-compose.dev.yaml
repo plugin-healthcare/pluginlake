@@ -42,8 +42,8 @@ services:
       context: ../../
       dockerfile: deploy/docker/pluginlake.dev.Dockerfile
     environment:
-      PLUGINLAKE_SERVER_HOST: ${PLUGINLAKE_SERVER_HOST:-"0.0.0.0"}
-      PLUGINLAKE_SERVER_PORT: ${PLUGINLAKE_SERVER_PORT:-"8000"}
+      PLUGINLAKE_SERVER_HOST: ${PLUGINLAKE_SERVER_HOST:-0.0.0.0}
+      PLUGINLAKE_SERVER_PORT: ${PLUGINLAKE_SERVER_PORT:-8000}
       PLUGINLAKE_DEBUG: ${PLUGINLAKE_DEBUG:-True}
     ports:
       - "${PLUGINLAKE_SERVER_PORT:-8000}:${PLUGINLAKE_SERVER_PORT:-8000}"
