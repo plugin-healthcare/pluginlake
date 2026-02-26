@@ -13,7 +13,7 @@ services:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 3s
       timeout: 1s
-      retries: 10
+      retries: 1
 
   dagster:
     build:
@@ -41,7 +41,16 @@ services:
     build:
       context: ../../
       dockerfile: deploy/docker/pluginlake.dev.Dockerfile
+    environment:
+      PLUGINLAKE_SERVER_HOST: ${PLUGINLAKE_SERVER_HOST:-0.0.0.0}
+      PLUGINLAKE_SERVER_PORT: ${PLUGINLAKE_SERVER_PORT:-8000}
+      PLUGINLAKE_DEBUG: ${PLUGINLAKE_DEBUG:-True}
     ports:
-      - "8000:8000"
+      - "${PLUGINLAKE_SERVER_PORT:-8000}:${PLUGINLAKE_SERVER_PORT:-8000}"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${PLUGINLAKE_SERVER_PORT:-8000}/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 1
     volumes:
       - ../../src:/app/src
