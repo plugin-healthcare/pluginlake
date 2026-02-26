@@ -35,6 +35,7 @@ class StorageLayerManager:
         settings: StorageSettings | None = None,
         backend: StorageBackend | None = None,
     ) -> None:
+        """Initialise with storage settings and an optional backend override."""
         self._settings = settings or StorageSettings()
         self._backend = backend or self._resolve_backend()
 
