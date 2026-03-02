@@ -19,6 +19,7 @@ dependencies = [
     "duckdb>=1.4.4",
     "fastapi>=0.128.7",
     "httpx>=0.28.0",
+    "marimo>=0.20.2",
     "polars>=1.38.1",
     "pyarrow>=23.0.1",
     "pydantic>=2.12.5",

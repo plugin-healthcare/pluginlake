@@ -28,6 +28,11 @@ services:
       DAGSTER_PG_USER: ${DAGSTER_PG_USER}
       DAGSTER_PG_PASSWORD: ${DAGSTER_PG_PASSWORD}
       DAGSTER_PG_DB: ${DAGSTER_PG_DB}
+      DUCKLAKE_PG_HOST: ${DUCKLAKE_PG_HOST:-postgres}
+      DUCKLAKE_PG_PORT: ${DUCKLAKE_PG_PORT:-5432}
+      DUCKLAKE_PG_USER: ${DUCKLAKE_PG_USER}
+      DUCKLAKE_PG_PASSWORD: ${DUCKLAKE_PG_PASSWORD}
+      DUCKLAKE_PG_DB: ${DUCKLAKE_PG_DB}
     depends_on:
       postgres:
         condition: service_healthy
