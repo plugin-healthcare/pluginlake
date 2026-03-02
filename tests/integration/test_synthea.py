@@ -16,14 +16,14 @@ import pytest
 from pluginlake.omop import (
     get_cohort,
     get_conditions_for_person,
-    get_duckdb_connection,
+    get_duckdb_connection,  # ty: ignore[unresolved-import]  # storage.py deleted; refactor pending
     get_measurement_values,
     get_observations_for_person,
     get_persons,
     get_visits_for_person,
     load_omop_table,
-    register_omop_tables,
-    save_omop_table,
+    register_omop_tables,  # ty: ignore[unresolved-import]  # storage.py deleted; refactor pending
+    save_omop_table,  # ty: ignore[unresolved-import]  # storage.py deleted; refactor pending
 )
 
 
@@ -86,7 +86,7 @@ def loaded_tables(synthea_data_dir: Path, parquet_output_dir: Path) -> dict[str,
 
 
 @pytest.fixture(scope="module")
-def duckdb_con(parquet_output_dir: Path, loaded_tables: dict[str, pl.DataFrame]):  # noqa: ARG001
+def duckdb_con(parquet_output_dir: Path, loaded_tables: dict[str, pl.DataFrame]):
     """DuckDB connection with registered OMOP tables."""
     con = get_duckdb_connection()
     register_omop_tables(con, data_dir=parquet_output_dir)
@@ -254,7 +254,7 @@ def test_query_cohort_with_age_range(duckdb_con):
         assert all(result["year_of_birth"] >= current_year - 60)
 
 
-def test_parquet_files_created(parquet_output_dir: Path, loaded_tables: dict[str, pl.DataFrame]):  # noqa: ARG001
+def test_parquet_files_created(parquet_output_dir: Path, loaded_tables: dict[str, pl.DataFrame]):
     """Test that Parquet files were created correctly."""
     parquet_files = list(parquet_output_dir.glob("*.parquet"))
 

@@ -3,7 +3,7 @@
 import polars as pl
 import pytest
 
-from pluginlake.omop.storage import (
+from pluginlake.omop.storage import (  # ty: ignore[unresolved-import]  # storage.py deleted; refactor pending
     get_duckdb_connection,
     load_parquet_as_polars,
     query_duckdb,

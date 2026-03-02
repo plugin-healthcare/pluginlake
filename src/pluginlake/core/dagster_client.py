@@ -93,6 +93,7 @@ class DagsterClient:
         repository_location_name: str = "pluginlake.definitions",
         repository_name: str = "__repository__",
         run_config: dict[str, Any] | None = None,
+        asset_selection: list[list[str]] | None = None,
     ) -> DagsterRunResult:
         """Launch a Dagster job run via the GraphQL API.
 
@@ -101,6 +102,8 @@ class DagsterClient:
             repository_location_name: Dagster repository location name.
             repository_name: Dagster repository name.
             run_config: Optional run configuration dictionary.
+            asset_selection: Optional list of asset key paths to select
+                (e.g. ``[["omop", "person"]]``).
 
         Returns:
             A DagsterRunResult with the run ID and initial status.
@@ -119,6 +122,9 @@ class DagsterClient:
                 "runConfigData": run_config or {},
             },
         }
+
+        if asset_selection:
+            variables["executionParams"]["selector"]["assetSelection"] = [{"path": path} for path in asset_selection]
 
         logger.info("Triggering Dagster job %r", job_name)
 

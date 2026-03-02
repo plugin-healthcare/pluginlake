@@ -26,10 +26,6 @@ class OMOPSettings(BaseSettings):
         default=Path("data/raw/omop"),
         description="Directory containing raw OMOP CSV files",
     )
-    storage_dir: Path = Field(
-        default=Path("data/omop"),
-        description="Directory for processed OMOP Parquet files",
-    )
 
     validate_on_load: bool = Field(
         default=True,

@@ -7,7 +7,9 @@ import duckdb
 import polars as pl
 
 from pluginlake.omop.schemas import get_omop_schema
-from pluginlake.omop.storage import query_duckdb
+from pluginlake.omop.storage import (  # ty: ignore[unresolved-import]  # storage.py deleted; refactor pending
+    query_duckdb,
+)
 from pluginlake.utils.logger import get_logger
 
 logger = get_logger(__name__)

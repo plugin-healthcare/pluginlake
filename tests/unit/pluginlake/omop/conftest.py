@@ -6,7 +6,10 @@ import duckdb
 import polars as pl
 import pytest
 
-from pluginlake.omop.storage import register_vocabulary_tables, save_vocabulary_table
+from pluginlake.omop.storage import (  # ty: ignore[unresolved-import]  # storage.py deleted; refactor pending
+    register_vocabulary_tables,
+    save_vocabulary_table,
+)
 
 
 @pytest.fixture

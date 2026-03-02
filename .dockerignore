@@ -1,0 +1,13 @@
+.venv/
+data/
+.data/
+dist/
+.git/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.pyc
+*.pyo
+notebooks/
+docs/
+planning/

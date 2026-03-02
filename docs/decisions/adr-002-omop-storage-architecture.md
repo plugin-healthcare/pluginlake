@@ -1,7 +1,7 @@
 # ADR-002: OMOP data storage architecture
 
 - **Status:** Proposed
-- **Date:** 2026-02-17
+- **Date:** 2026-02-17 (revised 2026-03-01)
 - **Authors:** Tim Hendriks
 
 ## Context
@@ -17,132 +17,103 @@ pluginlake needs to store and query hospital data in different formats and comin
 
 ## Decision
 
-**Store all healthcare data (FHIR, tabular, OMOP) as Parquet files. Transform all data to OMOP for use with DuckDB for analytical queries, using DuckLake for catalog management.**
+**All data assets are written through the Dagster IO manager, which issues `CREATE OR REPLACE TABLE` SQL against the DuckLake catalog. DuckLake manages all Parquet files autonomously. No manual Parquet file management exists in pluginlake.**
 
-### Storage layer: Parquet files
+### Write path: Dagster IO manager → DuckLake
 
-All healthcare data is stored as Parquet files, organized by source format:
+Every data asset is written through `DuckLakeIOManager.handle_output()`, which executes:
 
-```
-data/storage/
-├── fhir/                    # Native FHIR resources from EPD systems
-│   ├── patient.parquet      # Nested: id, name[{family, given[]}], identifier[{}]
-│   ├── observation.parquet  # Nested: id, subject{}, code{}, value[x]
-│   └── encounter.parquet
-├── tabular/                 # Flat tables from legacy systems
-│   ├── lab_results.parquet
-│   └── appointments.parquet
-└── omop/                    # Transformed to OMOP CDM v5.4
-    ├── person.parquet
-    ├── observation_period.parquet
-    ├── visit_occurrence.parquet
-    └── condition_occurrence.parquet
+```sql
+CREATE OR REPLACE TABLE ducklake.<schema>.<table> AS SELECT * FROM _data
 ```
 
-**Rationale:**
+DuckLake translates this into immutable, UUID-named Parquet files on disk. Updates and deletes use copy-on-write markers — pluginlake never rewrites files directly.
 
-- **Columnar format**: Optimized for analytical queries (80-90% compression ratio)
-- **Self-describing schema**: Embedded metadata - no external schema files needed, data is portable
-- **Nested types support**: FHIR resources contain nested arrays and objects (e.g., `Patient.name[{family, given[]}]`), Parquet preserves this structure without flattening
-- **Format flexibility**: Same storage layer works for flat OMOP tables and hierarchical FHIR resources
-
-### Query layer: DuckDB
-
-DuckDB provides zero-copy analytical queries over Parquet files through registered views.
-
-**Rationale:**
-
-- Embedded analytical database (no server required)
-- Native Parquet integration with predicate pushdown
-- Excellent performance on OLAP workloads
-- Easy conversion to/from Polars DataFrames
-
-### Catalog layer: DuckLake
-
-DuckLake (extension for DuckDB) manages metadata, versioning, and lineage:
-
-- **Metadata catalog**: PostgreSQL backend tracks table versions, schemas, and data locations
-- **Version control**: Snapshot-based versioning for reproducible queries
-- **Lineage tracking**: Records data transformations and asset dependencies
-- **Multi-table transactions**: Ensures consistency across related OMOP tables
-
-### Data flow architecture
+### Storage layout (managed by DuckLake)
 
 ```
-EPD systems
+data/lakehouse/
+└── <schema>/
+    └── <table>/
+        └── ducklake-<uuid>.parquet
+```
+
+The `data/lakehouse/` root is set via `DUCKLAKE_DATA_PATH`. There is no `data/storage/` directory; DuckLake is the single storage root.
+
+### Data flow
+
+```
+CSV files (OMOP CDM format)
     ↓
-FHIR API / Tabular exports
+Polars loader (pluginlake.omop.loader)
     ↓
-Polars loader (format-specific parsers)
+Dagster asset (pluginlake.assets.omop)
     ↓
-Parquet files (native format: fhir/, tabular/)
+DuckLakeIOManager.handle_output()
     ↓
-Transformation pipeline
+CREATE OR REPLACE TABLE ducklake.omop.<table>
     ↓
-Parquet files (OMOP format: omop/)
-    ↓
-DuckDB views (zero-copy queries on all formats)
-    ↓
-DuckLake catalog (metadata + versioning + lineage)
+DuckLake → ducklake-<uuid>.parquet
 ```
 
 **Key points:**
 
-- FHIR resources stored with nested structure intact
-- Tabular data stored as flat tables
-- OMOP is a transformation target, not input format
-- OMOP is the **primary analytical interface** for cross-station federated queries
-- Lineage tracks FHIR → OMOP transformations
+- OMOP CSVs from Synthea are a **direct input format**, not only a transformation target
+- The Dagster IO manager is the single write path — no asset may bypass it (ADR-003)
+- DuckLake handles file naming, compaction, and copy-on-write internally
+
+### Query/serve path
+
+FastAPI reads directly from the DuckLake catalog via SQL:
+
+```sql
+SELECT * FROM ducklake.omop.person WHERE ...
+```
+
+No intermediate view registration step (`register_omop_tables`) is needed in the serving layer.
+
+### Asset key routing
+
+`["omop", "person"]` → `ducklake.omop.person` (handled by `DuckLakeIOManager`)
 
 ## Alternatives considered
 
-### Only store data as OMOP
+### Manual Parquet files + DuckDB view registration
 
-Transform incoming data first, and use only OMOP as the standard for data storage. In this case the lineage information on the data transformation would be lost.
-
-**Rejected because:**
-
-- Loses original FHIR structure needed for EPD system reconciliation
-- Cannot regenerate source data if transformation logic changes
-- OMOP may not capture all FHIR-specific elements (extensions, custom fields)
-- Makes debugging transformation issues harder
-- Irreversible data loss for non-OMOP use cases
-
-### Store data in another dataformat and generate OMOP on the fly
-
-Store data in a different format (e.g., FHIR in JSON files), and generate OMOP dynamically when needed.
+Write Parquet files directly from Polars, then register them as DuckDB views with `register_omop_tables()`.
 
 **Rejected because:**
 
-- Repeated transformation overhead on every query
-- No materialized OMOP views for fast analytical queries
-- Complex transformation logic must run at query time
-- Cannot validate OMOP compliance until query execution
-- Poor performance for federated queries across stations
+- Bypasses the DuckLake catalog, losing versioning and lineage
+- Requires pluginlake to manage file paths and overwrites explicitly
+- No copy-on-write support; full file rewrites needed for any update
+- Violates ADR-003 ("every data asset goes through DuckLake")
 
 ### PostgreSQL for all data storage
 
-Store FHIR, tabular, and OMOP data directly in PostgreSQL database.
+Store FHIR, tabular, and OMOP data directly in PostgreSQL.
 
 **Rejected because:**
 
 - OLTP-optimized, not OLAP (slower analytical queries)
-- No built-in compression (requires extensions)
+- No built-in compression
 - Harder to version entire datasets atomically
 
 ## Consequences
 
 ### Positive
 
-- **Fast analytical queries**: Columnar format + predicate pushdown enable efficient filtering
-- **Portable storage**: Parquet files work across languages and platforms
-- **Type-safe ingestion**: Pydantic validation catches errors early
-- **Easy development**: No database server required for local work
-- **Efficient storage**: 80-90% compression reduces storage costs
-- **Versioning ready**: DuckLake enables reproducible queries
+- **Single write path**: all assets go through the IO manager — no ad-hoc Parquet writes
+- **DuckLake manages files**: UUID-named files, copy-on-write updates, no manual overwrite logic
+- **Fast analytical queries**: columnar format + predicate pushdown via Polars `LazyFrame`
+- **Versioning and lineage**: DuckLake PostgreSQL catalog tracks all table versions
+- **Portable storage**: Parquet files are readable without DuckLake if needed
 
 ### Negative
 
-- **No row-level updates**: Must rewrite entire Parquet files to modify data (acceptable because we will append-only)
-- **DuckLake maturity**: Newer project, less battle-tested than PostgreSQL
+- **DuckLake maturity**: newer project, less battle-tested than PostgreSQL
 - **Memory constraints**: DuckDB requires sufficient RAM for large queries (mitigated by spillover to disk)
+
+## Migration note
+
+`omop/storage.py` (`save_omop_table`, `register_omop_tables`, `get_duckdb_connection`) implements the pre-DuckLake manual path and is deprecated. It will be removed once `queries.py` and `vocabulary_queries.py` are migrated to read directly from `ducklake.omop.*`.

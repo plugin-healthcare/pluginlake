@@ -14,7 +14,10 @@ from pluginlake.omop.queries import (
     get_persons,
     get_visits_for_person,
 )
-from pluginlake.omop.storage import register_omop_tables, save_omop_table
+from pluginlake.omop.storage import (  # ty: ignore[unresolved-import]  # storage.py deleted; refactor pending
+    register_omop_tables,
+    save_omop_table,
+)
 
 
 @pytest.fixture

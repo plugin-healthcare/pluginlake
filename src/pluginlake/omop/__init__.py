@@ -32,13 +32,6 @@ from pluginlake.omop.schemas import (
     VisitOccurrence,
     get_omop_schema,
 )
-from pluginlake.omop.storage import (
-    get_duckdb_connection,
-    load_parquet_as_polars,
-    query_duckdb,
-    register_omop_tables,
-    save_omop_table,
-)
 from pluginlake.omop.validation import ValidationError, validate_omop_table_schema
 
 __all__ = [
@@ -62,7 +55,6 @@ __all__ = [
     "VisitOccurrence",
     "get_cohort",
     "get_conditions_for_person",
-    "get_duckdb_connection",
     "get_measurement_values",
     "get_observations_for_person",
     "get_omop_schema",
@@ -71,9 +63,5 @@ __all__ = [
     "get_visits_for_person",
     "load_omop_dataset",
     "load_omop_table",
-    "load_parquet_as_polars",
-    "query_duckdb",
-    "register_omop_tables",
-    "save_omop_table",
     "validate_omop_table_schema",
 ]

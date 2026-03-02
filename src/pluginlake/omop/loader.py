@@ -11,8 +11,18 @@ from pluginlake.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+CDM_53_RENAMES = {
+    "visit_occurrence": {
+        "admitting_source_concept_id": "admitted_from_concept_id",
+        "admitting_source_value": "admitted_from_source_value",
+        "discharge_to_concept_id": "discharged_to_concept_id",
+        "discharge_to_source_value": "discharged_to_source_value",
+    },
+}
+
 VOCABULARY_FILE_MAPPING = {
     "concept": ["CONCEPT.csv", "concept.csv"],
+    "concept_cpt4": ["CONCEPT_CPT4.csv", "concept_cpt4.csv"],
     "vocabulary": ["VOCABULARY.csv", "vocabulary.csv"],
     "domain": ["DOMAIN.csv", "domain.csv"],
     "concept_class": ["CONCEPT_CLASS.csv", "concept_class.csv"],
@@ -137,6 +147,11 @@ def load_omop_table(
             try_parse_dates=True,
             infer_schema_length=settings.infer_schema_length,
         )
+
+        if table_name in CDM_53_RENAMES:
+            renames = {k: v for k, v in CDM_53_RENAMES[table_name].items() if k in df.columns}
+            if renames:
+                df = df.rename(renames)
 
         duration = time.time() - start_time
         logger.info(
@@ -284,6 +299,7 @@ def load_vocabulary_table(
             file_path,
             encoding=encoding,
             separator=separator,
+            quote_char=None,
             null_values=["", "NULL"],
             try_parse_dates=True,
             infer_schema_length=settings.infer_schema_length,
@@ -358,7 +374,10 @@ def load_vocabulary_dataset(
 
     vocabulary_files = VOCABULARY_FILE_MAPPING
     if table_names:
-        vocabulary_files = {k: v for k, v in vocabulary_files.items() if k in table_names}
+        include = set(table_names)
+        if "concept" in include:
+            include.add("concept_cpt4")
+        vocabulary_files = {k: v for k, v in vocabulary_files.items() if k in include}
 
     logger.info(
         "Loading OMOP vocabularies from %s",
@@ -380,6 +399,13 @@ def load_vocabulary_dataset(
                 table_name,
                 extra={"table_name": table_name},
             )
+
+    if "concept_cpt4" in tables:
+        if "concept" in tables:
+            tables["concept"] = pl.concat([tables["concept"], tables.pop("concept_cpt4")])
+            logger.info("Merged concept_cpt4 into concept.")
+        else:
+            tables.pop("concept_cpt4")
 
     logger.info(
         "Loaded %d vocabulary tables",

@@ -41,6 +41,7 @@ services:
       - ../../config/dagster:/app/config/dagster
       - ../../data:/app/data
       - ${DAGSTER_COMPUTE_LOGS:-../../.data/dagster/compute_logs}:/app/compute_logs
+      - ${DAGSTER_LAKEHOUSE_DATA:-../../.data/lakehouse}:/app/.data/lakehouse
 
   pluginlake:
     build:
@@ -55,7 +56,13 @@ services:
     ports:
       - "${PLUGINLAKE_SERVER_PORT:-8000}:${PLUGINLAKE_SERVER_PORT:-8000}"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${PLUGINLAKE_SERVER_PORT:-8000}/health')"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:${PLUGINLAKE_SERVER_PORT:-8000}/health')",
+        ]
       interval: 5s
       timeout: 3s
       retries: 1

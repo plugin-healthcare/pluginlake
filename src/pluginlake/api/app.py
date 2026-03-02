@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from pluginlake.api.exceptions import register_exception_handlers
 from pluginlake.api.middleware import RequestLoggingMiddleware
-from pluginlake.api.routers import health, ingest
+from pluginlake.api.routers import health, ingest, omop
 from pluginlake.config import Settings
 from pluginlake.utils.logger import get_logger, setup_logging
 
@@ -66,3 +66,4 @@ def _include_routers(app: FastAPI) -> None:
     """Register all API routers."""
     app.include_router(health.router)
     app.include_router(ingest.router)
+    app.include_router(omop.router)
