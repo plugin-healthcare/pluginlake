@@ -15,7 +15,8 @@ class LocalStorageBackend(StorageBackend):
             Created automatically if it does not exist.
     """
 
-    def __init__(self, base_path: str | Path):
+    def __init__(self, base_path: str | Path) -> None:
+        """Initialise with the root directory for file storage."""
         self._base_path = Path(base_path).resolve()
         self._base_path.mkdir(parents=True, exist_ok=True)
 

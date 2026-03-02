@@ -10,6 +10,8 @@ config/dagster/logs/
 config/dagster/storage/
 config/dagster/history/
 config/dagster/compute_logs/
+config/dagster/.logs_queue
+config/dagster/.nux
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

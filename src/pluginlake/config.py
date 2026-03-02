@@ -234,6 +234,10 @@ class DagsterSettings(BaseSettings):
         default="pluginlake.definitions",
         description="Python module containing Dagster definitions.",
     )
+    webserver_url: str = Field(
+        default="http://localhost:3000",
+        description="URL of the Dagster webserver (GraphQL API).",
+    )
     pg_host: str = Field(default="localhost", description="Dagster PostgreSQL hostname.")
     pg_user: SecretStr = Field(description="Dagster PostgreSQL user.")
     pg_password: SecretStr = Field(description="Dagster PostgreSQL password.")
