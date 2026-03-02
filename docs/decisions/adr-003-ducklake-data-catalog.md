@@ -74,7 +74,7 @@ POST /ingest
   │             return 202 + tracking_id (= Dagster run_id)
   │
   └─ Phase 2 (async, Dagster)
-      ├─ Business rule validation, quality scoring, transform
+      ├─ technical validation, quality scoring, transform to standard format
       ├─ FAIL → run failed in Dagster UI, queryable via tracking_id
       └─ PASS → data in DuckLake catalog
 ```
@@ -190,3 +190,23 @@ Filesystem
 - Prometheus metrics and alerting are out of scope. Live service status is provided by the `/health` endpoint.
 - Stations stay lightweight with no message broker and no extra databases beyond PostgreSQL.
 - The PostgreSQL init script creates both the `dagster` and `ducklake` databases in a single container.
+
+## Decision 4: Referential integrity strategy
+
+By adopting a lakehouse architecture, we explicitly accept the absence of primary keys and foreign keys at the storage layer. Parquet files have no constraint engine and DuckLake is a catalog, not a relational database. Referential integrity is therefore managed as validation in Phase 2, or at read time in transformation assets. This is a deliberate shift from traditional constraint-based enforcement and enables a late-binding approach where strictness is determined by the needs of downstream consumers rather than as a hard requirement at ingest time.
+
+**Suggested approach for referential integrity checks within PLUGINLake**
+
+| When | Example | On violation |
+|---|---|---|
+| Ingestion (Phase 2) | `condition_occurrence.person_id` exists in `person` | Quarantine: record does not graduate to the next layer |
+| Transform | `condition_concept_id` exists in `concept` with correct domain and `standard_concept` | Exclude from output or resolve/enrich via vocabulary graph if possible |
+| Serve | `visit_occurrence` end date not before start date | Only serve valid records  |
+
+### Consequences
+
+- The lakehouse has no FK constraint enforcement. This is accepted.
+- Referential integrity validation is explicit, auditable, and queryable. Violations are DuckLake-registered assets, not silent drops or hard failures.
+- Quarantined records are a first-class asset. No data is discarded at ingest time.
+- Downstream consumers determine strictness. Transform assets may enrich or exclude, serve endpoints only return valid records.
+- Vocabulary reference validation at the transform layer requires the OMOP vocabulary Parquet files to be present locally on the node. These are a prerequisite for Phase 2 processing.
