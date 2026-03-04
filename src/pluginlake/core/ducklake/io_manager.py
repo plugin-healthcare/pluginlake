@@ -21,54 +21,32 @@ CATALOG = "ducklake"
 class DuckLakeIOManager(IOManager):
     """Dagster IO manager that persists asset outputs to DuckLake.
 
-    Resolves each asset key to a ``catalog.schema.table`` path using
-    the full key and an optional schema mapping.
-
-    Default resolution:
+    Resolves each asset key to a ``catalog.schema.table`` path:
         - ``["condition_era"]`` → ``ducklake.main.condition_era``
         - ``["omop", "condition_era"]`` → ``ducklake.omop.condition_era``
         - ``["raw", "omop", "condition_era"]`` → ``ducklake.raw.omop_condition_era``
 
-    With ``schema_mapping={"raw": "bronze"}``:
-        - ``["raw", "omop", "condition_era"]`` → ``ducklake.bronze.omop_condition_era``
-
     Args:
         conn: A DuckDB connection with the ``ducklake`` catalog already attached.
-        schema_mapping: Optional mapping from asset key prefix to DuckLake
-            schema name. Unmapped prefixes use the prefix itself.
     """
 
     def __init__(
         self,
         conn: "duckdb.DuckDBPyConnection",
-        schema_mapping: dict[str, str] | None = None,
     ) -> None:
         """Initialize with an open DuckDB connection.
 
         Args:
             conn: A DuckDB connection with the ``ducklake`` catalog attached.
-            schema_mapping: Optional mapping from key prefix to schema name.
         """
         self._conn = conn
-        self._schema_mapping = schema_mapping or {}
-
-    def resolve_schema(self, prefix: str) -> str:
-        """Map an asset key prefix to a DuckLake schema name.
-
-        Args:
-            prefix: The first segment of the asset key path.
-
-        Returns:
-            The DuckLake schema name (mapped or pass-through).
-        """
-        return self._schema_mapping.get(prefix, prefix)
 
     def table_ref(self, asset_key_path: list[str]) -> str:
         """Derive a fully qualified DuckLake table reference from an asset key.
 
-        Uses the full path: first segment becomes the schema (via mapping),
-        remaining segments are joined with ``_`` to form the table name.
-        Single-segment keys use the default schema.
+        First segment becomes the schema, remaining segments are joined
+        with ``_`` to form the table name. Single-segment keys use the
+        default schema.
 
         Args:
             asset_key_path: The asset key path segments,
@@ -81,7 +59,7 @@ class DuckLakeIOManager(IOManager):
             schema = DEFAULT_SCHEMA
             table = asset_key_path[0]
         else:
-            schema = self.resolve_schema(asset_key_path[0])
+            schema = asset_key_path[0]
             table = "_".join(asset_key_path[1:])
 
         return f"{CATALOG}.{schema}.{table}"
@@ -94,15 +72,19 @@ class DuckLakeIOManager(IOManager):
         """
         self._conn.execute(f"CREATE SCHEMA IF NOT EXISTS {CATALOG}.{schema}")
 
-    def handle_output(self, context: "OutputContext", obj: pl.DataFrame) -> None:
-        """Write a Polars DataFrame to a DuckLake table.
+    def handle_output(self, context: "OutputContext", obj: pl.DataFrame | pl.LazyFrame) -> None:
+        """Write a Polars DataFrame or LazyFrame to a DuckLake table.
 
-        Ensures the target schema exists, registers the DataFrame with
+        Accepts both eager and lazy frames. When a ``pl.LazyFrame`` is
+        provided, DuckDB evaluates the query plan internally via the
+        native Polars plugin, so data never materializes in Python.
+
+        Ensures the target schema exists, registers the frame with
         DuckDB, and creates or replaces the table.
 
         Args:
             context: Dagster output context containing the asset key.
-            obj: The Polars DataFrame to persist.
+            obj: The Polars DataFrame or LazyFrame to persist.
         """
         path = list(context.asset_key.path)
         ref = self.table_ref(path)
@@ -116,7 +98,10 @@ class DuckLakeIOManager(IOManager):
         )
         self._conn.unregister("_data")
 
-        logger.info("Wrote %d rows to %s.", len(obj), ref)
+        row_count = self._conn.sql(
+            f"SELECT COUNT(*) FROM {ref}"  # noqa: S608
+        ).fetchone()
+        logger.info("Wrote %d rows to %s.", row_count[0] if row_count else 0, ref)
 
     def load_input(self, context: "InputContext") -> pl.LazyFrame:
         """Load a DuckLake table as a Polars LazyFrame.
@@ -148,7 +133,6 @@ def ducklake_io_manager(_init_context: "InitResourceContext") -> DuckLakeIOManag
     attach the DuckLake catalog, then wraps the connection in a
     :class:`DuckLakeIOManager`.
 
-    Schema mapping can be configured via DuckLake settings in the future.
     """
     conn = setup_ducklake()
     return DuckLakeIOManager(conn)
