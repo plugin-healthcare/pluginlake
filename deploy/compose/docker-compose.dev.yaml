@@ -9,6 +9,8 @@ services:
       - "5432:5432"
     volumes:
       - ${POSTGRES_DATA:-../../.data/postgres}:/var/lib/postgresql/data
+    env_file:
+      - ../../.env
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 3s
@@ -33,6 +35,8 @@ services:
       DUCKLAKE_PG_USER: ${DUCKLAKE_PG_USER}
       DUCKLAKE_PG_PASSWORD: ${DUCKLAKE_PG_PASSWORD}
       DUCKLAKE_PG_DB: ${DUCKLAKE_PG_DB}
+    env_file:
+      - ../../.env
     depends_on:
       postgres:
         condition: service_healthy
@@ -40,12 +44,16 @@ services:
       - ../../src:/app/src
       - ../../examples:/app/examples
       - ../../config/dagster:/app/config/dagster
+      - ../../data:/app/data
       - ${DAGSTER_COMPUTE_LOGS:-../../.data/dagster/compute_logs}:/app/compute_logs
+      - ${DAGSTER_LAKEHOUSE_DATA:-../../.data/lakehouse}:/app/.data/lakehouse
 
   pluginlake:
     build:
       context: ../../
       dockerfile: deploy/docker/pluginlake.dev.Dockerfile
+    env_file:
+      - ../../.env
     environment:
       PLUGINLAKE_SERVER_HOST: ${PLUGINLAKE_SERVER_HOST:-0.0.0.0}
       PLUGINLAKE_SERVER_PORT: ${PLUGINLAKE_SERVER_PORT:-8000}
@@ -53,9 +61,16 @@ services:
     ports:
       - "${PLUGINLAKE_SERVER_PORT:-8000}:${PLUGINLAKE_SERVER_PORT:-8000}"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${PLUGINLAKE_SERVER_PORT:-8000}/health')"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:${PLUGINLAKE_SERVER_PORT:-8000}/health')",
+        ]
       interval: 5s
       timeout: 3s
       retries: 1
     volumes:
       - ../../src:/app/src
+      - ../../data:/app/data

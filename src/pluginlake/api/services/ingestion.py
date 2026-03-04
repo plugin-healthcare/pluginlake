@@ -60,8 +60,8 @@ class IngestionService:
 
     def __init__(
         self,
-        storage_manager: StorageLayerManager,
-        dagster_client: DagsterClient,
+        storage_manager: StorageLayerManager | None = None,
+        dagster_client: DagsterClient | None = None,
         settings: IngestionSettings | None = None,
     ) -> None:
         """Initialise the service with storage, Dagster, and settings."""
@@ -148,6 +148,9 @@ class IngestionService:
 
         Files are stored as: ``raw/{dataset}/{timestamp}_{file_id}_{filename}``
         """
+        if self._storage is None:
+            msg = "_store_file requires storage_manager"
+            raise TypeError(msg)
         timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%S")
         stored_name = f"{timestamp}_{file_id}_{filename}"
         dest = self._storage.get_path(StorageLayer.RAW, dataset, stored_name)
@@ -169,6 +172,9 @@ class IngestionService:
         Returns the run ID on success, or None if triggering fails.
         Failures are logged but do not raise — the file is already stored.
         """
+        if self._dagster is None:
+            msg = "_trigger_dagster requires dagster_client"
+            raise TypeError(msg)
         try:
             result = await self._dagster.trigger_job(
                 job_name=self._settings.dagster_job_name,
