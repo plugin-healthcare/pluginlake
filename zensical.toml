@@ -8,12 +8,14 @@ nav = [
     { "Guides" = [
         { "Getting Started" = "guides/getting-started.md" },
         { "Docker" = "guides/docker.md" },
+        { "API" = "guides/api.md" },
         { "Using as Package" = "guides/using-as-package.md" },
     ]},
     { "Decisions" = [
         { "Overview" = "decisions/README.md" },
         { "ADR-001 Asset Architecture" = "decisions/adr-001-asset-architecture.md" },
-        { "ADR-002 DuckLake Data Catalog" = "decisions/adr-002-ducklake-data-catalog.md" },
+        { "ADR-002 OMOP data storage architecture" = "decisions/adr-002-adr-002-omop-storage-architecture.md" },
+        { "ADR-002 DuckLake Data Catalog" = "decisions/adr-003-ducklake-data-catalog.md" }
     ]},
     { "Development" = [
         { "Guidelines" = "develop-guidelines.md" },

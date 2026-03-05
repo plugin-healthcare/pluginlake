@@ -67,7 +67,7 @@ Hardened images are distributed through Docker Hub and require authentication to
 1. Create an account at [hub.docker.com](https://hub.docker.com) if you don't have one.
 2. Log in from the CLI:
    ```bash
-   docker login
+   docker login dhi.io
    ```
 3. Browse the available hardened images at the [Docker Hub Hardened Images Catalog](https://hub.docker.com/hardened-images/catalog). Note that not all images are free — some require a Docker Pro, Team, or Business subscription.
 

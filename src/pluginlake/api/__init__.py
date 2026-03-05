@@ -1,1 +1,1 @@
-"""API package for Pluginlake."""
+"""API package for pluginlake."""
