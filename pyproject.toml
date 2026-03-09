@@ -12,16 +12,12 @@ readme = "README.md"
 requires-python = ">=3.13"
 
 dependencies = [
-    "azure-identity>=1.25.2",
-    "azure-storage-blob>=12.28.0",
     "dagster>=1.12.14",
-    "dagster-postgres>=0.28.14",
     "duckdb>=1.4.4",
     "fastapi>=0.128.7",
     "httpx>=0.28.0",
     "marimo>=0.20.2",
     "polars>=1.38.1",
-    "pyarrow>=23.0.1",
     "pydantic>=2.12.5",
     "pydantic-settings>=2.9.1",
     "python-multipart>=0.0.18",
@@ -34,6 +30,15 @@ Issues = "https://github.com/plugin-healthcare/pluginlake/issues"
 Documentation = "https://github.com/plugin-healthcare/pluginlake#readme"
 
 [project.optional-dependencies]
+infra = [
+    "dagster-graphql>=1.12.14",
+    "dagster-postgres>=0.28.14",
+    "dagster-webserver>=1.12.14",
+]
+azure = [
+    "azure-identity>=1.25.2",
+    "azure-storage-blob>=12.28.0",
+]
 synthea = [
     "boto3>=1.42.45",
     "tqdm>=4.67.3",
@@ -44,13 +49,9 @@ requires = ["uv_build>=0.10.0,<0.11.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
-dagster-infra = [
-    "dagster-webserver>=1.12.14",
-]
 dev = [
     "dagster-dg-cli>=1.12.14",
     "pre-commit>=4.5.1",
-    { include-group = "dagster-infra" },
     { include-group = "lint" },
     { include-group = "test" },
     { include-group = "security" },
@@ -80,7 +81,7 @@ nb = [
 
 [tool.ruff]
 line-length = 120
-target-version = "py313"
+target-version = "py312"
 fix = true
 # Skip non-source directories
 exclude = [
@@ -121,7 +122,6 @@ strict = true
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [
     "S101",    # Use of assert
-    "S608",    # SQL injection — test assertions use f-strings with constants
     "D100",    # Missing docstring in public module
     "D103",    # Missing docstring in public function
     "D104",    # Missing docstring in public package
@@ -161,11 +161,6 @@ strict = true
     "DTZ005",  # datetime.now() without tz acceptable for age calculation in notebooks
 ]
 
-"examples/*.py" = [
-    "INP001",  # Implicit namespace package
-    "S105",    # Possible hardcoded password (example config)
-]
-
 [tool.ruff.format]
 quote-style = "double"
 docstring-code-format = true
@@ -183,6 +178,8 @@ xfail_strict = true
 filterwarnings = [
     "error",
 ]
+
+[tool.ty]
 
 [tool.ty.src]
 exclude = ["external_repos/", "notebooks/"]
