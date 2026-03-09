@@ -56,7 +56,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser. You should 
 
 ## 5. Explore the asset graph
 
-Navigate to **Assets** in the left sidebar. You'll see three assets connected in a graph:
+Navigate to **Assets** in the left sidebar, then switch to the **Lineage** tab. You'll see three assets connected in a graph:
 
 ```
               ┌──▶ titanic_survival_by_class

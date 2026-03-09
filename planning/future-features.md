@@ -6,7 +6,7 @@ Acknowledged features that are out of current scope. Each item includes context 
 
 - **Azure Blob Storage**: Configure DuckDB's `azure` extension and point DuckLake's `DATA_PATH` to an Azure Blob container. Requires `azure-storage-blob` (already a dependency). Relevant when deploying to Azure or when data volumes exceed local disk.
 
-- **S3 Storage**: Configure DuckDB's `httpfs` extension and point DuckLake's `DATA_PATH` to an S3 bucket. Relevant for AWS deployments.
+- **S3-compatible storage**: Configure DuckDB's `httpfs` extension and point DuckLake's `DATA_PATH` to any S3-compatible endpoint.
 
 ## Large dataset writes via DuckDBPyRelation
 

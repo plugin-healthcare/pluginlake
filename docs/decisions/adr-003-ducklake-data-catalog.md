@@ -33,10 +33,10 @@ def condition_era(raw_conditions: pl.DataFrame) -> pl.DataFrame:
 
 The IO manager handles the following formats:
 
-| Format                                              | Stored as                                           |
-|-----------------------------------------------------|-----------------------------------------------------|
-| Tabular data (CSV, Parquet, any source to columnar) | DuckLake table (Parquet-backed)                     |
-| JSON / XML documents                                | DuckLake table with JSON or text column             |
+| Format                                              | Stored as                                                        |
+|-----------------------------------------------------|------------------------------------------------------------------|
+| Tabular data (CSV, Parquet, any source to columnar) | DuckLake table (open storage format, default Parquet)            |
+| JSON / XML documents                                | DuckLake table (open storage format, default Parquet)            |
 
 DuckLake supports `json`, `struct`, `list`, and `map` column types natively, so deeply nested and polymorphic documents can be stored without flattening. Every asset output goes through the IO manager, which registers it in the DuckLake catalog and writes the data. If the data has not changed, the IO manager skips the write and no new version is created. Domain-specific transformations (e.g., FHIR to OMOP) are handled by Dagster assets and the IO manager persists and catalogs any new or updated assets.
 

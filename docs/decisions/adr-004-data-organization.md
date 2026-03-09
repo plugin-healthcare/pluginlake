@@ -47,14 +47,20 @@ DuckLake settings like `target_file_size`, `parquet_compression`, and `per_threa
 
 ## Decision 1: Processing layers as schemas
 
-**The first segment of a Dagster asset key becomes the DuckLake schema. This represents the processing layer.**
+**The first segment of a Dagster asset key becomes the DuckLake schema.**
 
-Based on the existing code and lake house conventions, two common patterns are identified:
+pluginlake follows a medallion architecture. Each schema acts as a processing layer:
 
-- Medallion architecture: bronze (raw) → Silver (curated) → gold (aggregated, business-level)
-- Domain-based architecture: [omop, fhir, etc.]
+| Layer | Purpose |
+|---|---|
+| `staging` | Unvalidated ingestion payloads |
+| `raw` | Technically validated (schema, types) |
+| `curated` | Contextually validated (business rules, referential integrity, vocabulary mappings) |
+| `aggregated` | Consumer-ready aggregations and views |
 
-A station that uses medallion architecture defines its layers as key prefixes:
+These are the default layers, not a rigid set. Stations can define additional schemas as needed (e.g. `omop`, `fhir`) using the same key prefix mechanism.
+
+Layers are defined as Dagster asset key prefixes:
 
 ```python
 @asset(key_prefix="raw")
@@ -89,19 +95,6 @@ Both are valid and the IO manager is able to handle both patterns consistently.
 - **Multi-segment key** → first segment = schema, remaining segments joined with `_` = table.
 - **Filesystem** → managed by DuckLake. Mirrors schema/table structure automatically.
 
-### Schema mapping (optional override)
-
-The IO manager accepts an optional `schema_mapping` dict that overrides the default behavior:
-
-```python
-# Remap "raw" prefix to "bronze" schema
-DuckLakeIOManager(conn, schema_mapping={"raw": "bronze"})
-
-# ["raw", "omop", "condition_era"] → ducklake.bronze.omop_condition_era
-```
-
-This is useful for station-specific naming conventions without changing asset keys.
-
 ### Alternatives considered
 
 | Approach | Result for `["raw", "omop", "condition_era"]` | Rejected because |
@@ -123,9 +116,11 @@ The full `.data/` directory layout:
 │   │   └── omop_condition_era/
 │   │       ├── ducklake-{uuid}.parquet
 │   │       └── ducklake-{uuid}.parquet   ← multiple files per table
-│   └── curated/
-│       └── omop_condition_era/
-│           └── ducklake-{uuid}.parquet
+│   ├── curated/
+│   │   └── omop_condition_era/
+│   │       └── ducklake-{uuid}.parquet
+│   └── aggregated/
+│       └── ...
 ├── staging/            ← ingestion payloads awaiting Dagster (see ADR-002)
 │   └── {run_id}/
 │       └── payload.json
@@ -148,7 +143,7 @@ The IO manager is the single integration point. It enforces that the Dagster ass
 Asset key: ["raw", "omop", "condition_era"]
     │
     ├─ IO manager resolves:
-    │   schema = "raw"  (first segment, optionally mapped)
+    │   schema = "raw"  (first segment)
     │   table  = "omop_condition_era"  (remaining segments joined with _)
     │
     ├─ DuckLake catalog entry:
@@ -177,51 +172,49 @@ DuckLake doesn't know about Dagster asset keys — it only knows schemas and tab
 - Staging and logs live outside DuckLake under `.data/`. Their details are in ADR-002.
 - The IO manager is the only integration point between Dagster, DuckLake, and the filesystem.
 - Asset renames create new tables; old ones need explicit cleanup.
-- Schema mapping allows per-station naming overrides without changing asset code.
+- All stations use the same naming convention. There is no per-station schema mapping. This keeps every station speaking the same language.
 
 ---
 
 ## Decision 4: Asset data flow and lazy evaluation
 
-### Pipeline data flow
+### Lazy evaluation via the DuckDB Polars plugin
 
-Data flows through the pipeline in two phases per asset boundary:
+DuckDB's native Polars plugin ([duckdb#17947](https://github.com/duckdb/duckdb/pull/17947)) enables lazy evaluation end-to-end. The IO manager uses this for both reads and writes:
 
-1. **Read (lazy):** `load_input` returns a `pl.LazyFrame` via `conn.sql(...).pl(lazy=True)`.
-2. **Transform:** The asset chains Polars lazy operations (`.filter()`, `.select()`, `.join()`, etc.).
-3. **Write (eager):** The asset returns a `pl.DataFrame` (calling `.collect()` if working lazily). `handle_output` registers it in DuckDB and writes to DuckLake via `CREATE OR REPLACE TABLE`.
+- **`load_input`** returns a `pl.LazyFrame` via `conn.sql(...).pl(lazy=True)`. Polars operations chained on this frame (filters, projections, joins) are pushed down to DuckDB at collect time, enabling DuckLake file pruning.
+- **`handle_output`** accepts both `pl.DataFrame` and `pl.LazyFrame`. DuckDB's `register()` handles both types. When a LazyFrame is provided, DuckDB evaluates the query plan internally and writes to DuckLake without the data materializing in Python.
 
+Assets can therefore stay fully lazy:
+
+```python
+@asset(key_prefix="curated")
+def omop_condition_era(raw_omop_condition_era: pl.LazyFrame) -> pl.LazyFrame:
+    return raw_omop_condition_era.filter(pl.col("condition_status") == "active")
 ```
-load_input  →  pl.LazyFrame  →  asset transforms (lazy)  →  .collect()  →  pl.DataFrame  →  handle_output
+
+Or collect explicitly when needed:
+
+```python
+@asset(key_prefix="curated")
+def omop_condition_era(raw_omop_condition_era: pl.LazyFrame) -> pl.DataFrame:
+    return raw_omop_condition_era.filter(...).collect()
 ```
 
-### Why lazy reads matter
+Both patterns work. The IO manager handles them the same way.
 
-DuckDB v1.4.0 added native Polars LazyFrame support ([duckdb#17947](https://github.com/duckdb/duckdb/pull/17947)) with:
+### Ingestion and serving
 
-- **Projection pushdown:** Only columns used by the Polars plan are fetched from DuckDB.
-- **Filter pushdown:** Polars `.filter()` expressions are translated to SQL WHERE clauses and pushed down to DuckDB, enabling DuckLake file pruning via `ducklake_file_column_stats`.
-- **Batched streaming:** Data flows as Arrow record batches, not as a single materialization.
+The FastAPI layer acts as the entry point for both data ingestion and data serving. It provides authentication, request validation, and payload size limits.
 
-This means a downstream asset that only uses a few columns and filters on a condition will only read the relevant data from DuckLake, not the full table.
+For ingestion, the actual processing strategy depends on the data source and file type. Possible approaches include lazy processing, chunking, and streaming. These are implementation decisions per pipeline, not defined at the architecture level. FastAPI has built-in support for handling large payloads (streaming request bodies, background tasks, configurable upload limits).
 
-### Why writes are eager
+For serving, the API queries DuckLake directly via SQL with proper WHERE clauses. It does not use the IO manager. Selective reads benefit from DuckLake file pruning naturally.
 
-Dagster's IO manager contract requires `handle_output` to receive a Python object. The asset must return a materialized `pl.DataFrame`. This is a Dagster framework constraint, not a DuckLake limitation. DuckLake itself can write from SQL queries without Python materialization (see future features: `DuckDBPyRelation` dispatch).
+### Partitioning
 
-### Bounded ingestion
+DuckLake tables can be partitioned via `PARTITION BY` using `CREATE TABLE` or `ALTER TABLE`. DuckLake uses [Hive-style partitioning](https://ducklake.select/docs/stable/duckdb/advanced_features/partitioning) by default. Partitioning is a physical optimization: DuckLake organizes Parquet files by partition value and prunes files during queries when filters match the partition column.
 
-Data enters the pipeline in bounded chunks, either through:
+Partitioning requires specifying one or more columns in the `PARTITION BY` clause. DuckLake then organizes Parquet files into Hive-style directories based on those column values. When a query filters on a partition column, DuckLake skips files in non-matching partitions entirely. This supports incremental loads where each pipeline run writes to a specific partition (e.g., by date or source) and existing partitions remain immutable.
 
-- **Dagster partitions:** Each partition is a separate materialization processing a manageable slice.
-- **API-level chunking:** The FastAPI ingestion endpoint accepts bounded payloads (e.g., FHIR bundles of N resources). Each payload triggers a Dagster run for that chunk.
-
-This ensures the pipeline never processes unbounded data in a single materialization. The DuckLake table accumulates across runs since each INSERT creates new Parquet files without modifying existing ones.
-
-### Serving layer
-
-The FastAPI serving layer queries DuckLake directly via SQL with proper WHERE clauses. It does not use the IO manager. This means:
-
-- Selective reads benefit from DuckLake file pruning naturally.
-- No data enters Python beyond what the query returns.
-- The serving layer is decoupled from pipeline execution.
+The partition strategy is a per-table decision, not a global default. Which column to partition by (if any) depends on the data domain, query patterns, and ingestion frequency. Partition definitions are embedded in the schema or data model configuration of each station. The IO manager does not need to be aware of partitioning — DuckLake handles it transparently via SQL DDL.
