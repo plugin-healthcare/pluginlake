@@ -1,0 +1,33 @@
+services:
+  postgres:
+    volumes:
+      - smoke-pgdata:/var/lib/postgresql/data
+
+  dagster:
+    env_file:
+      - smoke.env
+    environment:
+      OMOP_VOCABULARY_DIR: /app/tests/integration/fixtures/vocab
+      OMOP_RAW_DATA_DIR: /app/.data/smoke/clinical
+      OMOP_VALIDATE_CONCEPTS: "true"
+    volumes:
+      - ../../tests:/app/tests
+      - ./smoke.env:/app/.env
+      - smoke-lakehouse:/app/.data/lakehouse
+      - smoke-clinical:/app/.data/smoke/clinical
+      - smoke-compute-logs:/app/compute_logs
+
+  pluginlake:
+    env_file:
+      - smoke.env
+    environment:
+      OMOP_RAW_DATA_DIR: /app/.data/smoke/clinical
+    volumes:
+      - ./smoke.env:/app/.env
+      - smoke-clinical:/app/.data/smoke/clinical
+
+volumes:
+  smoke-pgdata:
+  smoke-lakehouse:
+  smoke-clinical:
+  smoke-compute-logs:

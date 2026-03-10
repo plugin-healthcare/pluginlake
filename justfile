@@ -37,6 +37,17 @@ dev-up *args='':
 dev-down *args='':
     docker compose -f deploy/compose/docker-compose.dev.yaml down {{ args }}
 
+_smoke-compose := "-f deploy/compose/docker-compose.dev.yaml -f deploy/compose/docker-compose.smoke.yaml"
+
+# Run smoke test against running stack
+smoke-test:
+    uv run python scripts/smoke_test.py
+
+# Start isolated stack, run smoke test, tear down (clean volumes)
+smoke-test-full:
+    docker compose {{ _smoke-compose }} up -d
+    uv run python scripts/smoke_test.py; rc=$?; docker compose {{ _smoke-compose }} down -v; exit $rc
+
 # Start local dev with titanic example (no Docker)
 dev-local:
     uv run dg dev -f examples/titanic.py
