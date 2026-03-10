@@ -51,12 +51,12 @@ DuckLake settings like `target_file_size`, `parquet_compression`, and `per_threa
 
 pluginlake follows a medallion architecture. Each schema acts as a processing layer:
 
-| Layer | Purpose |
-|---|---|
-| `staging` | Unvalidated ingestion payloads |
-| `raw` | Technically validated (schema, types) |
-| `curated` | Contextually validated (business rules, referential integrity, vocabulary mappings) |
-| `aggregated` | Consumer-ready aggregations and views |
+| Layer        | Purpose                                                                             |
+| ------------ | ----------------------------------------------------------------------------------- |
+| `staging`    | Unvalidated ingestion payloads                                                      |
+| `raw`        | Technically validated (schema, types)                                               |
+| `curated`    | Contextually validated (business rules, referential integrity, vocabulary mappings) |
+| `aggregated` | Consumer-ready aggregations and views                                               |
 
 These are the default layers, not a rigid set. Stations can define additional schemas as needed (e.g. `omop`, `fhir`) using the same key prefix mechanism.
 
@@ -84,12 +84,12 @@ Both are valid and the IO manager is able to handle both patterns consistently.
 
 ### Full mapping rules
 
-| Dagster asset key | DuckLake schema | DuckLake table | Filesystem path |
-|---|---|---|---|
-| `["condition_era"]` | `main` | `condition_era` | `DATA_PATH/main/condition_era/` |
-| `["omop", "condition_era"]` | `omop` | `condition_era` | `DATA_PATH/omop/condition_era/` |
-| `["raw", "omop", "condition_era"]` | `raw` | `omop_condition_era` | `DATA_PATH/raw/omop_condition_era/` |
-| `["curated", "omop", "condition_era"]` | `curated` | `omop_condition_era` | `DATA_PATH/curated/omop_condition_era/` |
+| Dagster asset key                      | DuckLake schema | DuckLake table       | Filesystem path                         |
+| -------------------------------------- | --------------- | -------------------- | --------------------------------------- |
+| `["condition_era"]`                    | `main`          | `condition_era`      | `DATA_PATH/main/condition_era/`         |
+| `["omop", "condition_era"]`            | `omop`          | `condition_era`      | `DATA_PATH/omop/condition_era/`         |
+| `["raw", "omop", "condition_era"]`     | `raw`           | `omop_condition_era` | `DATA_PATH/raw/omop_condition_era/`     |
+| `["curated", "omop", "condition_era"]` | `curated`       | `omop_condition_era` | `DATA_PATH/curated/omop_condition_era/` |
 
 - **Single-segment key** → schema `main` (DuckDB default), table = key.
 - **Multi-segment key** → first segment = schema, remaining segments joined with `_` = table.
@@ -97,11 +97,11 @@ Both are valid and the IO manager is able to handle both patterns consistently.
 
 ### Alternatives considered
 
-| Approach | Result for `["raw", "omop", "condition_era"]` | Rejected because |
-|---|---|---|
-| Layer + domain as combined schema | `ducklake.raw_omop.condition_era` | Schema proliferation: `raw_omop`, `raw_fhir`, `curated_omop`, `curated_fhir`... |
-| Domain as schema, layer in table name | `ducklake.omop.raw_condition_era` | Mixes concerns: the domain schema contains all processing stages |
-| Nested schemas | `ducklake.raw.omop.condition_era` | Not possible in DuckDB (3-level limit) |
+| Approach                              | Result for `["raw", "omop", "condition_era"]` | Rejected because                                                                |
+| ------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------- |
+| Layer + domain as combined schema     | `ducklake.raw_omop.condition_era`             | Schema proliferation: `raw_omop`, `raw_fhir`, `curated_omop`, `curated_fhir`... |
+| Domain as schema, layer in table name | `ducklake.omop.raw_condition_era`             | Mixes concerns: the domain schema contains all processing stages                |
+| Nested schemas                        | `ducklake.raw.omop.condition_era`             | Not possible in DuckDB (3-level limit)                                          |
 
 ---
 

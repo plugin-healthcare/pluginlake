@@ -25,6 +25,10 @@ class DuckLakeSettings(BaseSettings):
     catalog_name: str = "lakehouse"
     data_path: str = ".data/lakehouse"
 
+    target_file_size: int | None = None
+    parquet_compression: str | None = None
+    per_thread_output: bool | None = None
+
     @property
     def pg_connection_string(self) -> str:
         """Build the libpq connection string for DuckLake metadata."""

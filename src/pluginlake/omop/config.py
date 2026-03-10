@@ -70,6 +70,10 @@ class OMOPSettings(BaseSettings):
         default=True,
         description="Automatically load vocabularies on first query",
     )
+    validate_concepts: bool = Field(
+        default=True,
+        description="Validate concept IDs against vocabulary tables during ingestion",
+    )
 
     folder_watch_interval: int = Field(
         default=30,

@@ -14,8 +14,9 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 3s
-      timeout: 1s
-      retries: 1
+      timeout: 3s
+      retries: 10
+      start_period: 5s
 
   dagster:
     build:
@@ -70,7 +71,8 @@ services:
         ]
       interval: 5s
       timeout: 3s
-      retries: 1
+      retries: 10
+      start_period: 5s
     volumes:
       - ../../src:/app/src
       - ../../data:/app/data
