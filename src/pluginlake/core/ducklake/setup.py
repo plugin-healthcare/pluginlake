@@ -1,5 +1,7 @@
 """DuckLake database setup and connection management."""
 
+import time
+
 import duckdb
 import psycopg2
 from psycopg2 import sql
@@ -87,9 +89,25 @@ def create_connection(
 
     attach_query = (
         f"ATTACH 'ducklake:postgres:{settings.pg_connection_string}' "
-        f"AS ducklake (DATA_PATH '{backend.get_base_path()}')"
+        f"AS ducklake (DATA_PATH '{backend.get_base_path()}', OVERRIDE_DATA_PATH TRUE)"
     )
-    conn.execute(attach_query)
+
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            conn.execute(attach_query)
+            break
+        except duckdb.Error as exc:
+            if "already exists" in str(exc) and attempt < max_retries - 1:
+                logger.warning("DuckLake catalog init race detected (attempt %d), retrying...", attempt + 1)
+                time.sleep(1)
+                conn.close()
+                conn = duckdb.connect()
+                conn.execute("INSTALL ducklake")
+                conn.execute("LOAD ducklake")
+                backend.configure_duckdb(conn)
+            else:
+                raise
 
     logger.info(
         "Attached DuckLake catalog (db=%s, data_path=%s).",

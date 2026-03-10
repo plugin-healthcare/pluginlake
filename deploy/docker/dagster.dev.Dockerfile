@@ -8,10 +8,10 @@ COPY --from=dhi.io/uv:0-debian13-dev /usr/local/bin/uv /usr/local/bin/uvx /usr/l
 
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-install-project
+RUN uv sync --frozen --extra infra --no-install-project
 
 COPY . .
-RUN uv sync --frozen
+RUN uv sync --frozen --extra infra
 
 ENV PATH="/app/.venv/bin:$PATH" \
     DAGSTER_HOME="/app/config/dagster" \
