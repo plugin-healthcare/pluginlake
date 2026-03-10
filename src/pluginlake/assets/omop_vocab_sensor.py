@@ -3,7 +3,7 @@
 import json
 import time
 
-from dagster import AssetKey, RunRequest, SensorEvaluationContext, SensorResult, SkipReason, sensor
+from dagster import AssetKey, DefaultSensorStatus, RunRequest, SensorEvaluationContext, SensorResult, SkipReason, sensor
 
 from pluginlake.assets.omop import VOCABULARY_TABLES
 from pluginlake.omop.config import get_omop_settings
@@ -16,6 +16,7 @@ logger = get_logger(__name__)
 @sensor(
     job_name="omop_vocab_ingest_job",
     minimum_interval_seconds=get_omop_settings().folder_watch_interval,
+    default_status=DefaultSensorStatus.RUNNING,
 )
 def omop_vocab_sensor(context: SensorEvaluationContext) -> SensorResult | SkipReason:
     """Auto-download OMOP vocabularies if missing, then trigger ingestion for new/changed files."""
