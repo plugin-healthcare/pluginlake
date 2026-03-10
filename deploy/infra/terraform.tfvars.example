@@ -1,0 +1,27 @@
+# Copy this file to terraform.tfvars and fill in your values.
+# NEVER commit terraform.tfvars to version control.
+
+resource_group_name = "rg-plugin-demo-d"
+location            = "westeurope"
+
+# Container Registry
+acr_name = "cr-plugin-demo-d"
+acr_sku  = "Basic"
+
+# Storage Account
+storage_account_name     = "st-plugin-demo-d"
+storage_account_tier     = "Standard"
+storage_replication_type = "LRS"
+
+# Optional: pre-create blob containers
+# storage_containers = ["raw", "processed", "output"]
+
+# Service Principal — set this to the Object ID of the SP that needs access.
+# Find it with: az ad sp show --id <APP_ID> --query id -o tsv
+# service_principal_object_id = "00000000-0000-0000-0000-000000000000"
+
+tags = {
+  project     = "pluginlake"
+  environment = "demo"
+  managed_by  = "opentofu"
+}
