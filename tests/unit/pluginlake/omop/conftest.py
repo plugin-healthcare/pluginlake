@@ -6,10 +6,17 @@ import duckdb
 import polars as pl
 import pytest
 
-from pluginlake.omop.storage import (  # ty: ignore[unresolved-import]  # storage.py deleted; refactor pending
-    register_vocabulary_tables,
-    save_vocabulary_table,
-)
+
+def _register_table(
+    con: duckdb.DuckDBPyConnection,
+    schema: str,
+    name: str,
+    df: pl.DataFrame,
+) -> None:
+    tmp = f"_tmp_{name}"
+    con.register(tmp, df.to_arrow())
+    con.execute(f"CREATE TABLE {schema}.{name} AS SELECT * FROM {tmp}")
+    con.unregister(tmp)
 
 
 @pytest.fixture
@@ -81,7 +88,7 @@ def sample_concepts() -> pl.DataFrame:
             ],
             "valid_start_date": [date(1970, 1, 1)] * 10,
             "valid_end_date": [date(2099, 12, 31)] * 10,
-            "invalid_reason": [None] * 10,
+            "invalid_reason": pl.Series([None] * 10, dtype=pl.Utf8),
         }
     )
 
@@ -194,7 +201,6 @@ def sample_source_to_concept_map() -> pl.DataFrame:
 
 @pytest.fixture
 def test_db_with_vocabularies(
-    tmp_path,
     sample_concepts,
     sample_vocabularies,
     sample_domains,
@@ -202,18 +208,19 @@ def test_db_with_vocabularies(
     sample_concept_ancestor,
     sample_source_to_concept_map,
 ) -> duckdb.DuckDBPyConnection:
-    """Create DuckDB connection with registered vocabulary tables."""
-    vocab_dir = tmp_path / "vocabularies" / "parquet"
-    vocab_dir.mkdir(parents=True, exist_ok=True)
-
-    save_vocabulary_table(sample_concepts, "concept", output_dir=vocab_dir)
-    save_vocabulary_table(sample_vocabularies, "vocabulary", output_dir=vocab_dir)
-    save_vocabulary_table(sample_domains, "domain", output_dir=vocab_dir)
-    save_vocabulary_table(sample_concept_classes, "concept_class", output_dir=vocab_dir)
-    save_vocabulary_table(sample_concept_ancestor, "concept_ancestor", output_dir=vocab_dir)
-    save_vocabulary_table(sample_source_to_concept_map, "source_to_concept_map", output_dir=vocab_dir)
-
+    """Create DuckDB connection with vocabulary tables under ducklake.omop_vocab."""
     con = duckdb.connect(":memory:")
-    register_vocabulary_tables(con, data_dir=vocab_dir)
+    con.execute("ATTACH ':memory:' AS ducklake")
+    con.execute("CREATE SCHEMA ducklake.omop_vocab")
+
+    for name, df in [
+        ("concept", sample_concepts),
+        ("vocabulary", sample_vocabularies),
+        ("domain", sample_domains),
+        ("concept_class", sample_concept_classes),
+        ("concept_ancestor", sample_concept_ancestor),
+        ("source_to_concept_map", sample_source_to_concept_map),
+    ]:
+        _register_table(con, "ducklake.omop_vocab", name, df)
 
     return con

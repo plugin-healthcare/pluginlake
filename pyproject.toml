@@ -122,6 +122,7 @@ strict = true
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [
     "S101",    # Use of assert
+    "S608",    # SQL injection — test assertions use f-strings with constants
     "D100",    # Missing docstring in public module
     "D103",    # Missing docstring in public function
     "D104",    # Missing docstring in public package
@@ -149,6 +150,7 @@ strict = true
     "N803",    # Argument name should be lowercase (marimo passes module refs)
     "N806",    # Variable should be lowercase (constants in notebook cells)
     "PLR0913", # Too many arguments (marimo cell dependency injection)
+    "ARG001",  # Unused function argument (marimo dependency ordering)
 ]
 "src/pluginlake/omop/queries.py" = [
     "PLR0913", # Too many arguments acceptable for filter functions with optional criteria

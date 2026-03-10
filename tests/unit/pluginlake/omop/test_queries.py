@@ -14,10 +14,6 @@ from pluginlake.omop.queries import (
     get_persons,
     get_visits_for_person,
 )
-from pluginlake.omop.storage import (  # ty: ignore[unresolved-import]  # storage.py deleted; refactor pending
-    register_omop_tables,
-    save_omop_table,
-)
 
 
 @pytest.fixture
@@ -145,7 +141,6 @@ def sample_drug_exposures() -> pl.DataFrame:
 
 @pytest.fixture
 def test_db_with_data(
-    tmp_path,
     sample_persons,
     sample_conditions,
     sample_observations,
@@ -153,19 +148,23 @@ def test_db_with_data(
     sample_measurements,
     sample_drug_exposures,
 ):
-    """Create test database with sample data."""
-    data_dir = tmp_path / "test_data"
-    data_dir.mkdir()
-
-    save_omop_table(sample_persons, "person", output_dir=data_dir, overwrite=True)
-    save_omop_table(sample_conditions, "condition_occurrence", output_dir=data_dir, overwrite=True)
-    save_omop_table(sample_observations, "observation", output_dir=data_dir, overwrite=True)
-    save_omop_table(sample_visits, "visit_occurrence", output_dir=data_dir, overwrite=True)
-    save_omop_table(sample_measurements, "measurement", output_dir=data_dir, overwrite=True)
-    save_omop_table(sample_drug_exposures, "drug_exposure", output_dir=data_dir, overwrite=True)
-
+    """Create test database with sample data under ducklake.omop schema."""
     con = duckdb.connect(":memory:")
-    register_omop_tables(con, data_dir)
+    con.execute("ATTACH ':memory:' AS ducklake")
+    con.execute("CREATE SCHEMA ducklake.omop")
+
+    for name, df in [
+        ("person", sample_persons),
+        ("condition_occurrence", sample_conditions),
+        ("observation", sample_observations),
+        ("visit_occurrence", sample_visits),
+        ("measurement", sample_measurements),
+        ("drug_exposure", sample_drug_exposures),
+    ]:
+        con.register(f"_tmp_{name}", df.to_arrow())
+        con.execute(f"CREATE TABLE ducklake.omop.{name} AS SELECT * FROM _tmp_{name}")
+        con.unregister(f"_tmp_{name}")
+
     yield con
     con.close()
 

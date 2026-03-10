@@ -1,3 +1,9 @@
+"""Download Synthea Sample Data
+
+Retrieve pre-generated synthetic patient data in FHIR (from Mitre) and
+OMOP (from S3) formats for local development and testing.
+"""
+
 import marimo
 
 __generated_with = "0.20.2"

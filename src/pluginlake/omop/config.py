@@ -71,6 +71,15 @@ class OMOPSettings(BaseSettings):
         description="Automatically load vocabularies on first query",
     )
 
+    folder_watch_interval: int = Field(
+        default=30,
+        description="Sensor polling interval in seconds for folder-based ingestion",
+    )
+    folder_watch_debounce_seconds: int = Field(
+        default=60,
+        description="Skip files modified within this many seconds to avoid duplicate triggers",
+    )
+
 
 def get_omop_settings() -> OMOPSettings:
     """Get OMOP module settings.

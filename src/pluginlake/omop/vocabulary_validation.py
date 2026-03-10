@@ -7,9 +7,6 @@ import duckdb
 import polars as pl
 
 from pluginlake.omop.schemas import get_omop_schema
-from pluginlake.omop.storage import (  # ty: ignore[unresolved-import]  # storage.py deleted; refactor pending
-    query_duckdb,
-)
 from pluginlake.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -22,7 +19,7 @@ def validate_concept_ids(  # noqa: PLR0913
     vocabulary_id: str | None = None,
     *,
     standard_only: bool = True,
-    schema: str = "omop_vocab",
+    schema: str = "ducklake.omop_vocab",
 ) -> pl.DataFrame:
     """Validate concept IDs against vocabulary tables.
 
@@ -84,16 +81,15 @@ def validate_concept_ids(  # noqa: PLR0913
     ORDER BY ic.concept_id
     """  # noqa: S608
 
-    result = query_duckdb(
-        conn,
-        query,
-        {
-            "concept_ids": concept_ids,
-            "standard_only": standard_only,
-            "domain_id": domain_id,
-            "vocabulary_id": vocabulary_id,
-        },
-    )
+    params = {
+        "concept_ids": concept_ids,
+        "standard_only": standard_only,
+        "domain_id": domain_id,
+        "vocabulary_id": vocabulary_id,
+    }
+    cursor = conn.execute(query, params)
+    columns = [desc[0] for desc in cursor.description]
+    result = pl.DataFrame(cursor.fetchall(), schema=columns, orient="row")
 
     invalid_count = result.filter(~pl.col("is_valid")).height
     if invalid_count > 0:
@@ -112,7 +108,7 @@ def validate_table_concepts(
     df: pl.DataFrame,
     table_name: str,
     *,
-    schema: str = "omop_vocab",
+    schema: str = "ducklake.omop_vocab",
 ) -> pl.DataFrame:
     """Validate all concept_id columns in a clinical data table.
 

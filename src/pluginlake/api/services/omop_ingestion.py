@@ -38,13 +38,13 @@ class OmopCsvIngestionService(IngestionService):
             msg = "OMOP table uploads must be .csv files."
             raise IngestionError(msg)
 
-    def _store_file(self, content: bytes, _filename: str, dataset: str, _file_id: str) -> Path:
+    def _store_file(self, content: bytes, filename: str, dataset: str, file_id: str) -> Path:  # noqa: ARG002 — signature required by IngestionService; OMOP stores by dataset name only
         dest = self._omop_settings.raw_data_dir / f"{dataset}.csv"
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(content)
         return dest
 
-    async def _trigger_dagster(self, _file_path: Path, dataset: str, _filename: str) -> str | None:
+    async def _trigger_dagster(self, file_path: Path, dataset: str, filename: str) -> str | None:  # noqa: ARG002 — signature required by IngestionService; OMOP triggers by dataset name only
         if self._dagster is None:
             msg = "_trigger_dagster requires dagster_client"
             raise TypeError(msg)

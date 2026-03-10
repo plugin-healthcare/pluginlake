@@ -3,27 +3,25 @@
 Tests the complete pipeline:
 1. Load CSV files from Synthea 1k dataset
 2. Validate schemas
-3. Save to Parquet format
-4. Query with DuckDB
+3. Register in DuckDB
+4. Query with OMOP query API
 5. Verify results
 """
 
 from pathlib import Path
 
+import duckdb
 import polars as pl
 import pytest
 
 from pluginlake.omop import (
     get_cohort,
     get_conditions_for_person,
-    get_duckdb_connection,  # ty: ignore[unresolved-import]  # storage.py deleted; refactor pending
     get_measurement_values,
     get_observations_for_person,
     get_persons,
     get_visits_for_person,
     load_omop_table,
-    register_omop_tables,  # ty: ignore[unresolved-import]  # storage.py deleted; refactor pending
-    save_omop_table,  # ty: ignore[unresolved-import]  # storage.py deleted; refactor pending
 )
 
 
@@ -37,14 +35,8 @@ def synthea_data_dir() -> Path:
 
 
 @pytest.fixture(scope="module")
-def parquet_output_dir(tmp_path_factory) -> Path:
-    """Temporary directory for Parquet output."""
-    return tmp_path_factory.mktemp("omop_parquet")
-
-
-@pytest.fixture(scope="module")
-def loaded_tables(synthea_data_dir: Path, parquet_output_dir: Path) -> dict[str, pl.DataFrame]:
-    """Load all available Synthea tables and save to Parquet.
+def loaded_tables(synthea_data_dir: Path) -> dict[str, pl.DataFrame]:
+    """Load all available Synthea tables.
 
     Returns:
         Dictionary mapping table names to loaded DataFrames.
@@ -73,23 +65,24 @@ def loaded_tables(synthea_data_dir: Path, parquet_output_dir: Path) -> dict[str,
             validate=False,
         )
 
-        save_omop_table(
-            df,
-            table_name=table_name,
-            output_dir=parquet_output_dir,
-            overwrite=True,
-        )
-
         tables[table_name] = df
 
     return tables
 
 
 @pytest.fixture(scope="module")
-def duckdb_con(parquet_output_dir: Path, loaded_tables: dict[str, pl.DataFrame]):
-    """DuckDB connection with registered OMOP tables."""
-    con = get_duckdb_connection()
-    register_omop_tables(con, data_dir=parquet_output_dir)
+def duckdb_con(loaded_tables: dict[str, pl.DataFrame]):
+    """DuckDB connection with registered OMOP tables under ducklake.omop schema."""
+    con = duckdb.connect(":memory:")
+    con.execute("ATTACH ':memory:' AS ducklake")
+    con.execute("CREATE SCHEMA ducklake.omop")
+
+    for table_name, df in loaded_tables.items():
+        tmp = f"_tmp_{table_name}"
+        con.register(tmp, df.to_arrow())
+        con.execute(f"CREATE TABLE ducklake.omop.{table_name} AS SELECT * FROM {tmp}")
+        con.unregister(tmp)
+
     yield con
     con.close()
 
@@ -252,13 +245,3 @@ def test_query_cohort_with_age_range(duckdb_con):
         current_year = 2026
         assert all(result["year_of_birth"] <= current_year - 30)
         assert all(result["year_of_birth"] >= current_year - 60)
-
-
-def test_parquet_files_created(parquet_output_dir: Path, loaded_tables: dict[str, pl.DataFrame]):
-    """Test that Parquet files were created correctly."""
-    parquet_files = list(parquet_output_dir.glob("*.parquet"))
-
-    assert len(parquet_files) > 0, "Should create at least one Parquet file"
-
-    for parquet_file in parquet_files:
-        assert parquet_file.stat().st_size > 0, f"{parquet_file.name} should not be empty"
