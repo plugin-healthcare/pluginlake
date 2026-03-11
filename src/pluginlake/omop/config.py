@@ -74,6 +74,10 @@ class OMOPSettings(BaseSettings):
         default=True,
         description="Validate concept IDs against vocabulary tables during ingestion",
     )
+    audit_schema: str = Field(
+        default="omop_audit",
+        description="DuckDB schema for vocabulary validation audit tables",
+    )
 
     folder_watch_interval: int = Field(
         default=30,

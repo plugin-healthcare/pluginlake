@@ -60,7 +60,8 @@ def omop_folder_sensor(context: SensorEvaluationContext) -> SensorResult | SkipR
         run_requests=[
             RunRequest(
                 run_key=f"omop-folder-{int(now)}",
-                asset_selection=[AssetKey(["omop", t]) for t in changed_tables],
+                asset_selection=[AssetKey(["omop_raw", t]) for t in changed_tables]
+                + [AssetKey(["omop", t]) for t in changed_tables],
             )
         ]
     )

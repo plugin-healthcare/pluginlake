@@ -2,7 +2,12 @@
 
 import polars as pl
 
-from pluginlake.omop.vocabulary_validation import validate_concept_ids, validate_table_concepts
+from pluginlake.omop.vocabulary_validation import (
+    filter_invalid_rows,
+    validate_concept_ids,
+    validate_table_concepts,
+    write_audit_table,
+)
 
 
 def test_validate_concept_ids_all_valid(test_db_with_vocabularies):
@@ -181,3 +186,130 @@ def test_validate_concept_ids_returns_concept_details(test_db_with_vocabularies)
     assert "vocabulary_id" in result.columns
     assert result["concept_name"][0] == "Male"
     assert result["concept_name"][1] == "Type 2 diabetes mellitus"
+
+
+def test_filter_invalid_rows_all_valid(test_db_with_vocabularies):
+    df = pl.DataFrame(
+        {
+            "condition_occurrence_id": [1, 2, 3],
+            "person_id": [1, 2, 3],
+            "condition_concept_id": [201826, 320128, 4329847],
+            "condition_type_concept_id": [38000280, 38000280, 38000280],
+        }
+    )
+    result = validate_table_concepts(test_db_with_vocabularies, df, "condition_occurrence")
+
+    valid_df, invalid_df = filter_invalid_rows(df, result, "condition_occurrence")
+
+    assert valid_df.height == 3
+    assert invalid_df.height == 0
+
+
+def test_filter_invalid_rows_some_invalid(test_db_with_vocabularies):
+    df = pl.DataFrame(
+        {
+            "condition_occurrence_id": [1, 2, 3],
+            "person_id": [1, 2, 3],
+            "condition_concept_id": [201826, 999999, 320128],
+            "condition_type_concept_id": [38000280, 38000280, 38000280],
+        }
+    )
+    result = validate_table_concepts(test_db_with_vocabularies, df, "condition_occurrence")
+
+    valid_df, invalid_df = filter_invalid_rows(df, result, "condition_occurrence")
+
+    assert valid_df.height == 2
+    assert invalid_df.height == 1
+    assert invalid_df["condition_concept_id"][0] == 999999
+
+
+def test_filter_invalid_rows_multiple_columns(test_db_with_vocabularies):
+    df = pl.DataFrame(
+        {
+            "condition_occurrence_id": [1, 2],
+            "person_id": [1, 2],
+            "condition_concept_id": [201826, 320128],
+            "condition_type_concept_id": [38000280, 888888],
+        }
+    )
+    result = validate_table_concepts(test_db_with_vocabularies, df, "condition_occurrence")
+
+    valid_df, invalid_df = filter_invalid_rows(df, result, "condition_occurrence")
+
+    assert valid_df.height == 1
+    assert invalid_df.height == 1
+    assert invalid_df["condition_type_concept_id"][0] == 888888
+
+
+def test_filter_invalid_rows_nulls_are_valid(test_db_with_vocabularies):
+    df = pl.DataFrame(
+        {
+            "condition_occurrence_id": [1, 2, 3],
+            "person_id": [1, 2, 3],
+            "condition_concept_id": [201826, None, 320128],
+            "condition_type_concept_id": [38000280, 38000280, 38000280],
+        }
+    )
+    result = validate_table_concepts(test_db_with_vocabularies, df, "condition_occurrence")
+
+    valid_df, invalid_df = filter_invalid_rows(df, result, "condition_occurrence")
+
+    assert valid_df.height == 3
+    assert invalid_df.height == 0
+
+
+def test_filter_invalid_rows_empty_validation():
+    df = pl.DataFrame(
+        {
+            "id": [1, 2],
+            "value": [10, 20],
+        }
+    )
+    empty_result = pl.DataFrame(
+        schema={
+            "column_name": pl.Utf8,
+            "concept_id": pl.Int64,
+            "is_valid": pl.Boolean,
+            "validation_message": pl.Utf8,
+        }
+    )
+
+    valid_df, invalid_df = filter_invalid_rows(df, empty_result, "test")
+
+    assert valid_df.height == 2
+    assert invalid_df.height == 0
+
+
+def test_write_audit_table(test_db_with_vocabularies):
+    audit_data = pl.DataFrame(
+        {
+            "column_name": ["condition_concept_id", "condition_concept_id"],
+            "concept_id": [201826, 999999],
+            "is_valid": [True, False],
+            "validation_message": ["Valid", "Concept ID does not exist"],
+        }
+    )
+
+    write_audit_table(test_db_with_vocabularies, audit_data, "condition_occurrence")
+
+    result = test_db_with_vocabularies.sql("SELECT * FROM ducklake.omop_audit.condition_occurrence").pl()
+    assert result.height == 2
+    assert "is_valid" in result.columns
+
+
+def test_write_audit_table_empty(test_db_with_vocabularies):
+    empty = pl.DataFrame(
+        schema={
+            "column_name": pl.Utf8,
+            "concept_id": pl.Int64,
+            "is_valid": pl.Boolean,
+            "validation_message": pl.Utf8,
+        }
+    )
+
+    write_audit_table(test_db_with_vocabularies, empty, "condition_occurrence")
+
+    tables = test_db_with_vocabularies.sql(
+        "SELECT table_name FROM information_schema.tables WHERE table_schema = 'omop_audit'"
+    ).fetchall()
+    assert len(tables) == 0

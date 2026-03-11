@@ -180,3 +180,17 @@ def test_multiple_queries_same_connection(test_db_with_vocabularies):
     assert result1.height == 1
     assert result2.height == 1
     assert result3.height == 5
+
+
+def test_get_concept_nonexistent(test_db_with_vocabularies):
+    result = get_concept(-1, con=test_db_with_vocabularies)
+
+    assert isinstance(result, pl.DataFrame)
+    assert result.height == 0
+
+
+def test_search_concepts_no_matches(test_db_with_vocabularies):
+    result = search_concepts("zzzznonexistentterm", con=test_db_with_vocabularies)
+
+    assert isinstance(result, pl.DataFrame)
+    assert result.height == 0

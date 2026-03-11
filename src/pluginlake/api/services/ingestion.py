@@ -15,6 +15,7 @@ from pluginlake.api.config import IngestionSettings
 from pluginlake.config import StorageLayer
 from pluginlake.core.dagster_client import DagsterClient, DagsterClientError
 from pluginlake.core.storage.layers import StorageLayerManager
+from pluginlake.utils.jsonl_writer import write_ingestion_log
 from pluginlake.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -63,11 +64,13 @@ class IngestionService:
         storage_manager: StorageLayerManager | None = None,
         dagster_client: DagsterClient | None = None,
         settings: IngestionSettings | None = None,
+        ingestion_log_dir: Path | None = None,
     ) -> None:
         """Initialise the service with storage, Dagster, and settings."""
         self._storage = storage_manager
         self._dagster = dagster_client
         self._settings = settings or IngestionSettings()
+        self._ingestion_log_dir = ingestion_log_dir
 
     async def ingest_file(self, file: UploadFile, dataset: str) -> IngestionResult:
         """Validate, store, and trigger processing for an uploaded file.
@@ -108,7 +111,7 @@ class IngestionService:
             dagster_run_id,
         )
 
-        return IngestionResult(
+        result = IngestionResult(
             file_id=file_id,
             filename=filename,
             dataset=dataset,
@@ -118,6 +121,19 @@ class IngestionService:
             status=status,
             message=message,
         )
+
+        if self._ingestion_log_dir is not None:
+            write_ingestion_log(
+                self._ingestion_log_dir,
+                file_id=result.file_id,
+                filename=result.filename,
+                dataset=result.dataset,
+                size_bytes=result.size_bytes,
+                status=result.status,
+                dagster_run_id=result.dagster_run_id,
+            )
+
+        return result
 
     def _validate_extension(self, filename: str) -> None:
         """Check that the file extension is in the allowed list."""
