@@ -66,7 +66,7 @@ def fhir_to_omop_tables(context: AssetExecutionContext) -> Generator[Output]:
                 context.log.info("No rows translated for %s", omop_table)
                 continue
 
-            df = pl.DataFrame(all_rows)
+            df = pl.DataFrame(all_rows, infer_schema_length=None)
             yield Output(
                 value=df,
                 output_name=omop_table,

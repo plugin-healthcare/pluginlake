@@ -11,7 +11,8 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --extra infra --no-install-project
 
 COPY . .
-RUN uv sync --frozen --extra infra
+RUN uv sync --frozen --extra infra && \
+    uv pip install deploy/wheels/plugin_rosetta-*.whl
 
 ENV PATH="/app/.venv/bin:$PATH" \
     DAGSTER_HOME="/app/config/dagster" \
