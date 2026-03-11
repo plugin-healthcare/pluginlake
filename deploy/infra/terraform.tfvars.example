@@ -1,6 +1,9 @@
 # Copy this file to terraform.tfvars and fill in your values.
 # NEVER commit terraform.tfvars to version control.
 
+# Find your subscription ID with: az account show --query id -o tsv
+subscription_id = "00000000-0000-0000-0000-000000000000"
+
 resource_group_name = "rg-plugin-demo-d"
 location            = "westeurope"
 

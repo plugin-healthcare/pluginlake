@@ -1,3 +1,8 @@
+variable "subscription_id" {
+  description = "Azure subscription ID. Can also be set via the ARM_SUBSCRIPTION_ID environment variable."
+  type        = string
+}
+
 variable "resource_group_name" {
   description = "Name of the existing Azure resource group."
   type        = string
