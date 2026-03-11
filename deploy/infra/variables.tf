@@ -51,8 +51,20 @@ variable "storage_containers" {
   default     = []
 }
 
+variable "acr_pull_principal_object_id" {
+  description = "Object ID of the principal (SP, managed identity, group) that gets AcrPull (read-only) access. Leave empty to skip."
+  type        = string
+  default     = ""
+}
+
+variable "acr_push_principal_object_id" {
+  description = "Object ID of the principal (SP, managed identity, group) that gets AcrPush (push + pull) access. Leave empty to skip."
+  type        = string
+  default     = ""
+}
+
 variable "service_principal_object_id" {
-  description = "Object ID of the service principal that will be granted access to ACR and Blob Storage. Leave empty to skip role assignments."
+  description = "Object ID of the service principal that will be granted access to Blob Storage. Leave empty to skip role assignments."
   type        = string
   default     = ""
 }

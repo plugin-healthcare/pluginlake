@@ -20,17 +20,18 @@ resource "azurerm_container_registry" "main" {
   tags = var.tags
 }
 
-# Grant the service principal push and pull access.
-resource "azurerm_role_assignment" "acr_push" {
-  count                = var.service_principal_object_id != "" ? 1 : 0
-  scope                = azurerm_container_registry.main.id
-  role_definition_name = "AcrPush"
-  principal_id         = var.service_principal_object_id
-}
-
+# Pull-only access (e.g. deployment runners, read-only consumers).
 resource "azurerm_role_assignment" "acr_pull" {
-  count                = var.service_principal_object_id != "" ? 1 : 0
+  count                = var.acr_pull_principal_object_id != "" ? 1 : 0
   scope                = azurerm_container_registry.main.id
   role_definition_name = "AcrPull"
-  principal_id         = var.service_principal_object_id
+  principal_id         = var.acr_pull_principal_object_id
+}
+
+# Push + pull access (e.g. CI/CD pipelines that build and push images).
+resource "azurerm_role_assignment" "acr_push" {
+  count                = var.acr_push_principal_object_id != "" ? 1 : 0
+  scope                = azurerm_container_registry.main.id
+  role_definition_name = "AcrPush"
+  principal_id         = var.acr_push_principal_object_id
 }

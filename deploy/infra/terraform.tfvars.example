@@ -16,8 +16,12 @@ storage_replication_type = "LRS"
 # Optional: pre-create blob containers
 # storage_containers = ["raw", "processed", "output"]
 
-# Service Principal — set this to the Object ID of the SP that needs access.
-# Find it with: az ad sp show --id <APP_ID> --query id -o tsv
+# ACR — set these to the Object IDs of the principals that need ACR access.
+# Find an Object ID with: az ad sp show --id <APP_ID> --query id -o tsv
+# acr_pull_principal_object_id = "00000000-0000-0000-0000-000000000000"  # pull-only (e.g. deployment runners)
+# acr_push_principal_object_id = "00000000-0000-0000-0000-000000000000"  # push + pull (e.g. CI/CD pipelines)
+
+# Storage — Object ID of the SP that gets Storage Blob Data Contributor access.
 # service_principal_object_id = "00000000-0000-0000-0000-000000000000"
 
 tags = {
