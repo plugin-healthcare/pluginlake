@@ -72,11 +72,18 @@ test = [
     "pytest-cov>=6.0.0",
 ]
 docs = [
+    "mkdocstrings[python]>=1.0.3",
     "zensical>=0.0.21",
 ]
 nb = [
     "marimo>=0.19.9",
     "pyzmq>=27.1.0",
+]
+dashboard = [
+    "streamlit[starlette]>=1.53.0",
+    "httpx>=0.28.0",
+    "plotly>=6.1.0",
+    "pydantic-settings>=2.9.1",
 ]
 
 # --- Tool Configuration ---
@@ -164,6 +171,18 @@ strict = true
     "W293",    # Blank line whitespace from marimo formatting
     "DTZ005",  # datetime.now() without tz acceptable for age calculation in notebooks
 ]
+"src/pluginlake-ui/**/*.py" = [
+    "INP001",  # Implicit namespace package (no __init__.py in Streamlit apps)
+    "T201",    # print() statements acceptable in dashboard scripts
+    "D100",    # Missing docstring in public module
+    "D103",    # Missing docstring in public function
+    "D104",    # Missing docstring in public package
+    "S101",    # Use of assert
+    "ANN401",  # HTTP client _get returns response.json() which is inherently Any
+]
+"src/pluginlake/api/routers/catalog.py" = [
+    "S608",    # SQL queries use validated identifiers; cannot parameterise schema/table names
+]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -186,7 +205,11 @@ filterwarnings = [
 [tool.ty]
 
 [tool.ty.src]
-exclude = ["external_repos/", "notebooks/"]
+exclude = [
+    "external_repos/",
+    "notebooks/",
+    "src/pluginlake-ui/",  # Streamlit modifies sys.path at runtime; ty cannot resolve cross-module imports
+]
 
 [tool.ty.environment]
 python-version = "3.13"

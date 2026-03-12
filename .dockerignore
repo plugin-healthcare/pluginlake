@@ -3,6 +3,7 @@ data/
 .data/
 dist/
 .git/
+.github/
 .pytest_cache/
 .ruff_cache/
 __pycache__/
@@ -11,3 +12,13 @@ __pycache__/
 notebooks/
 docs/
 planning/
+deploy/
+!deploy/docker
+tests/
+examples/
+.env
+.env.*
+!.env.example
+.coverage
+.pre-commit-config.yaml
+zensical.toml

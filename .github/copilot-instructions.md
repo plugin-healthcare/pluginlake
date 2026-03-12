@@ -53,3 +53,9 @@
 - Use em dashes sparingly; prefer commas, colons, or parentheses.
 - Don't overuse bold, italics or emojis. Use them only for emphasis when necessary.
 - check for mkdocs or zensical configs in zensical.toml, pyproject.tom or mkdocs.yaml before suggesting markdown formatting or structure.
+
+## Brand & styling
+
+- Brand colors, typography, spacing and component styles are defined in `.github/skills/plugin-brand.md`.
+- Always reference that file when generating or modifying UI, documentation themes, or Streamlit custom CSS.
+- Logo and brand assets live in `assets/` at the project root.

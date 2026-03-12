@@ -178,9 +178,6 @@ def _(httpx, mo, results):
         else:
             mo.output.replace(mo.md(f"{table_md}\n\nAll **{len(run_ids)}** runs completed successfully."))
 
-    ingestion_complete = True
-    return (ingestion_complete,)
-
 
 @app.cell
 def _(mo):
@@ -195,7 +192,7 @@ def _(mo):
 
 
 @app.cell
-def _(PROJECT_ROOT, ingestion_complete, mo):
+def _(PROJECT_ROOT, mo):
     """Connect to the DuckLake catalog and list all tables."""
     import duckdb
 

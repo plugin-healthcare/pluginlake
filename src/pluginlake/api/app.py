@@ -12,8 +12,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from pluginlake.api.exceptions import register_exception_handlers
 from pluginlake.api.middleware import RequestLoggingMiddleware
-from pluginlake.api.routers import health, ingest, omop
+from pluginlake.api.routers import assets, catalog, health, ingest, omop, omop_statistics
 from pluginlake.config import Settings
+from pluginlake.core.config import DuckLakeSettings
+from pluginlake.core.ducklake.setup import ensure_database
 from pluginlake.utils.logger import get_logger, setup_logging
 
 logger = get_logger(__name__)
@@ -21,10 +23,14 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """Application lifespan: setup logging on startup."""
+    """Application lifespan: setup logging and DuckLake database on startup."""
     settings = Settings()
     setup_logging(settings.effective_log_level)
     logger.info("pluginlake API starting")
+
+    ducklake_settings = DuckLakeSettings()  # type: ignore[missing-argument]
+    ensure_database(ducklake_settings)
+
     yield
     logger.info("pluginlake API shutting down")
 
@@ -67,3 +73,6 @@ def _include_routers(app: FastAPI) -> None:
     app.include_router(health.router)
     app.include_router(ingest.router)
     app.include_router(omop.router)
+    app.include_router(omop_statistics.router)
+    app.include_router(catalog.router)
+    app.include_router(assets.router)

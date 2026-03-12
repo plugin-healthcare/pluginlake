@@ -21,21 +21,45 @@ secure:
 
 ci: lint test secure
 
-docs:
+docs: docs-openapi
     uv run zensical serve
+
+# Build docs to site/ (for CI/deployment)
+docs-build: docs-openapi
+    uv run zensical build
+
+# Export OpenAPI schema to docs/openapi.json
+docs-openapi:
+    uv run python scripts/export_openapi.py
 
 pre-commit:
     uv run pre-commit run --all-files
 
 # --- Docker ---
 
-# Start dev environment
+_compose := "docker compose -f deploy/compose/docker-compose.dev.yaml"
+
+# Start dev environment (all services)
 dev-up *args='':
-    docker compose -f deploy/compose/docker-compose.dev.yaml up --build {{ args }}
+    {{ _compose }} up --build {{ args }}
 
 # Stop dev environment
 dev-down *args='':
-    docker compose -f deploy/compose/docker-compose.dev.yaml down {{ args }}
+    {{ _compose }} down {{ args }}
+
+# Start datastation dashboard with its API dependency
+dev-datastation *args='':
+    {{ _compose }} up --build pluginlake-ui {{ args }}
+
+_compose_central := "docker compose -f deploy/compose/docker-compose.central.yaml"
+
+# Start central dashboard (separate compose)
+dev-central *args='':
+    {{ _compose_central }} up --build {{ args }}
+
+# Start only the API (pluginlake + postgres)
+dev-api *args='':
+    {{ _compose }} up --build pluginlake {{ args }}
 
 # Start local dev with titanic example (no Docker)
 dev-local:
