@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.13.0"
+__generated_with = "0.20.4"
 app = marimo.App(width="medium")
 
 
@@ -16,33 +16,36 @@ def _():
 
 @app.cell
 def _(mo):
-    mo.md(
-        """
-        # Azure RBAC Manager
+    mo.md("""
+    # Azure RBAC Manager
 
-        Manage service principal access to pluginlake's Container Registry and Blob Storage.
+    Manage service principal access to pluginlake's Container Registry and Blob Storage.
 
-        **Prerequisite:** Run `az login` before using this notebook.
-        """
-    )
+    **Prerequisite:** Run `az login` before using this notebook.
+    """)
 
 
 @app.cell
 def _():
     # --- Configuration ---
     # Change these to match your environment.
-    RESOURCE_GROUP = "rg-plugin-demo-d"
     ACR_NAME = "crplugindemod"
     STORAGE_ACCOUNT = "stplugindemod"
 
     # Set this to the Object ID of the service principal you want to manage.
     # Find it with: az ad sp show --id <APP_ID> --query id -o tsv
     SERVICE_PRINCIPAL_OID = ""
-    return ACR_NAME, RESOURCE_GROUP, SERVICE_PRINCIPAL_OID, STORAGE_ACCOUNT
+    return ACR_NAME, SERVICE_PRINCIPAL_OID, STORAGE_ACCOUNT
 
 
 @app.cell
-def _(json, subprocess):
+def _(SERVICE_PRINCIPAL_OID, json, subprocess):
+    def require_sp_oid() -> None:
+        """Raise if the service principal Object ID is not configured."""
+        if not SERVICE_PRINCIPAL_OID:
+            msg = "Set SERVICE_PRINCIPAL_OID before running RBAC commands."
+            raise ValueError(msg)
+
     def az(args: list[str]) -> dict | list | str:
         """Run an az CLI command and return parsed JSON or raw text."""
         result = subprocess.run(
@@ -57,6 +60,11 @@ def _(json, subprocess):
             return {}
         return json.loads(text)
 
+    return az, require_sp_oid
+
+
+@app.cell
+def _(az, subprocess):
     def get_acr_id(acr_name: str) -> str:
         """Get the full resource ID of an ACR."""
         data = az(["acr", "show", "--name", acr_name, "--query", "id"])
@@ -149,29 +157,35 @@ def _(json, subprocess):
         )
         print(f"Revoked '{role}' from {assignee}")
 
-    return az, get_acr_id, get_storage_id, grant_role, list_containers, list_roles, revoke_role
+    return get_acr_id, get_storage_id, grant_role, list_roles, revoke_role
 
 
 @app.cell
 def _(mo):
-    mo.md(
-        """
-        ---
-        ## Container Registry
+    mo.md("""
+    ---
+    ## Container Registry
 
-        Use `acr_grant()` and `acr_revoke()` with one of these presets:
+    Use `acr_grant()` and `acr_revoke()` with one of these presets:
 
-        | Preset | Roles granted |
-        |---|---|
-        | `"pull"` | AcrPull |
-        | `"push"` | AcrPush |
-        | `"push+pull"` | AcrPush + AcrPull |
-        """
-    )
+    | Preset | Roles granted |
+    |---|---|
+    | `"pull"` | AcrPull |
+    | `"push"` | AcrPush |
+    | `"push+pull"` | AcrPush + AcrPull |
+    """)
 
 
 @app.cell
-def _(ACR_NAME, SERVICE_PRINCIPAL_OID, get_acr_id, grant_role, list_roles, revoke_role):
+def _(
+    ACR_NAME,
+    SERVICE_PRINCIPAL_OID,
+    get_acr_id,
+    grant_role,
+    list_roles,
+    require_sp_oid,
+    revoke_role,
+):
     ACR_PRESETS = {
         "pull": ["AcrPull"],
         "push": ["AcrPush"],
@@ -180,6 +194,7 @@ def _(ACR_NAME, SERVICE_PRINCIPAL_OID, get_acr_id, grant_role, list_roles, revok
 
     def acr_list():
         """List current ACR role assignments for the service principal."""
+        require_sp_oid()
         acr_id = get_acr_id(ACR_NAME)
         assignments = list_roles(acr_id, SERVICE_PRINCIPAL_OID)
         if not assignments:
@@ -189,42 +204,46 @@ def _(ACR_NAME, SERVICE_PRINCIPAL_OID, get_acr_id, grant_role, list_roles, revok
             print(f"  {a.get('roleDefinitionName', '?')}")
 
     def acr_grant(preset: str = "pull"):
-        """Grant ACR access. preset: 'pull', 'push', or 'push+pull'."""
+        require_sp_oid()
         acr_id = get_acr_id(ACR_NAME)
         for role in ACR_PRESETS[preset]:
             grant_role(acr_id, role, SERVICE_PRINCIPAL_OID)
 
     def acr_revoke(preset: str = "pull"):
-        """Revoke ACR access. preset: 'pull', 'push', or 'push+pull'."""
+        require_sp_oid()
         acr_id = get_acr_id(ACR_NAME)
         for role in ACR_PRESETS[preset]:
             revoke_role(acr_id, role, SERVICE_PRINCIPAL_OID)
 
-    return acr_grant, acr_list, acr_revoke
-
 
 @app.cell
 def _(mo):
-    mo.md(
-        """
-        ---
-        ## Blob Storage
+    mo.md("""
+    ---
+    ## Blob Storage
 
-        Use `blob_grant()` and `blob_revoke()` with one of these presets:
+    Use `blob_grant()` and `blob_revoke()` with one of these presets:
 
-        | Preset | Roles granted |
-        |---|---|
-        | `"read"` | Storage Blob Data Reader |
-        | `"read+write"` | Storage Blob Data Contributor |
-        | `"read+write+delete"` | Storage Blob Data Contributor + Storage Blob Data Owner |
+    | Preset | Roles granted |
+    |---|---|
+    | `"read"` | Storage Blob Data Reader |
+    | `"read+write"` | Storage Blob Data Contributor |
+    | `"read+write+delete"` | Storage Blob Data Contributor + Storage Blob Data Owner |
 
-        Pass `container="mycontainer"` to scope to a specific container, or omit it to apply to the entire account.
-        """
-    )
+    Pass `container="mycontainer"` to scope to a specific container, or omit it to apply to the entire account.
+    """)
 
 
 @app.cell
-def _(SERVICE_PRINCIPAL_OID, STORAGE_ACCOUNT, get_storage_id, grant_role, list_roles, revoke_role):
+def _(
+    SERVICE_PRINCIPAL_OID,
+    STORAGE_ACCOUNT,
+    get_storage_id,
+    grant_role,
+    list_roles,
+    require_sp_oid,
+    revoke_role,
+):
     BLOB_PRESETS = {
         "read": ["Storage Blob Data Reader"],
         "read+write": ["Storage Blob Data Contributor"],
@@ -239,6 +258,7 @@ def _(SERVICE_PRINCIPAL_OID, STORAGE_ACCOUNT, get_storage_id, grant_role, list_r
 
     def blob_list(container: str | None = None):
         """List current blob role assignments for the service principal."""
+        require_sp_oid()
         scope = _blob_scope(container)
         assignments = list_roles(scope, SERVICE_PRINCIPAL_OID)
         if not assignments:
@@ -248,73 +268,66 @@ def _(SERVICE_PRINCIPAL_OID, STORAGE_ACCOUNT, get_storage_id, grant_role, list_r
             print(f"  {a.get('roleDefinitionName', '?')}")
 
     def blob_grant(preset: str = "read", container: str | None = None):
-        """Grant blob access. preset: 'read', 'read+write', or 'read+write+delete'."""
+        require_sp_oid()
         scope = _blob_scope(container)
         for role in BLOB_PRESETS[preset]:
             grant_role(scope, role, SERVICE_PRINCIPAL_OID)
 
     def blob_revoke(preset: str = "read", container: str | None = None):
-        """Revoke blob access. preset: 'read', 'read+write', or 'read+write+delete'."""
+        require_sp_oid()
         scope = _blob_scope(container)
         for role in BLOB_PRESETS[preset]:
             revoke_role(scope, role, SERVICE_PRINCIPAL_OID)
 
-    return blob_grant, blob_list, blob_revoke
+
+@app.cell
+def _(mo):
+    mo.md("""
+    ---
+    ## Usage Examples
+
+    ```python
+    # List current ACR roles
+    acr_list()
+
+    # Grant push+pull to ACR
+    acr_grant("push+pull")
+
+    # Revoke push (keep pull)
+    acr_revoke("push")
+
+    # Grant read-only to entire storage account
+    blob_grant("read")
+
+    # Grant read+write to a specific container
+    blob_grant("read+write", container="raw")
+
+    # List roles on a container
+    blob_list(container="raw")
+
+    # Revoke all blob access
+    blob_revoke("read+write+delete")
+    ```
+    """)
 
 
 @app.cell
 def _(mo):
-    mo.md(
-        """
-        ---
-        ## Usage Examples
+    mo.md("""
+    ---
+    ## Quick Reference
 
-        ```python
-        # List current ACR roles
-        acr_list()
+    ```bash
+    # Find a service principal's Object ID
+    az ad sp show --id <APP_ID> --query id -o tsv
 
-        # Grant push+pull to ACR
-        acr_grant("push+pull")
+    # Create a new service principal (no role assignment)
+    az ad sp create-for-rbac --name "sp-pluginlake-<purpose>" --skip-assignment
 
-        # Revoke push (keep pull)
-        acr_revoke("push")
-
-        # Grant read-only to entire storage account
-        blob_grant("read")
-
-        # Grant read+write to a specific container
-        blob_grant("read+write", container="raw")
-
-        # List roles on a container
-        blob_list(container="raw")
-
-        # Revoke all blob access
-        blob_revoke("read+write+delete")
-        ```
-        """
-    )
-
-
-@app.cell
-def _(mo):
-    mo.md(
-        """
-        ---
-        ## Quick Reference
-
-        ```bash
-        # Find a service principal's Object ID
-        az ad sp show --id <APP_ID> --query id -o tsv
-
-        # Create a new service principal (no role assignment)
-        az ad sp create-for-rbac --name "sp-pluginlake-<purpose>" --skip-assignment
-
-        # List all SPs with pluginlake in the name
-        az ad sp list --display-name "sp-pluginlake" \\
-            --query "[].{name:displayName, appId:appId, objectId:id}" -o table
-        ```
-        """
-    )
+    # List all SPs with pluginlake in the name
+    az ad sp list --display-name "sp-pluginlake"     --query "[].{name:displayName, appId:appId, objectId:id}" -o table
+    ```
+    """)
 
 
 if __name__ == "__main__":

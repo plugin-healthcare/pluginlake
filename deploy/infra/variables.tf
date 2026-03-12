@@ -1,6 +1,7 @@
 variable "subscription_id" {
   description = "Azure subscription ID. Can also be set via the ARM_SUBSCRIPTION_ID environment variable."
   type        = string
+  sensitive   = true
 }
 
 variable "resource_group_name" {
