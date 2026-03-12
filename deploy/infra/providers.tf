@@ -20,7 +20,7 @@ provider "azurerm" {
   #   set ARM_CLIENT_ID, ARM_CLIENT_SECRET, ARM_TENANT_ID, ARM_SUBSCRIPTION_ID
 
   # Required in azurerm ~> 4.0; can also be set via ARM_SUBSCRIPTION_ID env var.
-  resource_provider_registrations = "none"
+  resource_provider_registrations = "register"
   subscription_id = var.subscription_id
 
   # Use Azure AD for storage data plane ops (required when shared_access_key_enabled = false).
