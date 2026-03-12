@@ -41,8 +41,8 @@ nav = [
 ]
 
 [project.theme]
-logo = "assets/logo_plugin_rgb_flavicon.svg"
-favicon = "assets/logo_plugin_rgb_flavicon.svg"
+logo = "assets/logo_plugin_rgb_favicon.svg"
+favicon = "assets/logo_plugin_rgb_favicon.svg"
 language = "en"
 
 features = [
