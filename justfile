@@ -85,7 +85,7 @@ infra-plan:
 infra-apply:
     cd {{ infra_dir }} && tofu apply
 
-# Destroy all managed infrastructure
+# Destroy all managed infrastructure (CAUTION: All resources (containers, images, blobs, etc.) will be deleted without confirmation!)
 infra-destroy:
     cd {{ infra_dir }} && tofu destroy
 
