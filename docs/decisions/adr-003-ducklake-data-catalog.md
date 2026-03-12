@@ -1,4 +1,4 @@
-# ADR-002: DuckLake integration with Dagster + logging strategy
+# ADR-003: DuckLake integration with Dagster + logging strategy
 
 - **Status:** Proposed
 - **Date:** 2026-02-23

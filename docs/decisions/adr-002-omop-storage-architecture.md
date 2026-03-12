@@ -116,4 +116,4 @@ Store FHIR, tabular, and OMOP data directly in PostgreSQL.
 
 ## Migration note
 
-`omop/storage.py` (`save_omop_table`, `register_omop_tables`, `get_duckdb_connection`) implements the pre-DuckLake manual path and is deprecated. It will be removed once `queries.py` and `vocabulary_queries.py` are migrated to read directly from `ducklake.omop.*`.
+The legacy `omop/storage.py` module (`save_omop_table`, `register_omop_tables`, `get_duckdb_connection`) has been removed. All OMOP data now flows through the DuckLake IO manager as described above.

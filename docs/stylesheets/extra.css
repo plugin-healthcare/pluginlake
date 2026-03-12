@@ -1,0 +1,99 @@
+/* PLUGIN Healthcare brand theme
+   Based on .github/skills/plugin-brand.md */
+
+/* ── Light mode ─────────────────────────────────────────── */
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: #053c5c;
+  --md-primary-fg-color--light: #0588a6;
+  --md-primary-fg-color--dark: #032a42;
+  --md-accent-fg-color: #f28729;
+  --md-default-fg-color: #053c5c;
+  --md-typeset-a-color: #0588a6;
+}
+
+/* ── Dark mode ──────────────────────────────────────────── */
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #0588a6;
+  --md-accent-fg-color: #f28729;
+}
+
+/* ── Bigger header logo ─────────────────────────────────── */
+.md-header__button.md-logo img,
+.md-header__button.md-logo svg {
+  height: 1.8rem;
+}
+
+/* ── Home hero section ──────────────────────────────────── */
+
+/* Hide the auto-generated page title when a .hero section is present */
+.md-content__inner:has(.hero) > h1:first-child {
+  display: none;
+}
+
+/* Remove default top margin/padding from content area on hero pages */
+.md-content__inner:has(.hero) {
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.hero {
+  text-align: center;
+  padding: 0.5rem 1rem 1.5rem;
+}
+
+.hero img {
+  max-width: 360px;
+  width: 100%;
+  margin-bottom: 0.25rem;
+}
+
+.hero p {
+  font-size: 1.15rem;
+  color: #3a6a82;
+  max-width: 640px;
+  margin: 0 auto 2rem;
+}
+
+/* ── Section cards grid ─────────────────────────────────── */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.25rem;
+  max-width: 900px;
+  margin: 0 auto 3rem;
+}
+
+@media (max-width: 768px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.grid .card {
+  border: 1px solid #d4e8f0;
+  border-radius: 8px;
+  padding: 1.5rem;
+  background: var(--md-default-bg-color, #fff);
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.grid .card:hover {
+  border-color: #0588a6;
+  box-shadow: 0 2px 8px rgba(5, 60, 92, 0.1);
+}
+
+.grid .card h3 {
+  margin-top: 0;
+  font-size: 1.1rem;
+}
+
+.grid .card h3 a {
+  color: #053c5c;
+  text-decoration: none;
+}
+
+.grid .card p {
+  font-size: 0.92rem;
+  color: #3a6a82;
+  margin-bottom: 0;
+}

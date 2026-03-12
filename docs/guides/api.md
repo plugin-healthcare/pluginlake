@@ -89,7 +89,7 @@ The API uses the following settings classes from `pluginlake.config`:
 | `ServerSettings` | `PLUGINLAKE_SERVER_`    | Host, port             |
 | `StorageSettings`| `PLUGINLAKE_STORAGE_`   | Data directory, layers |
 
-See the [Configuration guide](configuration.md) for full details.
+See the [Configuration reference](../reference/config.md) for full details.
 
 ## Project structure
 
