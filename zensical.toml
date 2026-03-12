@@ -1,32 +1,48 @@
 [project]
 site_name = "pluginlake"
-site_description = "Local-first healthcare data platform using DuckLake, Dagster, and DuckDB."
+site_description = "Local-first healthcare data platform using DuckLake, Dagster, and FastAPI."
 site_author = "Plugin Healthcare team"
 copyright = "Copyright &copy; 2026 Plugin Healthcare"
 
+extra_css = ["stylesheets/extra.css"]
+
 nav = [
+    { "Home" = "index.md" },
     { "Guides" = [
+        { "Guides" = "guides/index.md" },
         { "Getting Started" = "guides/getting-started.md" },
         { "Docker" = "guides/docker.md" },
-        { "API" = "guides/api.md" },
         { "Using as Package" = "guides/using-as-package.md" },
+        { "API" = "guides/api.md" },
+        { "API Specification" = "guides/api-specification.md" },
+    ]},
+    { "Reference" = [
+        { "Reference" = "reference/index.md" },
+        { "Configuration" = "reference/config.md" },
+        { "DuckLake" = "reference/ducklake.md" },
+        { "Storage" = "reference/storage.md" },
+        { "OMOP" = "reference/omop.md" },
+        { "Ingestion" = "reference/ingestion.md" },
+        { "Utilities" = "reference/utils.md" },
     ]},
     { "Decisions" = [
-        { "Overview" = "decisions/README.md" },
-        { "ADR-001 Asset Architecture" = "decisions/adr-001-asset-architecture.md" },
-        { "ADR-002 OMOP data storage architecture" = "decisions/adr-002-adr-002-omop-storage-architecture.md" },
-        { "ADR-002 DuckLake Data Catalog" = "decisions/adr-003-ducklake-data-catalog.md" }
+        { "Decisions" = "decisions/README.md" },
+        { "ADR-001: Asset Architecture" = "decisions/adr-001-asset-architecture.md" },
+        { "ADR-002: OMOP Storage Architecture" = "decisions/adr-002-omop-storage-architecture.md" },
+        { "ADR-003: DuckLake + Dagster Integration" = "decisions/adr-003-ducklake-data-catalog.md" },
+        { "ADR-004: Data Organization" = "decisions/adr-004-data-organization.md" },
+        { "ADR-005: FastAPI Gateway" = "decisions/adr-005-fastapi-gateway.md" },
     ]},
     { "Development" = [
-        { "Guidelines" = "develop-guidelines.md" },
-        { "External Repos" = "external-repos-reference.md" },
-        { "Stories Increment 1" = "stories-increment-1.md" },
-        { "Future Features" = "future-features.md" },
+        { "Development" = "development/index.md" },
+        { "Guidelines" = "development/develop-guidelines.md" },
+        { "Future Features" = "development/future-features.md" },
     ]},
 ]
 
 [project.theme]
-logo = "imgs/014f4611-d3c7-48e6-8383-52328e7eaf45-green.svg"
+logo = "assets/logo_plugin_rgb_flavicon.svg"
+favicon = "assets/logo_plugin_rgb_flavicon.svg"
 language = "en"
 
 features = [
@@ -53,11 +69,15 @@ features = [
 
 [[project.theme.palette]]
 scheme = "default"
+primary = "custom"
+accent = "custom"
 toggle.icon = "lucide/sun"
 toggle.name = "Switch to dark mode"
 
 [[project.theme.palette]]
 scheme = "slate"
+primary = "custom"
+accent = "custom"
 toggle.icon = "lucide/moon"
 toggle.name = "Switch to light mode"
 
@@ -75,3 +95,16 @@ pygments_lang_class = true
 [project.markdown_extensions.pymdownx.superfences]
 [project.markdown_extensions.pymdownx.tabbed]
 alternate_style = true
+
+[project.plugins.mkdocstrings]
+enabled = true
+
+[project.plugins.mkdocstrings.handlers.python]
+paths = ["src"]
+
+[project.plugins.mkdocstrings.handlers.python.options]
+docstring_style = "google"
+show_source = true
+show_root_heading = true
+show_symbol_type_heading = true
+members_order = "source"

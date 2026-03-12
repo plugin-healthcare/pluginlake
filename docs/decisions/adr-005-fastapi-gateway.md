@@ -1,7 +1,7 @@
 # ADR-005: FastAPI as unified API gateway
 
 **Status:** Proposed
-**Date:** 2025-03-05
+**Date:** 2026-03-05
 
 ## Context
 
