@@ -16,7 +16,6 @@ dependencies = [
     "duckdb>=1.4.4",
     "fastapi>=0.128.7",
     "httpx>=0.28.0",
-    "marimo>=0.20.2",
     "polars>=1.38.1",
     "psycopg2-binary>=2.9.11",
     "pyarrow>=23.0.1",  # Required by DuckDB for Polars DataFrame registration
@@ -45,10 +44,16 @@ synthea = [
     "boto3>=1.42.45",
     "tqdm>=4.67.3",
 ]
+fhir = [
+    "plugin-rosetta",
+]
 
 [build-system]
 requires = ["uv_build>=0.10.0,<0.11.0"]
 build-backend = "uv_build"
+
+[tool.uv.sources]
+plugin-rosetta = { git = "https://github.com/plugin-healthcare/plugin-rosetta", rev = "c08aa5ce47f72a3030ac14d877f28d2de49711c3" }
 
 [dependency-groups]
 dev = [
@@ -76,7 +81,7 @@ docs = [
     "zensical>=0.0.21",
 ]
 nb = [
-    "marimo>=0.19.9",
+    "marimo>=0.20.2",
     "pyzmq>=27.1.0",
 ]
 dashboard = [
@@ -109,6 +114,7 @@ ignore = [
     "E501",    # Line length regulated by formatter
     "TD002",   # Missing author in TODO
     "TD003",   # Missing issue link on the line following this TODO
+    "FIX002",  # Line contains TODO — TODOs are acceptable in-progress markers
     "TRY003",  # Avoid specifying long messages outside the exception class
     "SIM102",  # Use a single if statement instead of nested if statements
     "SIM108",  # Use ternary operator

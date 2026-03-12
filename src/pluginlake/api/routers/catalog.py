@@ -8,6 +8,7 @@
 import re
 from typing import Annotated, Any
 
+import duckdb
 from fastapi import APIRouter, HTTPException, Query
 
 from pluginlake.core.config import DuckLakeSettings
@@ -134,3 +135,68 @@ def list_columns(
             detail=f"Table '{schema}.{table}' not found or has no columns.",
         )
     return rows
+
+
+@router.get(
+    "/column-stats",
+    summary="Get column-level statistics for a DuckLake table",
+    description=(
+        "Returns per-column statistics including type, unique count, "
+        "null percentage, min, max, and quartiles using DuckDB SUMMARIZE."
+    ),
+)
+def column_stats(
+    schema: Annotated[str, Query(description="Schema name")],
+    table: Annotated[str, Query(description="Table name")],
+) -> list[dict[str, Any]]:
+    """Return column-level statistics using DuckDB SUMMARIZE."""
+    schema = _validate_identifier(schema, "schema")
+    table = _validate_identifier(table, "table")
+    try:
+        return _query_ducklake(f"SUMMARIZE SELECT * FROM ducklake.{schema}.{table}")
+    except Exception:
+        logger.exception("Failed to compute column stats for %s.%s", schema, table)
+        return []
+
+
+@router.get(
+    "/layer-summary",
+    summary="Get per-schema layer summary",
+    description="Returns table count and total row count for each DuckLake schema.",
+)
+def layer_summary() -> list[dict[str, Any]]:
+    """Return a summary of each schema (layer) in the DuckLake catalog."""
+    settings = DuckLakeSettings()  # type: ignore[missing-argument]
+    conn = create_connection(settings)
+    try:
+        schemas = conn.sql(
+            "SELECT DISTINCT table_schema FROM information_schema.tables "
+            "WHERE table_catalog = 'ducklake' ORDER BY table_schema"
+        ).fetchall()
+
+        result = []
+        for (schema_name,) in schemas:
+            tables = conn.sql(
+                "SELECT table_name FROM information_schema.tables "
+                f"WHERE table_catalog = 'ducklake' AND table_schema = '{schema_name}'"
+            ).fetchall()
+
+            total_rows = 0
+            for (table_name,) in tables:
+                try:
+                    cnt = conn.sql(f"SELECT COUNT(*) FROM ducklake.{schema_name}.{table_name}").fetchone()
+                    total_rows += cnt[0] if cnt else 0
+                except (duckdb.Error, IndexError):
+                    logger.warning("Could not count rows in %s.%s", schema_name, table_name)
+
+            result.append(
+                {
+                    "schema_name": schema_name,
+                    "table_count": len(tables),
+                    "total_rows": total_rows,
+                }
+            )
+
+        return result
+    finally:
+        conn.close()

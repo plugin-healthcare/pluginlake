@@ -15,7 +15,7 @@ services:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 3s
       timeout: 3s
-      retries: 5
+      retries: 10
       start_period: 5s
 
   dagster:
@@ -83,8 +83,8 @@ services:
         ]
       interval: 5s
       timeout: 3s
-      retries: 5
-      start_period: 10s
+      retries: 10
+      start_period: 5s
     volumes:
       - ../../src:/app/src
       - ${PLUGINLAKE_DATA:-../../.data}:/app/.data

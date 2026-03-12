@@ -66,6 +66,14 @@ class ApiClient:
         """List columns for a specific DuckLake table."""
         return self._get("/api/v1/catalog/columns", params={"schema": schema, "table": table})
 
+    def get_column_stats(self, schema: str, table: str) -> list[dict[str, Any]]:
+        """Get column-level statistics for a DuckLake table."""
+        return self._get("/api/v1/catalog/column-stats", params={"schema": schema, "table": table})
+
+    def get_layer_summary(self) -> list[dict[str, Any]]:
+        """Get per-schema layer summary with table and row counts."""
+        return self._get("/api/v1/catalog/layer-summary")
+
     # --- Assets ---------------------------------------------------------------
 
     def get_assets(self) -> list[dict[str, Any]]:
@@ -100,6 +108,13 @@ class ApiClient:
         """Upload an OMOP CSV file."""
         return self._post(
             f"/api/v1/omop/{table_name}/csv",
+            files={"file": (filename, file_bytes)},
+        )
+
+    def upload_fhir_ndjson(self, file_bytes: bytes, filename: str, resource_type: str) -> dict[str, Any]:
+        """Upload a FHIR NDJSON file."""
+        return self._post(
+            f"/api/v1/fhir/{resource_type}/ndjson",
             files={"file": (filename, file_bytes)},
         )
 

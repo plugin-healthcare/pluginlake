@@ -3,6 +3,8 @@
 Run with: streamlit run dashboard/central/app.py
 """
 
+from pathlib import Path
+
 import streamlit as st
 
 from config import get_settings
@@ -18,7 +20,11 @@ st.set_page_config(
 
 # --- Sidebar ------------------------------------------------------------------
 
+_logo_path = Path(__file__).resolve().parents[3] / "assets" / "logo_plugin_rgb_flavicon.svg"
+
 st.sidebar.title("pluginlake")
+if _logo_path.exists():
+    st.sidebar.image(str(_logo_path), width=150)
 st.sidebar.caption("Central Researcher Dashboard")
 st.sidebar.divider()
 

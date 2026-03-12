@@ -6,22 +6,9 @@ from client import ApiClient
 from components.metadata_view import render_assets_table, render_catalog_tables
 
 st.title("Metadata")
-st.caption("Dagster asset status and DuckLake catalog overview")
+st.caption("Detailed schema and column breakdown for each table in the catalog.")
 
 client = ApiClient()
-
-# --- Dagster Assets --------------------------------------------------------
-
-st.header("Dagster Assets")
-st.caption("Registered assets with their latest materialization status.")
-
-assets = fetch_assets(client)
-
-materialized_only = st.toggle("Materialized", value=False)
-if materialized_only:
-    assets = [a for a in assets if a.get("last_materialized")]
-
-render_assets_table(assets)
 
 # --- DuckLake Catalog ------------------------------------------------------
 
@@ -46,3 +33,16 @@ def _fetch_columns(schema: str, table: str) -> list[dict]:
 
 
 render_catalog_tables(tables, fetch_columns_fn=_fetch_columns)
+
+# --- Dagster Assets --------------------------------------------------------
+
+st.header("Dagster Assets")
+st.caption("Registered assets with their latest materialization status.")
+
+assets = fetch_assets(client)
+
+materialized_only = st.toggle("Materialized", value=False)
+if materialized_only:
+    assets = [a for a in assets if a.get("last_materialized")]
+
+render_assets_table(assets)

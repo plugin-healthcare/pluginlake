@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from pluginlake.api.config import IngestionSettings
 from pluginlake.api.services.ingestion import IngestionError, IngestionService
-from pluginlake.config import StorageSettings
+from pluginlake.config import LogSettings, StorageSettings
 from pluginlake.core.dagster_client import DagsterClient
 from pluginlake.core.storage.layers import StorageLayerManager
 from pluginlake.utils.logger import get_logger
@@ -84,10 +84,12 @@ def _get_ingestion_service() -> IngestionService:
 
     dagster_client = DagsterClient(webserver_url=ingest_settings.dagster_webserver_url)
 
+    log_settings = LogSettings()
     return IngestionService(
         storage_manager=storage_manager,
         dagster_client=dagster_client,
         settings=ingest_settings,
+        ingestion_log_dir=log_settings.ingestion_log_dir,
     )
 
 

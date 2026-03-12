@@ -1,0 +1,6 @@
+vocabulary_id	vocabulary_name	vocabulary_reference	vocabulary_version	vocabulary_concept_id
+Ethnicity	OMOP Ethnicity	OMOP generated	Ethnicity 20250807	44819134
+Gender	OMOP Gender	OMOP generated		44819108
+None	OMOP Standardized Vocabularies	OMOP generated	v5.0 27-AUG-25	44819096
+Race	Race and Ethnicity Code Set (USBC)	http://www.cdc.gov/nchs/data/dvs/Race_Ethnicity_CodeSet.pdf	Version 1.0	44819109
+Visit	OMOP Visit	OMOP generated	Visit 20211216	44819119

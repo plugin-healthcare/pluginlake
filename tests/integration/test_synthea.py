@@ -8,6 +8,7 @@ Tests the complete pipeline:
 5. Verify results
 """
 
+import time
 from pathlib import Path
 
 import duckdb
@@ -245,3 +246,50 @@ def test_query_cohort_with_age_range(duckdb_con):
         current_year = 2026
         assert all(result["year_of_birth"] <= current_year - 30)
         assert all(result["year_of_birth"] >= current_year - 60)
+
+
+def test_query_nonexistent_person_returns_empty(duckdb_con):
+    """Querying person_id=-1 returns empty DataFrame."""
+    result = get_conditions_for_person(-1, con=duckdb_con)
+
+    assert isinstance(result, pl.DataFrame)
+    assert len(result) == 0
+
+
+def test_query_raises_on_missing_table(duckdb_con):
+    """Query against non-existent table raises QueryError."""
+    from pluginlake.omop.query_utils import QueryError, execute_query
+
+    with pytest.raises(QueryError):
+        execute_query(
+            duckdb_con,
+            "SELECT * FROM ducklake.omop.nonexistent_table",
+            None,
+            lambda: None,
+        )
+
+
+def test_query_performance_persons(duckdb_con):
+    """get_persons() on 1k dataset completes in <500ms."""
+    start = time.time()
+    get_persons(con=duckdb_con)
+    elapsed_ms = (time.time() - start) * 1000
+
+    assert elapsed_ms < 500
+
+
+def test_query_performance_cohort(duckdb_con, loaded_tables: dict[str, pl.DataFrame]):
+    """get_cohort() with condition+age filter completes in <1000ms."""
+    cond_df = loaded_tables["condition_occurrence"]
+    test_condition_id = cond_df["condition_concept_id"][0]
+
+    start = time.time()
+    get_cohort(
+        con=duckdb_con,
+        has_condition_concept_id=test_condition_id,
+        min_age=30,
+        max_age=60,
+    )
+    elapsed_ms = (time.time() - start) * 1000
+
+    assert elapsed_ms < 1000

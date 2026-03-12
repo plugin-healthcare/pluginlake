@@ -39,9 +39,12 @@ st.markdown(
 # --- Navigation ---------------------------------------------------------------
 
 pages = [
-    st.Page("pages/1_Metadata.py", title="Metadata", icon=":material/database:"),
-    st.Page("pages/2_OMOP_Statistics.py", title="OMOP Statistics", icon=":material/analytics:"),
-    st.Page("pages/3_Data_Ingestion.py", title="Data Ingestion", icon=":material/upload:"),
+    st.Page("pages/0_Overview.py", title="Overview", icon=":material/home:", default=True),
+    st.Page("pages/1_Data_Catalog.py", title="Data Catalog", icon=":material/table_chart:"),
+    st.Page("pages/2_Pipelines.py", title="Pipelines", icon=":material/account_tree:"),
+    st.Page("pages/2_OMOP_Statistics.py", title="OMOP", icon=":material/analytics:"),
+    st.Page("pages/4_FHIR.py", title="FHIR", icon=":material/medical_services:"),
+    st.Page("pages/5_Data_Ingestion.py", title="Upload Data", icon=":material/upload:"),
 ]
 
 pg = st.navigation(pages, position="top")
@@ -49,6 +52,8 @@ pg = st.navigation(pages, position="top")
 # --- Sidebar ------------------------------------------------------------------
 
 st.sidebar.title("pluginlake")
+if _logo_path.exists():
+    st.sidebar.image(str(_logo_path), width=150)
 st.sidebar.caption("Datastation Dashboard")
 
 if "last_refreshed" not in st.session_state:

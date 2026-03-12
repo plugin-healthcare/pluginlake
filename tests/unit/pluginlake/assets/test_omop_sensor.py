@@ -18,6 +18,7 @@ def raw_dir(tmp_path, monkeypatch):
             "raw_data_dir": tmp_path,
             "folder_watch_debounce_seconds": 60,
             "folder_watch_interval": 30,
+            "validate_concepts": False,
         },
     )()
     monkeypatch.setattr(
@@ -35,6 +36,30 @@ def _write_csv(raw_dir, name, mtime_offset=-120):
     target_time = time.time() + mtime_offset
     os.utime(path, (target_time, target_time))
     return path
+
+
+def test_skip_when_vocab_not_materialized(tmp_path, monkeypatch):
+    fake_settings = type(
+        "FakeSettings",
+        (),
+        {
+            "raw_data_dir": tmp_path,
+            "folder_watch_debounce_seconds": 60,
+            "folder_watch_interval": 30,
+            "validate_concepts": True,
+        },
+    )()
+    monkeypatch.setattr(
+        "pluginlake.assets.omop_sensor.get_omop_settings",
+        lambda: fake_settings,
+    )
+    from dagster import DagsterInstance
+
+    context = build_sensor_context(instance=DagsterInstance.ephemeral())
+    result = omop_folder_sensor(context)
+    assert isinstance(result, SkipReason)
+    assert result.skip_message is not None
+    assert "vocabulary" in result.skip_message.lower()
 
 
 def test_skip_when_directory_empty(raw_dir):
