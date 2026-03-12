@@ -23,4 +23,6 @@ provider "azurerm" {
   resource_provider_registrations = "none"
   subscription_id = var.subscription_id
 
+  # Use Azure AD for storage data plane ops (required when shared_access_key_enabled = false).
+  storage_use_azuread = true
 }
