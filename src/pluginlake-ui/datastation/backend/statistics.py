@@ -13,7 +13,7 @@ from client import ApiClient, ApiError
 logger = logging.getLogger(__name__)
 
 
-@st.cache_data(ttl=120, show_spinner=False)
+@st.cache_data(ttl=120, show_spinner="Loading OMOP statistics...")
 def fetch_omop_statistics(_client: ApiClient) -> dict[str, Any]:
     """Fetch aggregated OMOP statistics."""
     try:

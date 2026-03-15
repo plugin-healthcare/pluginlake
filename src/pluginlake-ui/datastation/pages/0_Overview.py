@@ -7,11 +7,11 @@ import streamlit as st
 from backend.catalog import fetch_layer_summary
 from backend.metadata import fetch_catalog_tables
 from backend.pipelines import fetch_assets, fetch_runs
-from client import ApiClient
+from client import get_client
 
 st.title("Overview")
 
-client = ApiClient()
+client = get_client()
 
 # ── Schema → layer mapping ────────────────────────────────────────────────
 # Follows ADR-004 medallion layers + "reference" for controlled vocabularies

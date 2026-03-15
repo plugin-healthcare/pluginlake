@@ -8,7 +8,7 @@ from backend.fhir import (
     fetch_fhir_statistics,
     fetch_fhir_tables,
 )
-from client import ApiClient
+from client import get_client
 from components.catalog_detail import render_column_stats
 from components.fhir_charts import (
     render_age_distribution,
@@ -24,7 +24,7 @@ from components.fhir_charts import (
 st.title("FHIR")
 st.caption("Ingestion metrics, clinical analytics, and FHIR-to-OMOP translation.")
 
-client = ApiClient()
+client = get_client()
 stats = fetch_fhir_statistics(client)
 
 # --- A. Ingestion Overview ---------------------------------------------------
@@ -101,11 +101,20 @@ with st.expander("FHIR Raw Tables"):
 with st.expander("Translated OMOP Tables"):
     fhir_omop = fetch_fhir_omop_tables(client)
     if fhir_omop:
-        for tbl in fhir_omop:
-            name = tbl.get("table_name", "")
-            col_count = tbl.get("column_count", "?")
-            st.markdown(f"**fhir_omop_raw.{name}** ({col_count} columns)")
-            col_stats = fetch_column_stats(client, "fhir_omop_raw", name)
+        omop_table_names = [t.get("table_name", "") for t in fhir_omop]
+        selected_omop = st.selectbox(
+            "Inspect table",
+            options=omop_table_names,
+            index=None,
+            placeholder="Select a table...",
+            key="fhir_omop_table_select",
+        )
+        if selected_omop:
+            col_count = next(
+                (t.get("column_count", "?") for t in fhir_omop if t.get("table_name") == selected_omop), "?"
+            )
+            st.markdown(f"**fhir_omop_raw.{selected_omop}** ({col_count} columns)")
+            col_stats = fetch_column_stats(client, "fhir_omop_raw", selected_omop)
             render_column_stats(col_stats)
     else:
         st.info("No translated OMOP tables found.", icon=":material/info:")

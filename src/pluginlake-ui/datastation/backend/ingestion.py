@@ -23,7 +23,7 @@ def fetch_ingestion_info(_client: ApiClient) -> dict[str, Any]:
         return {}
 
 
-@st.cache_data(ttl=15, show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False)
 def fetch_ingestion_runs(_client: ApiClient) -> list[dict[str, Any]]:
     """Fetch recent ingestion runs."""
     try:

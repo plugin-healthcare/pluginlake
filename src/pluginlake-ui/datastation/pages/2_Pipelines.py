@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 import streamlit as st
 from backend.catalog import fetch_layer_summary
 from backend.pipelines import fetch_assets, fetch_runs
-from client import ApiClient
+from client import get_client
 from components.data_flow import render_data_flow
 
 _RUN_ID_DISPLAY_LEN = 12
@@ -13,7 +13,7 @@ _RUN_ID_DISPLAY_LEN = 12
 st.title("Pipelines")
 st.caption("See how data flows through the system and monitor processing runs.")
 
-client = ApiClient()
+client = get_client()
 
 # --- Data flow diagram -----------------------------------------------------
 

@@ -2,7 +2,7 @@
 
 import streamlit as st
 from backend.statistics import fetch_omop_statistics
-from client import ApiClient
+from client import get_client
 from components.omop_charts import (
     render_age_distribution,
     render_gender_distribution,
@@ -15,7 +15,7 @@ from components.omop_charts import (
 st.title("OMOP Statistics")
 st.caption("Aggregated statistics of OMOP data on this datastation.")
 
-client = ApiClient()
+client = get_client()
 
 stats = fetch_omop_statistics(client)
 

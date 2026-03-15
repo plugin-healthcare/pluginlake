@@ -8,12 +8,19 @@ import logging
 from typing import Any
 
 import httpx
+import streamlit as st
 
 from config import get_settings
 
 logger = logging.getLogger(__name__)
 
 _settings = get_settings()
+
+
+@st.cache_resource
+def get_client() -> "ApiClient":
+    """Return a cached ApiClient instance shared across all pages."""
+    return ApiClient()
 
 
 class ApiError(Exception):

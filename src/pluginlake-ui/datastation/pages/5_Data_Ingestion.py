@@ -2,13 +2,13 @@
 
 import streamlit as st
 from backend.ingestion import fetch_ingestion_runs
-from client import ApiClient, ApiError
+from client import ApiError, get_client
 from components.ingestion_form import render_ingestion_runs
 
 st.title("Upload Data")
 st.caption("Upload data files to the datastation for processing.")
 
-client = ApiClient()
+client = get_client()
 
 # --- Upload tabs -----------------------------------------------------------
 

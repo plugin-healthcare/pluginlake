@@ -2,13 +2,13 @@
 
 import streamlit as st
 from backend.metadata import fetch_assets, fetch_catalog_columns, fetch_catalog_schemas, fetch_catalog_tables
-from client import ApiClient
+from client import get_client
 from components.metadata_view import render_assets_table, render_catalog_tables
 
 st.title("Metadata")
 st.caption("Detailed schema and column breakdown for each table in the catalog.")
 
-client = ApiClient()
+client = get_client()
 
 # --- DuckLake Catalog ------------------------------------------------------
 

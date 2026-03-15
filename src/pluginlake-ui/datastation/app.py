@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import streamlit as st
-from client import ApiClient
+from client import get_client
 from components.status import api_status_badge
 
 from config import get_settings
@@ -67,6 +67,6 @@ if st.sidebar.button("Refresh", icon=":material/refresh:", width="stretch"):
 st.sidebar.caption(f"Last updated: {st.session_state.last_refreshed:%H:%M:%S}")
 
 with st.sidebar:
-    api_status_badge(ApiClient())
+    api_status_badge(get_client())
 
 pg.run()

@@ -34,7 +34,7 @@ FHIR_TO_OMOP_MAPPING = {
 }
 
 
-@st.cache_data(ttl=120, show_spinner=False)
+@st.cache_data(ttl=120, show_spinner="Loading FHIR statistics...")
 def fetch_fhir_statistics(_client: ApiClient) -> dict[str, Any]:
     """Fetch aggregated FHIR statistics from the API."""
     try:

@@ -9,7 +9,7 @@ from client import ApiClient, ApiError
 logger = logging.getLogger(__name__)
 
 
-@st.cache_data(ttl=30, show_spinner=False)
+@st.cache_data(ttl=120, show_spinner=False)
 def fetch_assets(_client: ApiClient) -> list[dict[str, Any]]:
     """Fetch Dagster assets with materialization status."""
     try:
@@ -19,7 +19,7 @@ def fetch_assets(_client: ApiClient) -> list[dict[str, Any]]:
         return []
 
 
-@st.cache_data(ttl=15, show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False)
 def fetch_runs(_client: ApiClient) -> list[dict[str, Any]]:
     """Fetch recent Dagster runs."""
     try:
