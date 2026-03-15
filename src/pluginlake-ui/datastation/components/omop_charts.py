@@ -88,3 +88,88 @@ def render_gender_distribution(stats: dict[str, Any]) -> None:
         height=350,
     )
     st.plotly_chart(fig, width="stretch")
+
+
+def render_age_distribution(stats: dict[str, Any]) -> None:
+    """Vertical bar chart for age buckets."""
+    data = stats.get("age_distribution", {})
+    if not data or all(v == 0 for v in data.values()):
+        return
+
+    fig = go.Figure(
+        go.Bar(
+            x=list(data.keys()),
+            y=list(data.values()),
+            marker_color=_TEAL,
+            hovertemplate="%{x}: <b>%{y:,.0f}</b> patients<extra></extra>",
+        )
+    )
+    fig.update_layout(
+        **_CHART_LAYOUT,
+        title="Age Distribution",
+        xaxis_title="Age Group",
+        yaxis_title="Patients",
+        height=350,
+    )
+    fig.update_yaxes(gridcolor="#e8e8e8")
+    st.plotly_chart(fig, width="stretch")
+
+
+def render_top_conditions(stats: dict[str, Any]) -> None:
+    """Horizontal bar chart — top conditions."""
+    data = stats.get("top_conditions", {})
+    if not data:
+        return
+
+    sorted_items = sorted(data.items(), key=lambda x: x[1])
+    labels = [k for k, _ in sorted_items]
+    counts = [c for _, c in sorted_items]
+
+    fig = go.Figure(
+        go.Bar(
+            x=counts,
+            y=labels,
+            orientation="h",
+            marker_color=_ORANGE,
+            hovertemplate="%{y}: <b>%{x:,.0f}</b><extra></extra>",
+        )
+    )
+    fig.update_layout(
+        **_CHART_LAYOUT,
+        title="Top Conditions",
+        xaxis_title="Count",
+        yaxis_title=None,
+        height=max(350, len(labels) * 28 + 80),
+    )
+    fig.update_xaxes(gridcolor="#e8e8e8")
+    st.plotly_chart(fig, width="stretch")
+
+
+def render_top_observations(stats: dict[str, Any]) -> None:
+    """Horizontal bar chart — top observations."""
+    data = stats.get("top_observations", {})
+    if not data:
+        return
+
+    sorted_items = sorted(data.items(), key=lambda x: x[1])
+    labels = [k for k, _ in sorted_items]
+    counts = [c for _, c in sorted_items]
+
+    fig = go.Figure(
+        go.Bar(
+            x=counts,
+            y=labels,
+            orientation="h",
+            marker_color=_NAVY,
+            hovertemplate="%{y}: <b>%{x:,.0f}</b><extra></extra>",
+        )
+    )
+    fig.update_layout(
+        **_CHART_LAYOUT,
+        title="Top Observations",
+        xaxis_title="Count",
+        yaxis_title=None,
+        height=max(350, len(labels) * 28 + 80),
+    )
+    fig.update_xaxes(gridcolor="#e8e8e8")
+    st.plotly_chart(fig, width="stretch")

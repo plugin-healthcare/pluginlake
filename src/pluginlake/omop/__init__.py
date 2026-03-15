@@ -5,6 +5,7 @@ Provides functions for loading, validating, and querying OMOP Common Data Model 
 
 from pluginlake.omop.config import OMOPSettings, get_omop_settings
 from pluginlake.omop.loader import load_omop_dataset, load_omop_table
+from pluginlake.omop.provisioning import ensure_omop_vocabularies
 from pluginlake.omop.queries import (
     get_cohort,
     get_conditions_for_person,
@@ -56,6 +57,7 @@ __all__ = [
     "ValidationError",
     "VisitDetail",
     "VisitOccurrence",
+    "ensure_omop_vocabularies",
     "filter_invalid_rows",
     "get_cohort",
     "get_conditions_for_person",

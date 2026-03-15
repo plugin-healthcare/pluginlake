@@ -59,10 +59,10 @@ def test_skip_when_auto_load_disabled(tmp_path, monkeypatch):
     assert "disabled" in result.skip_message
 
 
-def test_calls_ensure_when_directory_empty(vocab_dir, monkeypatch):
+def test_auto_provisions_when_directory_empty(vocab_dir, monkeypatch):
     called = []
     monkeypatch.setattr(
-        "pluginlake.utils.testdata.ensure_omop_vocabularies",
+        "pluginlake.omop.provisioning.ensure_omop_vocabularies",
         lambda *_a, **_kw: called.append(True) or vocab_dir,
     )
     context = build_sensor_context()
@@ -70,7 +70,7 @@ def test_calls_ensure_when_directory_empty(vocab_dir, monkeypatch):
     assert called
 
 
-def test_calls_ensure_when_directory_missing(tmp_path, monkeypatch):
+def test_auto_provisions_when_directory_missing(tmp_path, monkeypatch):
     missing_dir = tmp_path / "nonexistent"
     fake_settings = type(
         "FakeSettings",
@@ -88,12 +88,42 @@ def test_calls_ensure_when_directory_missing(tmp_path, monkeypatch):
     )
     called = []
     monkeypatch.setattr(
-        "pluginlake.utils.testdata.ensure_omop_vocabularies",
+        "pluginlake.omop.provisioning.ensure_omop_vocabularies",
         lambda *_a, **_kw: called.append(True) or missing_dir,
     )
     context = build_sensor_context()
     omop_vocab_sensor(context)
     assert called
+
+
+def test_download_failure_returns_skip_reason(vocab_dir, monkeypatch):
+    import shutil
+
+    shutil.rmtree(vocab_dir)
+
+    fake_settings = type(
+        "FakeSettings",
+        (),
+        {
+            "vocabulary_dir": vocab_dir,
+            "vocabulary_auto_load": True,
+            "folder_watch_interval": 30,
+            "folder_watch_debounce_seconds": 60,
+        },
+    )()
+    monkeypatch.setattr(
+        "pluginlake.assets.omop_vocab_sensor.get_omop_settings",
+        lambda: fake_settings,
+    )
+    monkeypatch.setattr(
+        "pluginlake.omop.provisioning.ensure_omop_vocabularies",
+        lambda *_a, **_kw: (_ for _ in ()).throw(RuntimeError("Network error")),
+    )
+    context = build_sensor_context()
+    result = omop_vocab_sensor(context)
+    assert isinstance(result, SkipReason)
+    assert result.skip_message is not None
+    assert "failed" in result.skip_message.lower()
 
 
 def test_yields_run_request_for_new_vocab_csv(vocab_dir):
@@ -128,36 +158,6 @@ def test_yields_run_request_on_file_change(vocab_dir):
     assert isinstance(result, SensorResult)
     assert result.run_requests is not None
     assert len(result.run_requests) == 1
-
-
-def test_download_failure_returns_skip_reason(vocab_dir, monkeypatch):
-    import shutil
-
-    shutil.rmtree(vocab_dir)
-
-    fake_settings = type(
-        "FakeSettings",
-        (),
-        {
-            "vocabulary_dir": vocab_dir,
-            "vocabulary_auto_load": True,
-            "folder_watch_interval": 30,
-            "folder_watch_debounce_seconds": 60,
-        },
-    )()
-    monkeypatch.setattr(
-        "pluginlake.assets.omop_vocab_sensor.get_omop_settings",
-        lambda: fake_settings,
-    )
-    monkeypatch.setattr(
-        "pluginlake.utils.testdata.ensure_omop_vocabularies",
-        lambda *_a, **_kw: (_ for _ in ()).throw(RuntimeError("Network error")),
-    )
-    context = build_sensor_context()
-    result = omop_vocab_sensor(context)
-    assert isinstance(result, SkipReason)
-    assert result.skip_message is not None
-    assert "failed" in result.skip_message.lower()
 
 
 def test_cursor_updates_correctly(vocab_dir):

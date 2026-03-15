@@ -10,7 +10,7 @@ from pluginlake.fhir.config import FHIRSettings, get_fhir_settings
 def test_defaults(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("FHIR_RAW_DATA_DIR", raising=False)
     s = FHIRSettings(_env_file=None)  # ty: ignore[unknown-argument] — Pydantic Settings runtime param
-    assert s.raw_data_dir == Path("data/raw/fhir")
+    assert s.raw_data_dir == Path(".data/raw/fhir")
     assert s.folder_watch_interval == 30
     assert s.folder_watch_debounce_seconds == 60
 

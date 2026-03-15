@@ -86,6 +86,12 @@ class ApiClient:
         """Get aggregated OMOP statistics."""
         return self._get("/api/v1/omop/statistics")
 
+    # --- FHIR Statistics ------------------------------------------------------
+
+    def get_fhir_statistics(self) -> dict[str, Any]:
+        """Get aggregated FHIR statistics."""
+        return self._get("/api/v1/fhir/statistics")
+
     # --- Ingestion ------------------------------------------------------------
 
     def get_ingestion_info(self) -> dict[str, Any]:

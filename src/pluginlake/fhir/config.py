@@ -23,7 +23,7 @@ class FHIRSettings(BaseSettings):
     )
 
     raw_data_dir: Path = Field(
-        default=Path("data/raw/fhir"),
+        default=Path(".data/raw/fhir"),
         description="Directory containing raw FHIR NDJSON files",
     )
 

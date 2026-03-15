@@ -20,7 +20,8 @@ from pluginlake.core.ducklake.io_manager import ducklake_io_manager
 fhir_ingest_job = define_asset_job(
     name="fhir_ingest_job",
     selection=[AssetKey(["fhir_raw", rt]) for rt in FHIR_RESOURCE_TYPES]
-    + [AssetKey(["fhir_omop", t]) for t in OMOP_TARGET_TABLES],
+    + [AssetKey(["fhir_omop_raw", t]) for t in OMOP_TARGET_TABLES]
+    + [AssetKey(["omop", t]) for t in OMOP_TARGET_TABLES],
 )
 
 defs = Definitions(

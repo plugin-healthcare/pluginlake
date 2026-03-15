@@ -5,7 +5,14 @@ from collections.abc import Generator
 import duckdb
 import orjson
 import polars as pl
-from dagster import AssetExecutionContext, AssetKey, AssetOut, Output, multi_asset
+from dagster import (
+    AssetExecutionContext,
+    AssetKey,
+    AssetOut,
+    AutomationCondition,
+    Output,
+    multi_asset,
+)
 
 from pluginlake.core.ducklake.setup import setup_ducklake
 from pluginlake.fhir.loader import load_fhir_dataset
@@ -34,8 +41,19 @@ def fhir_raw_tables(context: AssetExecutionContext) -> Generator[Output]:
 
 
 @multi_asset(
-    outs={t: AssetOut(key=AssetKey(["fhir_omop", t]), is_required=False) for t in OMOP_TARGET_TABLES},
+    outs={
+        t: AssetOut(
+            key=AssetKey(["fhir_omop_raw", t]),
+            is_required=False,
+            automation_condition=AutomationCondition.eager(),
+        )
+        for t in OMOP_TARGET_TABLES
+    },
     deps=[AssetKey(["fhir_raw", rt]) for rt in FHIR_RESOURCE_TYPES],
+    internal_asset_deps={
+        omop_table: {AssetKey(["fhir_raw", ft]) for ft in fhir_types}
+        for omop_table, fhir_types in OMOP_TABLE_TO_FHIR.items()
+    },
     can_subset=True,
 )
 def fhir_to_omop_tables(context: AssetExecutionContext) -> Generator[Output]:

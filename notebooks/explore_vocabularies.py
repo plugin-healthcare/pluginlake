@@ -37,7 +37,11 @@ def _():
 
     import marimo as mo
 
+    from pluginlake.utils.testdata import find_repo_root
+
+    PROJECT_ROOT = find_repo_root()
     from pluginlake.omop.loader import load_vocabulary_dataset
+    from pluginlake.omop.provisioning import ensure_omop_vocabularies
     from pluginlake.omop.vocabulary_queries import (
         get_concept,
         get_concept_ancestors,
@@ -49,9 +53,7 @@ def _():
     from pluginlake.omop.vocabulary_validation import (
         validate_concept_ids,
     )
-    from pluginlake.utils.testdata import ensure_omop_vocabularies
 
-    PROJECT_ROOT = Path(__file__).resolve().parent.parent
     return (
         PROJECT_ROOT,
         ensure_omop_vocabularies,

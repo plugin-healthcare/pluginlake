@@ -1,5 +1,6 @@
 """OMOP CDM Dagster assets."""
 
+import contextlib
 from collections.abc import Generator
 
 import duckdb
@@ -7,6 +8,7 @@ import polars as pl
 from dagster import AssetExecutionContext, AssetKey, AssetOut, Output, multi_asset
 
 from pluginlake.core.ducklake.setup import setup_ducklake
+from pluginlake.fhir.translator_registry import OMOP_TARGET_TABLES
 from pluginlake.omop.config import get_omop_settings
 from pluginlake.omop.loader import load_omop_dataset, load_vocabulary_dataset
 from pluginlake.omop.vocabulary_validation import (
@@ -67,7 +69,9 @@ def omop_raw_clinical_tables(context: AssetExecutionContext) -> Generator[Output
 
 @multi_asset(
     outs={t: AssetOut(key=AssetKey(["omop", t]), is_required=False) for t in CLINICAL_TABLES},
-    deps=[AssetKey(["omop_vocab", "concept"])] + [AssetKey(["omop_raw", t]) for t in CLINICAL_TABLES],
+    deps=[AssetKey(["omop_vocab", "concept"])]
+    + [AssetKey(["omop_raw", t]) for t in CLINICAL_TABLES]
+    + [AssetKey(["fhir_omop_raw", t]) for t in OMOP_TARGET_TABLES],
     can_subset=True,
 )
 def omop_clinical_tables(context: AssetExecutionContext) -> Generator[Output]:
@@ -81,13 +85,18 @@ def omop_clinical_tables(context: AssetExecutionContext) -> Generator[Output]:
     try:
         for key in context.selected_asset_keys:
             table_name = key.path[-1]
-            raw_ref = f"ducklake.omop_raw.{table_name}"
 
-            try:
-                df = conn.sql(f"SELECT * FROM {raw_ref}").pl()  # noqa: S608 — table ref from trusted asset key
-            except duckdb.CatalogException:
-                context.log.warning("Raw table %s not found, skipping", raw_ref)
+            frames: list[pl.DataFrame] = []
+            for schema_name in ["omop_raw", "fhir_omop_raw"]:
+                ref = f"ducklake.{schema_name}.{table_name}"
+                with contextlib.suppress(duckdb.CatalogException):
+                    frames.append(conn.sql(f"SELECT * FROM {ref}").pl())  # noqa: S608 — table ref from trusted asset key
+
+            if not frames:
+                context.log.warning("No raw data for %s, skipping", table_name)
                 continue
+
+            df = pl.concat(frames, how="diagonal_relaxed")
 
             metadata: dict[str, int | list[dict[str, object]]] = {
                 "raw_row_count": len(df),

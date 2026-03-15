@@ -42,7 +42,10 @@ def _():
     from pluginlake.utils.testdata import ensure_synthea1k
 
     API_BASE = "http://localhost:8000/api/v1"
-    PROJECT_ROOT = Path(__file__).resolve().parent.parent
+    from pluginlake.utils.testdata import find_repo_root
+
+    PROJECT_ROOT = find_repo_root()
+
     SYNTHEA_OMOP_DIR = PROJECT_ROOT / "data" / "synthea" / "omop" / "synthea1k"
     SYNTHEA_FHIR_DIR = PROJECT_ROOT / "data" / "synthea" / "fhir"
 

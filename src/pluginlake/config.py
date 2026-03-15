@@ -104,7 +104,7 @@ class StorageSettings(BaseSettings):
     )
 
     base_dir: Path = Field(
-        default=Path("data"),
+        default=Path(".data"),
         description="Root directory for all storage layers.",
     )
     backend: Literal["local"] = Field(
@@ -231,7 +231,7 @@ class LogSettings(BaseSettings):
     )
 
     base_dir: Path = Field(
-        default=Path("data/logs"),
+        default=Path(".data/logs"),
         description="Root directory for operational JSONL logs.",
     )
 

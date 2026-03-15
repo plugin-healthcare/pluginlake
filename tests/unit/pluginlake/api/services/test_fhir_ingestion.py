@@ -45,11 +45,22 @@ def test_store_file_creates_ndjson(service, fhir_settings):
     assert path.read_bytes() == content
 
 
+def test_store_file_appends_on_subsequent_uploads(service, fhir_settings):
+    chunk1 = b'{"id": "1"}\n{"id": "2"}\n'
+    chunk2 = b'{"id": "3"}\n'
+    service._store_file(chunk1, "data.ndjson", "observation", "abc1")
+    service._store_file(chunk2, "data.ndjson", "observation", "abc2")
+
+    path = fhir_settings.raw_data_dir / "observation.ndjson"
+    lines = [line for line in path.read_bytes().split(b"\n") if line]
+    assert len(lines) == 3
+
+
 @pytest.mark.anyio
 async def test_trigger_dagster(service, dagster_client, tmp_path):
     run_id = await service._trigger_dagster(tmp_path / "test.ndjson", "patient", "patient.ndjson")
     assert run_id == "run-123"
     dagster_client.trigger_job.assert_called_once_with(
         job_name="fhir_ingest_job",
-        asset_selection=[["fhir_raw", "patient"]],
+        asset_selection=[["fhir_raw", "patient"], ["fhir_omop_raw", "person"], ["omop", "person"]],
     )

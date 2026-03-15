@@ -40,9 +40,11 @@ def _():
     import httpx
     import marimo as mo
 
+    from pluginlake.utils.testdata import find_repo_root
+
+    PROJECT_ROOT = find_repo_root()
     from pluginlake.utils.testdata import ensure_synthea1k
 
-    PROJECT_ROOT = Path(__file__).resolve().parent.parent
     API_BASE = "http://localhost:8000/api/v1"
     DAGSTER_GRAPHQL = "http://localhost:3000/graphql"
     SYNTHEA_DIR = PROJECT_ROOT / "data" / "synthea" / "omop" / "synthea1k"

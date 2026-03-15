@@ -34,6 +34,16 @@ FHIR_TO_OMOP_MAPPING = {
 }
 
 
+@st.cache_data(ttl=120, show_spinner=False)
+def fetch_fhir_statistics(_client: ApiClient) -> dict[str, Any]:
+    """Fetch aggregated FHIR statistics from the API."""
+    try:
+        return _client.get_fhir_statistics()
+    except ApiError:
+        logger.exception("Failed to fetch FHIR statistics")
+        return {}
+
+
 @st.cache_data(ttl=60, show_spinner=False)
 def fetch_fhir_tables(_client: ApiClient) -> list[dict[str, Any]]:
     """Fetch FHIR raw tables from the catalog."""
@@ -48,7 +58,7 @@ def fetch_fhir_tables(_client: ApiClient) -> list[dict[str, Any]]:
 def fetch_fhir_omop_tables(_client: ApiClient) -> list[dict[str, Any]]:
     """Fetch FHIR-to-OMOP translated tables from the catalog."""
     try:
-        return _client.get_catalog_tables(schema="fhir_omop")
+        return _client.get_catalog_tables(schema="fhir_omop_raw")
     except ApiError:
         logger.exception("Failed to fetch FHIR-OMOP tables")
         return []

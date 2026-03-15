@@ -17,15 +17,20 @@ _LAYER_INFO = {
     "omop": {"label": "OMOP Validated", "color": _TEAL, "standard": "OMOP"},
     "omop_audit": {"label": "Audit Log", "color": _GRAY, "standard": "OMOP"},
     "fhir_raw": {"label": "FHIR Raw", "color": "#f2a965", "standard": "FHIR"},
-    "fhir_omop": {"label": "FHIR → OMOP", "color": _ORANGE, "standard": "FHIR"},
+    "fhir_omop_raw": {"label": "FHIR \u2192 OMOP (staging)", "color": _ORANGE, "standard": "FHIR"},
 }
 
-# Directed edges: (source_schema, target_schema, color)
 _FLOW_EDGES = [
     ("omop_raw", "omop", _TEAL),
     ("omop_vocab", "omop", _NAVY),
-    ("fhir_raw", "fhir_omop", _ORANGE),
+    ("fhir_raw", "fhir_omop_raw", _ORANGE),
+    ("fhir_omop_raw", "omop", _ORANGE),
 ]
+
+
+def _hex_to_rgba(hex_color: str, alpha: float) -> str:
+    r, g, b = int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16)
+    return f"rgba({r},{g},{b},{alpha})"
 
 
 def render_data_flow(layer_summary: list[dict[str, Any]]) -> None:
@@ -40,9 +45,9 @@ def render_data_flow(layer_summary: list[dict[str, Any]]) -> None:
         )
         return
 
-    # Build nodes
     node_labels: list[str] = []
     node_colors: list[str] = []
+    node_hover: list[str] = []
     node_index: dict[str, int] = {}
 
     for schema in active:
@@ -50,24 +55,28 @@ def render_data_flow(layer_summary: list[dict[str, Any]]) -> None:
         info = _LAYER_INFO.get(name, {"label": name, "color": _GRAY})
         rows = schema["total_rows"]
         tables = schema["table_count"]
-        label = f"{info['label']}\n{tables} tables · {rows:,} rows"
         node_index[name] = len(node_labels)
-        node_labels.append(label)
-        node_colors.append(info.get("color", _GRAY))
+        node_labels.append(info["label"])
+        node_colors.append(_hex_to_rgba(info.get("color", _GRAY), 0.8))
+        node_hover.append(f"<b>{info['label']}</b><br>{tables} tables<br>{rows:,} rows")
 
-    # Build links
     sources: list[int] = []
     targets: list[int] = []
     values: list[int] = []
     link_colors: list[str] = []
+    link_hover: list[str] = []
 
     for src, tgt, color in _FLOW_EDGES:
         if src in node_index and tgt in node_index:
             tgt_rows = schema_map.get(tgt, {}).get("total_rows", 0)
+            flow_value = max(tgt_rows, 1)
             sources.append(node_index[src])
             targets.append(node_index[tgt])
-            values.append(max(tgt_rows, 1))
-            link_colors.append(color + "80")
+            values.append(flow_value)
+            link_colors.append(_hex_to_rgba(color, 0.25))
+            src_label = _LAYER_INFO.get(src, {"label": src})["label"]
+            tgt_label = _LAYER_INFO.get(tgt, {"label": tgt})["label"]
+            link_hover.append(f"{src_label} \u2192 {tgt_label}<br>{flow_value:,} rows")
 
     if not sources:
         st.info(
@@ -78,25 +87,32 @@ def render_data_flow(layer_summary: list[dict[str, Any]]) -> None:
 
     fig = go.Figure(
         go.Sankey(
+            arrangement="snap",
+            textfont={"family": "sans-serif", "color": "white", "size": 13},
             node={
-                "pad": 20,
-                "thickness": 20,
+                "pad": 40,
+                "thickness": 18,
                 "label": node_labels,
                 "color": node_colors,
+                "hovertemplate": "%{customdata}<extra></extra>",
+                "customdata": node_hover,
+                "line": {"width": 0},
             },
             link={
                 "source": sources,
                 "target": targets,
                 "value": values,
                 "color": link_colors,
+                "hovertemplate": "%{customdata}<extra></extra>",
+                "customdata": link_hover,
             },
         )
     )
     fig.update_layout(
-        title="Data Flow Between Layers",
         font={"family": "sans-serif", "color": _NAVY, "size": 13},
         paper_bgcolor="rgba(0,0,0,0)",
-        margin={"l": 20, "r": 20, "t": 48, "b": 20},
-        height=400,
+        plot_bgcolor="rgba(0,0,0,0)",
+        margin={"l": 24, "r": 24, "t": 16, "b": 16},
+        height=420,
     )
     st.plotly_chart(fig, use_container_width=True)

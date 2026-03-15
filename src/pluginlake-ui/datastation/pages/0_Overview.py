@@ -20,7 +20,7 @@ _LAYER = {
     "omop_raw": "Raw",
     "fhir_raw": "Raw",
     "omop": "Curated",
-    "fhir_omop": "Curated",
+    "fhir_omop_raw": "Raw",
     "omop_vocab": "Reference",
     "omop_audit": "Reference",
 }
@@ -30,7 +30,7 @@ _DOMAIN = {
     "omop_raw": "OMOP",
     "fhir_raw": "FHIR",
     "omop": "OMOP",
-    "fhir_omop": "FHIR",
+    "fhir_omop_raw": "FHIR",
     "omop_vocab": "OMOP",
     "omop_audit": "OMOP",
 }

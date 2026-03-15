@@ -57,7 +57,8 @@ def fhir_folder_sensor(context: SensorEvaluationContext) -> SensorResult | SkipR
             RunRequest(
                 run_key=f"fhir-folder-{int(now)}",
                 asset_selection=[AssetKey(["fhir_raw", rt]) for rt in changed_types]
-                + [AssetKey(["fhir_omop", t]) for t in omop_tables],
+                + [AssetKey(["fhir_omop_raw", t]) for t in omop_tables]
+                + [AssetKey(["omop", t]) for t in omop_tables],
             )
         ]
     )

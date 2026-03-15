@@ -104,4 +104,5 @@ def test_includes_omop_target_in_asset_selection(raw_dir):
     assert keys is not None
     key_paths = [k.path for k in keys]
     assert ["fhir_raw", "patient"] in key_paths
-    assert ["fhir_omop", "person"] in key_paths
+    assert ["fhir_omop_raw", "person"] in key_paths
+    assert ["omop", "person"] in key_paths

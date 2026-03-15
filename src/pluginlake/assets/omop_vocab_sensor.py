@@ -28,11 +28,11 @@ def omop_vocab_sensor(context: SensorEvaluationContext) -> SensorResult | SkipRe
     vocab_dir = settings.vocabulary_dir
 
     if not vocab_dir.exists() or not any(vocab_dir.iterdir()):
+        logger.info("Vocabulary directory %s is empty, auto-provisioning...", vocab_dir)
         try:
-            from pluginlake.utils.testdata import ensure_omop_vocabularies  # noqa: PLC0415
+            from pluginlake.omop.provisioning import ensure_omop_vocabularies  # noqa: PLC0415
 
             ensure_omop_vocabularies()
-            logger.info("Downloaded OMOP vocabularies to %s", vocab_dir)
         except Exception:
             logger.exception("Failed to download OMOP vocabularies")
             return SkipReason("Vocabulary download failed, will retry next tick")

@@ -58,11 +58,11 @@ just dev-up
 
 This starts:
 
-| Container | Purpose |
-|-----------|---------|
-| postgres | Dagster metadata storage |
-| dagster | All-in-one: webserver + daemon + code location |
-| pluginlake | FastAPI service |
+| Container  | Purpose                                        |
+| ---------- | ---------------------------------------------- |
+| postgres   | Dagster metadata storage                       |
+| dagster    | All-in-one: webserver + daemon + code location |
+| pluginlake | FastAPI service                                |
 
 Source code is volume-mounted for hot reload. Stop with `just dev-down`.
 
@@ -86,13 +86,13 @@ just up
 
 This runs the full container architecture:
 
-| Container | Image | Purpose |
-|-----------|-------|---------|
-| postgres | `dhi.io/postgres:17-alpine3.22` | Dagster metadata storage |
-| dagster-webserver | `dagster-webserver.Dockerfile` | Web UI (port 3000) |
-| dagster-daemon | `dagster-webserver.Dockerfile` | Schedules, sensors, run queue |
-| dagster-code-server | `pluginlake.Dockerfile` | Serves asset definitions via gRPC (port 4000) |
-| pluginlake | `pluginlake.Dockerfile` | FastAPI service |
+| Container           | Image                           | Purpose                                       |
+| ------------------- | ------------------------------- | --------------------------------------------- |
+| postgres            | `dhi.io/postgres:17-alpine3.22` | Dagster metadata storage                      |
+| dagster-webserver   | `dagster-webserver.Dockerfile`  | Web UI (port 3000)                            |
+| dagster-daemon      | `dagster-webserver.Dockerfile`  | Schedules, sensors, run queue                 |
+| dagster-code-server | `pluginlake.Dockerfile`         | Serves asset definitions via gRPC (port 4000) |
+| pluginlake          | `pluginlake.Dockerfile`         | FastAPI service                               |
 
 Stop with `just down`.
 

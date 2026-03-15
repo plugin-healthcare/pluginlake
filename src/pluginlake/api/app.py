@@ -12,7 +12,16 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from pluginlake.api.exceptions import register_exception_handlers
 from pluginlake.api.middleware import RequestLoggingMiddleware
-from pluginlake.api.routers import assets, catalog, fhir, health, ingest, omop, omop_statistics
+from pluginlake.api.routers import (
+    assets,
+    catalog,
+    fhir,
+    fhir_statistics,
+    health,
+    ingest,
+    omop,
+    omop_statistics,
+)
 from pluginlake.config import LogSettings, Settings
 from pluginlake.core.config import DuckLakeSettings
 from pluginlake.core.ducklake.setup import ensure_database
@@ -84,3 +93,4 @@ def _include_routers(app: FastAPI) -> None:
     app.include_router(catalog.router)
     app.include_router(assets.router)
     app.include_router(fhir.router)
+    app.include_router(fhir_statistics.router)

@@ -15,6 +15,19 @@ def render_column_stats(stats: list[dict[str, Any]]) -> None:
         st.caption("No column statistics available.")
         return
 
+    numeric_types = {
+        "TINYINT",
+        "SMALLINT",
+        "INTEGER",
+        "BIGINT",
+        "FLOAT",
+        "DOUBLE",
+        "DECIMAL",
+        "HUGEINT",
+        "INT",
+        "REAL",
+    }
+
     display_data = []
     for col in stats:
         null_pct_raw = col.get("null_percentage", "0.00%")
@@ -24,16 +37,20 @@ def render_column_stats(stats: list[dict[str, Any]]) -> None:
             null_pct = 0.0
         filled_pct = 100.0 - null_pct
 
+        col_type = col.get("column_type", "")
+        base_type = col_type.split("(")[0].upper()
+        is_numeric = base_type in numeric_types
+
         display_data.append(
             {
                 "Column": col.get("column_name", ""),
-                "Type": col.get("column_type", ""),
-                "Filled %": filled_pct / 100.0,
+                "Type": col_type,
+                "Filled %": filled_pct,
                 "Unique": col.get("approx_unique", 0),
                 "Total": col.get("count", 0),
-                "Min": _truncate(col.get("min")),
-                "Max": _truncate(col.get("max")),
-                "Avg": _truncate(col.get("avg")),
+                "Min": _truncate(col.get("min")) if is_numeric else "—",
+                "Max": _truncate(col.get("max")) if is_numeric else "—",
+                "Avg": _truncate(col.get("avg")) if is_numeric else "—",
             }
         )
 
@@ -49,7 +66,7 @@ def render_column_stats(stats: list[dict[str, Any]]) -> None:
                 help="Percentage of non-null values",
                 format="%.0f%%",
                 min_value=0,
-                max_value=1,
+                max_value=100,
             ),
             "Unique": st.column_config.NumberColumn("Unique", format="%d"),
             "Total": st.column_config.NumberColumn("Rows", format="%d"),
