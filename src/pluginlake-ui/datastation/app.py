@@ -31,6 +31,7 @@ st.markdown(
     """
     <style>
     [data-testid="stLogo"] img { height: 3.5rem; }
+    [data-baseweb="select"], [data-baseweb="select"] * { cursor: pointer !important; }
     </style>
     """,
     unsafe_allow_html=True,
