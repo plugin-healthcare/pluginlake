@@ -1,0 +1,22 @@
+services:
+  pluginlake-ui-central:
+    build:
+      context: ../../
+      dockerfile: deploy/docker/ui-central.dev.Dockerfile
+    ports:
+      - "8502:8502"
+    env_file:
+      - ../../.env
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8502/_stcore/health')",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    volumes:
+      - ../../src/pluginlake-ui/central:/app/src/pluginlake-ui/central

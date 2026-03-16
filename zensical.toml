@@ -1,0 +1,110 @@
+[project]
+site_name = "pluginlake"
+site_description = "Local-first healthcare data platform using DuckLake, Dagster, and FastAPI."
+site_author = "Plugin Healthcare team"
+copyright = "Copyright &copy; 2026 Plugin Healthcare"
+
+extra_css = ["stylesheets/extra.css"]
+
+nav = [
+    { "Home" = "index.md" },
+    { "Guides" = [
+        { "Guides" = "guides/index.md" },
+        { "Getting Started" = "guides/getting-started.md" },
+        { "Docker" = "guides/docker.md" },
+        { "Using as Package" = "guides/using-as-package.md" },
+        { "API" = "guides/api.md" },
+        { "API Specification" = "guides/api-specification.md" },
+    ]},
+    { "Reference" = [
+        { "Reference" = "reference/index.md" },
+        { "Configuration" = "reference/config.md" },
+        { "DuckLake" = "reference/ducklake.md" },
+        { "Storage" = "reference/storage.md" },
+        { "OMOP" = "reference/omop.md" },
+        { "Ingestion" = "reference/ingestion.md" },
+        { "Utilities" = "reference/utils.md" },
+    ]},
+    { "Decisions" = [
+        { "Decisions" = "decisions/README.md" },
+        { "ADR-001: Asset Architecture" = "decisions/adr-001-asset-architecture.md" },
+        { "ADR-002: OMOP Storage Architecture" = "decisions/adr-002-omop-storage-architecture.md" },
+        { "ADR-003: DuckLake + Dagster Integration" = "decisions/adr-003-ducklake-data-catalog.md" },
+        { "ADR-004: Data Organization" = "decisions/adr-004-data-organization.md" },
+        { "ADR-005: FastAPI Gateway" = "decisions/adr-005-fastapi-gateway.md" },
+    ]},
+    { "Development" = [
+        { "Development" = "development/index.md" },
+        { "Guidelines" = "development/develop-guidelines.md" },
+        { "Future Features" = "development/future-features.md" },
+    ]},
+]
+
+[project.theme]
+logo = "assets/logo_plugin_rgb_favicon.svg"
+favicon = "assets/logo_plugin_rgb_favicon.svg"
+language = "en"
+
+features = [
+    "announce.dismiss",
+    "content.action.edit",
+    "content.action.view",
+    "content.code.annotate",
+    "content.code.copy",
+    "content.code.select",
+    "content.footnote.tooltips",
+    "content.tabs.link",
+    "header.autohide",
+    "navigation.footer",
+    "navigation.indexes",
+    "navigation.instant",
+    "navigation.instant.prefetch",
+    "navigation.sections",
+    "navigation.tabs",
+    "navigation.tabs.sticky",
+    "navigation.top",
+    "navigation.tracking",
+    "search.highlight",
+]
+
+[[project.theme.palette]]
+scheme = "default"
+primary = "custom"
+accent = "custom"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+scheme = "slate"
+primary = "custom"
+accent = "custom"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to light mode"
+
+[project.markdown_extensions.admonition]
+[project.markdown_extensions.attr_list]
+[project.markdown_extensions.footnotes]
+[project.markdown_extensions.md_in_html]
+[project.markdown_extensions.pymdownx.details]
+[project.markdown_extensions.pymdownx.highlight]
+anchor_linenums = true
+line_spans = "__span"
+pygments_lang_class = true
+[project.markdown_extensions.pymdownx.inlinehilite]
+[project.markdown_extensions.pymdownx.snippets]
+[project.markdown_extensions.pymdownx.superfences]
+[project.markdown_extensions.pymdownx.tabbed]
+alternate_style = true
+
+[project.plugins.mkdocstrings]
+enabled = true
+
+[project.plugins.mkdocstrings.handlers.python]
+paths = ["src"]
+
+[project.plugins.mkdocstrings.handlers.python.options]
+docstring_style = "google"
+show_source = true
+show_root_heading = true
+show_symbol_type_heading = true
+members_order = "source"
