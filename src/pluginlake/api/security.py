@@ -60,7 +60,7 @@ async def require_auth(request: Request) -> User:
     Returns:
         The authenticated user.
     """
-    # TODO(auth): Validate Authorization header / token here.  # noqa: FIX002
+    # TODO(auth): Validate Authorization header / token here.
     logger.debug("Auth placeholder: allowing request to %s", request.url.path)
     return _PLACEHOLDER_USER
 
@@ -92,7 +92,7 @@ def require_role(*roles: str) -> Callable[..., Coroutine[Any, Any, User]]:
     """
 
     async def _check_role(user: CurrentUser) -> User:
-        # TODO(auth): Enforce role check — raise HTTPException(403) on failure.  # noqa: FIX002
+        # TODO(auth): Enforce role check — raise HTTPException(403) on failure.
         logger.debug(
             "AuthZ placeholder: user=%s required_roles=%s actual_roles=%s",
             user.id,

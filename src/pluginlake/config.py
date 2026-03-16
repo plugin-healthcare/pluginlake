@@ -104,7 +104,7 @@ class StorageSettings(BaseSettings):
     )
 
     base_dir: Path = Field(
-        default=Path("data"),
+        default=Path(".data"),
         description="Root directory for all storage layers.",
     )
     backend: Literal["local"] = Field(
@@ -210,6 +210,50 @@ class PostgresSettings(BaseSettings):
     user: SecretStr = Field(description="PostgreSQL user.")
     password: SecretStr = Field(description="PostgreSQL password.")
     db: str = Field(default="pluginlake", description="PostgreSQL database name.")
+
+
+# ---------------------------------------------------------------------------
+# Dagster settings
+# ---------------------------------------------------------------------------
+
+
+class LogSettings(BaseSettings):
+    """Operational JSONL log configuration.
+
+    Environment variables are prefixed with ``PLUGINLAKE_LOG_``.
+    """
+
+    model_config = SettingsConfigDict(
+        env_prefix="PLUGINLAKE_LOG_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    base_dir: Path = Field(
+        default=Path(".data/logs"),
+        description="Root directory for operational JSONL logs.",
+    )
+
+    @model_validator(mode="after")
+    def _resolve_base_dir(self) -> "LogSettings":
+        self.base_dir = self.base_dir.resolve()
+        return self
+
+    @property
+    def query_log_dir(self) -> Path:
+        """Path to the query/traffic log directory."""
+        return self.base_dir / "query_log"
+
+    @property
+    def ingestion_log_dir(self) -> Path:
+        """Path to the ingestion history log directory."""
+        return self.base_dir / "ingestion_log"
+
+    def ensure_directories(self) -> None:
+        """Create both log subdirectories."""
+        self.query_log_dir.mkdir(parents=True, exist_ok=True)
+        self.ingestion_log_dir.mkdir(parents=True, exist_ok=True)
 
 
 # ---------------------------------------------------------------------------

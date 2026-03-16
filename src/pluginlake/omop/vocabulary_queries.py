@@ -3,42 +3,13 @@
 Functions for querying OMOP controlled vocabularies.
 """
 
-from collections.abc import Callable, Generator
-from contextlib import contextmanager
-
 import duckdb
 import polars as pl
 
-from pluginlake.core.ducklake.setup import setup_ducklake
+from pluginlake.omop.query_utils import ensure_connection, execute_query
 from pluginlake.utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-
-@contextmanager
-def _ensure_connection(
-    con: duckdb.DuckDBPyConnection | None,
-) -> Generator[duckdb.DuckDBPyConnection]:
-    should_close = con is None
-    if con is None:
-        con = setup_ducklake()
-    try:
-        yield con
-    finally:
-        if should_close:
-            con.close()
-
-
-def _execute_query(
-    con: duckdb.DuckDBPyConnection,
-    query: str,
-    params: dict | None,
-    log_fn: Callable[[], None],
-) -> pl.DataFrame:
-    log_fn()
-    result = con.execute(query, params) if params else con.execute(query)
-    columns = [desc[0] for desc in result.description]
-    return pl.DataFrame(result.fetchall(), schema=columns, orient="row")
 
 
 def get_concept(
@@ -48,7 +19,7 @@ def get_concept(
     schema: str = "ducklake.omop_vocab",
 ) -> pl.DataFrame:
     """Retrieve a single concept by ID."""
-    with _ensure_connection(con) as conn:
+    with ensure_connection(con) as conn:
         query = f"""
             SELECT
                 concept_id,
@@ -65,7 +36,7 @@ def get_concept(
             WHERE concept_id = $concept_id
         """  # noqa: S608
 
-        return _execute_query(
+        return execute_query(
             conn,
             query,
             {"concept_id": concept_id},
@@ -84,7 +55,7 @@ def search_concepts(  # noqa: PLR0913
     schema: str = "ducklake.omop_vocab",
 ) -> pl.DataFrame:
     """Search concepts by name with optional domain, vocabulary, and standard filters."""
-    with _ensure_connection(con) as conn:
+    with ensure_connection(con) as conn:
         conditions = []
         params = {"term": f"%{term}%", "limit": limit}
 
@@ -120,7 +91,7 @@ def search_concepts(  # noqa: PLR0913
             LIMIT $limit
         """  # noqa: S608
 
-        return _execute_query(
+        return execute_query(
             conn,
             query,
             params,
@@ -136,7 +107,7 @@ def get_concept_descendants(
     schema: str = "ducklake.omop_vocab",
 ) -> pl.DataFrame:
     """Return all descendant concepts of an ancestor concept."""
-    with _ensure_connection(con) as conn:
+    with ensure_connection(con) as conn:
         params = {"ancestor_id": ancestor_concept_id}
         max_levels_clause = ""
 
@@ -161,7 +132,7 @@ def get_concept_descendants(
             ORDER BY ca.min_levels_of_separation, c.concept_name
         """  # noqa: S608
 
-        return _execute_query(
+        return execute_query(
             conn,
             query,
             params,
@@ -177,7 +148,7 @@ def get_concept_ancestors(
     schema: str = "ducklake.omop_vocab",
 ) -> pl.DataFrame:
     """Return all ancestor concepts of a descendant concept."""
-    with _ensure_connection(con) as conn:
+    with ensure_connection(con) as conn:
         params = {"descendant_id": descendant_concept_id}
         max_levels_clause = ""
 
@@ -202,7 +173,7 @@ def get_concept_ancestors(
             ORDER BY ca.min_levels_of_separation, c.concept_name
         """  # noqa: S608
 
-        return _execute_query(
+        return execute_query(
             conn,
             query,
             params,
@@ -218,7 +189,7 @@ def map_source_code(
     schema: str = "ducklake.omop_vocab",
 ) -> pl.DataFrame:
     """Map a source code to its standard OMOP concept via the source-to-concept map."""
-    with _ensure_connection(con) as conn:
+    with ensure_connection(con) as conn:
         query = f"""
             SELECT
                 stcm.source_code,
@@ -240,7 +211,7 @@ def map_source_code(
             ORDER BY stcm.target_concept_id
         """  # noqa: S608
 
-        return _execute_query(
+        return execute_query(
             conn,
             query,
             {"source_code": source_code, "source_vocabulary_id": source_vocabulary_id},
@@ -255,7 +226,7 @@ def get_vocabulary_info(
     schema: str = "ducklake.omop_vocab",
 ) -> pl.DataFrame:
     """Return vocabulary metadata, optionally filtered by vocabulary ID."""
-    with _ensure_connection(con) as conn:
+    with ensure_connection(con) as conn:
         where_clause = ""
         params = {}
 
@@ -275,7 +246,7 @@ def get_vocabulary_info(
             ORDER BY vocabulary_id
         """  # noqa: S608
 
-        return _execute_query(
+        return execute_query(
             conn,
             query,
             params or None,

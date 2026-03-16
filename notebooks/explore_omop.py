@@ -16,23 +16,24 @@ app = marimo.App(width="medium")
 @app.cell
 def _(mo):
     mo.md(r"""
-    # OMOP Ingestion Demo
+    # Ingestion & Exploration Demo
 
     This notebook demonstrates the pluginlake ingestion pipeline end-to-end:
 
     1. **Pre-flight check** - verify that PostgreSQL, Dagster, and FastAPI are running
-    2. **Bulk ingest** - upload Synthea-generated OMOP CSV files via the REST API
-    3. **Explore DuckLake** - query the ingested data directly through the DuckLake catalog
-    4. **Demographics** - analyse gender and age distributions via DuckLake SQL
-    5. **Cohort selection** - select patient cohorts by condition and age range
-    6. **Single-table upload** - upload a small CSV inline to show the single-file API
+    2. **OMOP ingest** - upload Synthea-generated OMOP CSV files via the REST API
+    3. **FHIR ingest** - upload Synthea FHIR NDJSON files via the REST API
+    4. **Monitor runs** - poll the pluginlake API until all runs complete
+    5. **Explore DuckLake** - query the ingested data directly through the DuckLake catalog
+    6. **Demographics** - analyse gender and age distributions via DuckLake SQL
+    7. **Cohort selection** - select patient cohorts by condition and age range
     """)
 
 
 @app.cell
 def _():
     """Set up imports, constants, and ensure test data is available."""
-    import io
+    import time
     from pathlib import Path
 
     import httpx
@@ -40,11 +41,24 @@ def _():
 
     from pluginlake.utils.testdata import ensure_synthea1k
 
-    BASE_URL = "http://localhost:8000/api/v1/omop"
-    PROJECT_ROOT = Path(__file__).resolve().parent.parent
-    SYNTHEA_DIR = PROJECT_ROOT / "data" / "synthea" / "omop" / "synthea1k"
+    API_BASE = "http://localhost:8000/api/v1"
+    from pluginlake.utils.testdata import find_repo_root
+
+    PROJECT_ROOT = find_repo_root()
+
+    SYNTHEA_OMOP_DIR = PROJECT_ROOT / "data" / "synthea" / "omop" / "synthea1k"
+    SYNTHEA_FHIR_DIR = PROJECT_ROOT / "data" / "synthea" / "fhir"
+
     ensure_synthea1k(project_root=PROJECT_ROOT)
-    return BASE_URL, PROJECT_ROOT, SYNTHEA_DIR, httpx, io, mo
+    return (
+        API_BASE,
+        PROJECT_ROOT,
+        SYNTHEA_FHIR_DIR,
+        SYNTHEA_OMOP_DIR,
+        httpx,
+        mo,
+        time,
+    )
 
 
 @app.cell
@@ -82,89 +96,137 @@ def _(mo):
 @app.cell
 def _(mo):
     mo.md(r"""
-    ## Bulk Ingest
+    ## OMOP Ingest
 
     Upload every CSV in the Synthea 1K dataset to the OMOP ingest endpoint (`POST /api/v1/omop/<table>/csv`).
     Each file triggers a Dagster materialisation run that validates the data against the OMOP CDM schema
-    and persists it into DuckLake. The table below shows the HTTP response for each file.
+    and persists it into DuckLake.
     """)
 
 
 @app.cell
-def _(BASE_URL, SYNTHEA_DIR, httpx, mo):
+def _(API_BASE, SYNTHEA_OMOP_DIR, httpx, mo):
     """Upload all Synthea CSVs to the OMOP ingest endpoint."""
     import polars as pl
 
-    results = []
-    for _csv_file in sorted(SYNTHEA_DIR.glob("*.csv")):
-        _table_name = _csv_file.stem
-        with _csv_file.open("rb") as _f:
-            _resp = httpx.post(
-                f"{BASE_URL}/{_table_name}/csv",
-                files={"file": (_csv_file.name, _f, "text/csv")},
-                timeout=120.0,
+    omop_results: list[dict] = []
+    csv_files = sorted(SYNTHEA_OMOP_DIR.glob("*.csv"))
+
+    if not csv_files:
+        mo.callout(mo.md(f"No CSV files found in `{SYNTHEA_OMOP_DIR}`. Run `ensure_synthea1k()` first."), kind="warn")
+    else:
+        for _csv_file in csv_files:
+            _table_name = _csv_file.stem
+            with _csv_file.open("rb") as _f:
+                _resp = httpx.post(
+                    f"{API_BASE}/omop/{_table_name}/csv",
+                    files={"file": (_csv_file.name, _f, "text/csv")},
+                    timeout=120.0,
+                )
+            omop_results.append(
+                {
+                    "table": _table_name,
+                    "status": _resp.status_code,
+                    "dagster_run_id": _resp.json().get("dagster_run_id"),
+                    "message": _resp.json().get("message"),
+                }
             )
-        results.append(
-            {
-                "table": _table_name,
-                "status": _resp.status_code,
-                "dagster_run_id": _resp.json().get("dagster_run_id"),
-                "message": _resp.json().get("message"),
-            }
-        )
 
-    mo.md(f"Sent {len(results)} files")
-
-    mo.ui.table(pl.DataFrame(results))
-    return (results,)
+        mo.md(f"Sent **{len(omop_results)}** OMOP CSV files")
+        mo.ui.table(pl.DataFrame(omop_results))
+    return (omop_results,)
 
 
 @app.cell
-def _(httpx, mo, results):
-    """Poll Dagster GraphQL for run status until all runs reach a terminal state."""
-    import time
+def _(mo):
+    mo.md(r"""
+    ## FHIR Ingest
 
-    DAGSTER_GRAPHQL = "http://localhost:3000/graphql"
+    Upload Synthea FHIR NDJSON files from `data/synthea/fhir/`.
+    Run `notebooks/data_retrievals/retrieve_synthea.py` first to download the dataset.
+    """)
+
+
+@app.cell
+def _(API_BASE, SYNTHEA_FHIR_DIR, httpx, mo):
+    """Upload Synthea FHIR NDJSON files."""
+    import polars as pl
+
+    ndjson_files = sorted(SYNTHEA_FHIR_DIR.glob("*.ndjson"))
+    fhir_results: list[dict] = []
+
+    if not ndjson_files:
+        mo.callout(
+            mo.md(
+                f"No NDJSON files found in `{SYNTHEA_FHIR_DIR}`.\n\n"
+                "Run `notebooks/data_retrievals/retrieve_synthea.py` to download the Synthea FHIR dataset."
+            ),
+            kind="warn",
+        )
+    else:
+        mo.md(f"Found **{len(ndjson_files)}** NDJSON files in `{SYNTHEA_FHIR_DIR}`")
+        for _ndjson_file in ndjson_files:
+            _resource_type = _ndjson_file.stem.lower()
+            with _ndjson_file.open("rb") as _f:
+                _resp = httpx.post(
+                    f"{API_BASE}/fhir/{_resource_type}/ndjson",
+                    files={"file": (_ndjson_file.name, _f, "application/x-ndjson")},
+                    timeout=120.0,
+                )
+            fhir_results.append(
+                {
+                    "resource_type": _resource_type,
+                    "status": _resp.status_code,
+                    "dagster_run_id": _resp.json().get("dagster_run_id"),
+                    "message": _resp.json().get("message"),
+                }
+            )
+
+        mo.md(f"Sent **{len(fhir_results)}** FHIR NDJSON files")
+        mo.ui.table(pl.DataFrame(fhir_results))
+    return (fhir_results,)
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## Monitor Runs
+
+    Poll the pluginlake API (`GET /api/v1/runs`) until all triggered runs reach a terminal state.
+    """)
+
+
+@app.cell
+def _(
+    API_BASE,
+    fhir_results: list[dict],
+    httpx,
+    mo,
+    omop_results: list[dict],
+    time,
+):
+    """Poll the pluginlake API for run status until all triggered runs complete."""
     TERMINAL_STATUSES = {"SUCCESS", "FAILURE", "CANCELED"}
     POLL_INTERVAL = 3
 
-    _RUN_STATUS_QUERY = """
-    query RunStatus($runId: ID!) {
-      runOrError(runId: $runId) {
-        __typename
-        ... on Run {
-          runId
-          status
-        }
-        ... on RunNotFoundError {
-          message
-        }
-      }
-    }
-    """
-
-    run_ids = [r["dagster_run_id"] for r in results if r.get("dagster_run_id")]
+    all_results = omop_results + fhir_results
+    run_ids = [r["dagster_run_id"] for r in all_results if r.get("dagster_run_id")]
 
     if not run_ids:
-        mo.callout(mo.md("No Dagster runs were triggered. Check the ingest results above."), kind="warn")
+        mo.callout(mo.md("No Dagster runs were triggered. Check the results above."), kind="warn")
     else:
-        while True:
-            run_statuses = {}
-            for _rid in run_ids:
-                try:
-                    _resp = httpx.post(
-                        DAGSTER_GRAPHQL,
-                        json={"query": _RUN_STATUS_QUERY, "variables": {"runId": _rid}},
-                        timeout=10.0,
-                    )
-                    _data = _resp.json().get("data", {}).get("runOrError", {})
-                    run_statuses[_rid] = _data.get("status", "UNKNOWN")
-                except httpx.HTTPError:
-                    run_statuses[_rid] = "UNREACHABLE"
+        mo.md(f"Monitoring **{len(run_ids)}** runs via pluginlake API...")
 
-            run_rows = "\n".join(f"| `{rid[:8]}...` | {status} |" for rid, status in run_statuses.items())
+        while True:
+            _runs_resp = httpx.get(f"{API_BASE}/runs", timeout=10.0)
+            _all_runs = _runs_resp.json() if _runs_resp.is_success else []
+            _status_lookup = {r["run_id"]: r["status"] for r in _all_runs if r.get("run_id")}
+
+            run_statuses = {rid: _status_lookup.get(rid, "PENDING") for rid in run_ids}
+
+            run_rows = "\n".join(f"| `{rid[:8]}…` | {status} |" for rid, status in run_statuses.items())
             table_md = f"| Run ID | Status |\n|---|---|\n{run_rows}"
-            mo.output.replace(mo.md(f"## Waiting for Dagster runs\n\n{table_md}"))
+            mo.output.replace(mo.md(table_md))
 
             if all(s in TERMINAL_STATUSES for s in run_statuses.values()):
                 break
@@ -177,9 +239,6 @@ def _(httpx, mo, results):
             )
         else:
             mo.output.replace(mo.md(f"{table_md}\n\nAll **{len(run_ids)}** runs completed successfully."))
-
-    ingestion_complete = True
-    return (ingestion_complete,)
 
 
 @app.cell
@@ -195,7 +254,7 @@ def _(mo):
 
 
 @app.cell
-def _(PROJECT_ROOT, ingestion_complete, mo):
+def _(PROJECT_ROOT, mo):
     """Connect to the DuckLake catalog and list all tables."""
     import duckdb
 
@@ -342,48 +401,6 @@ def _(conn, mo):
         mo.ui.table(diabetic_cohort.head(10))
     else:
         mo.md("### Diabetic Cohort (Age 40-70)\n\nNo persons found matching cohort criteria.")
-
-
-@app.cell
-def _(mo):
-    mo.md(r"""
-    ## Single-Table Upload
-
-    Besides bulk ingestion you can also upload individual tables. Below we POST a small inline
-    CSV (`observation_period`) to demonstrate the single-file endpoint. The response includes the
-    Dagster run ID so you can track the materialisation in the Dagster UI at http://localhost:3000.
-    """)
-
-
-@app.cell
-def _(BASE_URL, httpx, io, mo):
-    """Upload a small inline CSV to demonstrate the single-file ingest endpoint."""
-    _csv = """\
-    observation_period_id,person_id,observation_period_start_date,observation_period_end_date,period_type_concept_id
-    1,1,2020-01-01,2023-12-31,44814724
-    2,2,2019-06-01,2023-12-31,44814724
-    3,3,2021-03-15,2023-12-31,44814724
-    """
-
-    _resp = httpx.post(
-        f"{BASE_URL}/observation_period/csv",
-        files={"file": ("observation_period.csv", io.BytesIO(_csv.encode()), "text/csv")},
-    )
-    csv_result = _resp.json()
-    mo.md(f"**HTTP {_resp.status_code}**")
-
-    mo.md(rf"""
-    | field | value |
-    |---|---|
-    | status | `{csv_result.get("status")}` |
-    | file\_path | `{csv_result.get("file_path")}` |
-    | size\_bytes | {csv_result.get("size_bytes")} |
-    | dagster\_run\_id | `{csv_result.get("dagster_run_id")}` |
-    | message | {csv_result.get("message")} |
-
-    > If `dagster_run_id` is `None`, Dagster was unreachable — the CSV is still stored and can be
-    > re-triggered manually. Check http://localhost:3000 to confirm the run.
-    """)
 
 
 if __name__ == "__main__":

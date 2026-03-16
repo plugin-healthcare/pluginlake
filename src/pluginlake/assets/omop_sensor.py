@@ -3,7 +3,7 @@
 import json
 import time
 
-from dagster import AssetKey, RunRequest, SensorEvaluationContext, SensorResult, SkipReason, sensor
+from dagster import AssetKey, DefaultSensorStatus, RunRequest, SensorEvaluationContext, SensorResult, SkipReason, sensor
 
 from pluginlake.assets.omop import CLINICAL_TABLES
 from pluginlake.omop.config import get_omop_settings
@@ -12,6 +12,7 @@ from pluginlake.omop.config import get_omop_settings
 @sensor(
     job_name="omop_ingest_job",
     minimum_interval_seconds=get_omop_settings().folder_watch_interval,
+    default_status=DefaultSensorStatus.RUNNING,
 )
 def omop_folder_sensor(context: SensorEvaluationContext) -> SensorResult | SkipReason:
     """Watch OMOP_RAW_DATA_DIR for new/changed CSVs and trigger ingestion."""
@@ -21,6 +22,12 @@ def omop_folder_sensor(context: SensorEvaluationContext) -> SensorResult | SkipR
 
     if not raw_dir.exists():
         return SkipReason(f"Directory {raw_dir} does not exist")
+
+    if settings.validate_concepts:
+        concept_key = AssetKey(["omop_vocab", "concept"])
+        event = context.instance.get_latest_materialization_event(concept_key)
+        if event is None:
+            return SkipReason("Waiting for vocabulary tables to be materialized first")
 
     previous_state: dict[str, float] = json.loads(context.cursor) if context.cursor else {}
     now = time.time()
@@ -53,7 +60,8 @@ def omop_folder_sensor(context: SensorEvaluationContext) -> SensorResult | SkipR
         run_requests=[
             RunRequest(
                 run_key=f"omop-folder-{int(now)}",
-                asset_selection=[AssetKey(["omop", t]) for t in changed_tables],
+                asset_selection=[AssetKey(["omop_raw", t]) for t in changed_tables]
+                + [AssetKey(["omop", t]) for t in changed_tables],
             )
         ]
     )

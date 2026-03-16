@@ -1,0 +1,6 @@
+person_id,gender_concept_id,year_of_birth,month_of_birth,day_of_birth,birth_datetime,race_concept_id,ethnicity_concept_id,location_id,provider_id,care_site_id,person_source_value,gender_source_value,gender_source_concept_id,race_source_value,race_source_concept_id,ethnicity_source_value,ethnicity_source_concept_id
+1,8507,1974,12,6,1974-12-06,8527,0,,,,person-001,M,0,white,0,italian,0
+2,8532,1950,8,2,1950-08-02,8516,38003563,,,,person-002,F,0,black,0,hispanic,0
+3,8507,1985,3,15,1985-03-15,8515,0,,,,person-003,M,0,asian,0,nonhispanic,0
+4,8532,1995,7,22,1995-07-22,8527,0,,,,person-004,F,0,white,0,german,0
+5,8507,1960,1,10,1960-01-10,999999,0,,,,person-005,M,0,unknown,0,unknown,0
