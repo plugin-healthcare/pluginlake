@@ -1,0 +1,372 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "pluginlake",
+    "description": "Central API endpoint for the pluginlake data station.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Health",
+        "description": "Liveness check \u2014 returns 200 if the service is running.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ready": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Ready",
+        "description": "Readiness check \u2014 returns 200 when the service can accept traffic.\n\nExtend this to verify downstream dependencies (database, storage, etc.).",
+        "operationId": "ready_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Ready Ready Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ingest": {
+      "post": {
+        "tags": [
+          "ingestion"
+        ],
+        "summary": "Upload a data file for ingestion",
+        "description": "Accepts a multipart file upload, validates file type and size, writes the file to the raw storage layer, and triggers a Dagster job for downstream processing.\n\n**Supported formats:** .csv, .json, .parquet, .ndjson, .xlsx\n\n**Max file size:** 500 MB (configurable)",
+        "operationId": "ingest_file_api_v1_ingest_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_ingest_file_api_v1_ingest_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid file type or validation error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "File exceeds the maximum allowed size.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ingest/info": {
+      "get": {
+        "tags": [
+          "ingestion"
+        ],
+        "summary": "Get ingestion endpoint configuration",
+        "description": "Returns the current upload limits and allowed file types.",
+        "operationId": "ingest_info_api_v1_ingest_info_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestionInfoResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/omop/{table_name}/csv": {
+      "post": {
+        "tags": [
+          "omop"
+        ],
+        "summary": "Upload an OMOP table CSV file",
+        "description": "Accepts a multipart CSV upload for the named OMOP table, writes it to ``OMOP_RAW_DATA_DIR/{table_name}.csv``, and triggers ``omop_ingest_job`` via Dagster to materialize the asset in DuckLake.\n\n**Supported format:** .csv only",
+        "operationId": "ingest_omop_csv_api_v1_omop__table_name__csv_post",
+        "parameters": [
+          {
+            "name": "table_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Table Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_ingest_omop_csv_api_v1_omop__table_name__csv_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Body_ingest_file_api_v1_ingest_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          },
+          "dataset": {
+            "type": "string",
+            "title": "Dataset",
+            "description": "Target dataset name for organising the file."
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "dataset"
+        ],
+        "title": "Body_ingest_file_api_v1_ingest_post"
+      },
+      "Body_ingest_omop_csv_api_v1_omop__table_name__csv_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_ingest_omop_csv_api_v1_omop__table_name__csv_post"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "ErrorResponse",
+        "description": "Error response body.\n\nAttributes:\n    detail: Human-readable error description."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "IngestionInfoResponse": {
+        "properties": {
+          "max_file_size_mb": {
+            "type": "integer",
+            "title": "Max File Size Mb"
+          },
+          "allowed_extensions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Allowed Extensions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "max_file_size_mb",
+          "allowed_extensions"
+        ],
+        "title": "IngestionInfoResponse",
+        "description": "Response for the ingestion info endpoint.\n\nAttributes:\n    max_file_size_mb: Maximum allowed file size in megabytes.\n    allowed_extensions: List of allowed file extensions."
+      },
+      "IngestionResponse": {
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "dataset": {
+            "type": "string",
+            "title": "Dataset"
+          },
+          "file_path": {
+            "type": "string",
+            "title": "File Path"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "dagster_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dagster Run Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_id",
+          "filename",
+          "dataset",
+          "file_path",
+          "size_bytes",
+          "dagster_run_id",
+          "status",
+          "message"
+        ],
+        "title": "IngestionResponse",
+        "description": "Response returned after a successful file ingestion.\n\nAttributes:\n    file_id: Unique identifier assigned to the uploaded file.\n    filename: Original filename.\n    dataset: Target dataset name.\n    file_path: Storage path where the file was written.\n    size_bytes: Size of the file in bytes.\n    dagster_run_id: Dagster run ID if triggered, else null.\n    status: ``completed`` if Dagster was triggered, ``stored`` otherwise.\n    message: Human-readable summary."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

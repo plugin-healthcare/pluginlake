@@ -208,7 +208,8 @@ rm -rf .data/lakehouse/
 
 ## Next steps
 
-- **Add your own assets** — Create new `@asset` functions and add them to `Definitions`
-- **Use pluginlake as a package** — See the [using as package](using-as-package.md) guide for building your own data station
-- **Run the full Docker stack** — See the [Docker guide](docker.md) for running Dagster + PostgreSQL + pluginlake together
-- **Explore Dagster** — Check the [Dagster docs](https://docs.dagster.io/) for schedules, sensors, resources, and more
+- **Add your own assets** — Follow the patterns in `examples/titanic.py` to create new `@asset` functions, then register them in a `Definitions` object. See the [using as package](using-as-package.md) guide for the full pattern.
+- **Use pluginlake as a package** — Build your own data station on top of pluginlake's core assets. See the [using as package](using-as-package.md) guide.
+- **Run the full Docker stack** — Deploy Dagster + PostgreSQL + pluginlake together. See the [Docker guide](docker.md).
+- **Explore the API** — Query assets and trigger runs programmatically. See the [API overview](api.md) and the [interactive specification](api-specification.md).
+- **Explore Dagster** — Learn about schedules, sensors, resources, and more in the [Dagster docs](https://docs.dagster.io/).
