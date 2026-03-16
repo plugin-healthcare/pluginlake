@@ -109,12 +109,37 @@ def create_connection(
             else:
                 raise
 
+    _apply_tuning_options(conn, settings)
+
     logger.info(
         "Attached DuckLake catalog (db=%s, data_path=%s).",
         settings.pg_db,
         backend.get_base_path(),
     )
     return conn
+
+
+def _apply_tuning_options(
+    conn: duckdb.DuckDBPyConnection,
+    settings: DuckLakeSettings,
+) -> None:
+    tuning: list[tuple[str, int | str | bool]] = []
+    if settings.target_file_size is not None:
+        tuning.append(("target_file_size", settings.target_file_size))
+    if settings.parquet_compression is not None:
+        tuning.append(("parquet_compression", settings.parquet_compression))
+    if settings.per_thread_output is not None:
+        tuning.append(("per_thread_output", settings.per_thread_output))
+
+    for option, value in tuning:
+        if isinstance(value, str):
+            sql_value = f"'{value}'"
+        elif isinstance(value, bool):
+            sql_value = str(value).lower()
+        else:
+            sql_value = str(value)
+        conn.execute(f"CALL ducklake_set_option('ducklake', '{option}', {sql_value})")
+        logger.info("DuckLake option %s = %s", option, value)
 
 
 def setup_ducklake(

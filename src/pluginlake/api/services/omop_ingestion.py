@@ -28,9 +28,10 @@ class OmopCsvIngestionService(IngestionService):
         dagster_client: DagsterClient,
         omop_settings: OMOPSettings,
         settings: IngestionSettings | None = None,
+        ingestion_log_dir: Path | None = None,
     ) -> None:
         """Initialise with a Dagster client, OMOP settings, and optional ingestion settings."""
-        super().__init__(dagster_client=dagster_client, settings=settings)
+        super().__init__(dagster_client=dagster_client, settings=settings, ingestion_log_dir=ingestion_log_dir)
         self._omop_settings = omop_settings
 
     def _validate_extension(self, filename: str) -> None:

@@ -23,7 +23,7 @@ class OMOPSettings(BaseSettings):
     )
 
     raw_data_dir: Path = Field(
-        default=Path("data/raw/omop"),
+        default=Path(".data/raw/omop"),
         description="Directory containing raw OMOP CSV files",
     )
 
@@ -59,8 +59,12 @@ class OMOPSettings(BaseSettings):
     )
 
     vocabulary_dir: Path = Field(
-        default=Path("data/omop_vocabularies"),
+        default=Path(".data/omop_vocabularies"),
         description="Directory containing OMOP vocabulary files",
+    )
+    vocabulary_url: str = Field(
+        default="https://github.com/plugin-healthcare/pluginlake-testdata/releases/download/omop-vocabularies-v1/omop_vocabularies.tar.gz",
+        description="URL to download OMOP vocabulary archive from",
     )
     vocabulary_schema: str = Field(
         default="omop_vocab",
@@ -69,6 +73,14 @@ class OMOPSettings(BaseSettings):
     vocabulary_auto_load: bool = Field(
         default=True,
         description="Automatically load vocabularies on first query",
+    )
+    validate_concepts: bool = Field(
+        default=True,
+        description="Validate concept IDs against vocabulary tables during ingestion",
+    )
+    audit_schema: str = Field(
+        default="omop_audit",
+        description="DuckDB schema for vocabulary validation audit tables",
     )
 
     folder_watch_interval: int = Field(

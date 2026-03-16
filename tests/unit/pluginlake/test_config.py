@@ -210,3 +210,34 @@ def test_storage_layers_writable_via_get_layer_path(tmp_path: Path):
     target = s.get_layer_path(StorageLayer.RAW, "test.parquet")
     target.write_text("data")
     assert target.read_text() == "data"
+
+
+# ---------------------------------------------------------------------------
+# LogSettings
+# ---------------------------------------------------------------------------
+
+from pluginlake.config import LogSettings  # noqa: E402
+
+
+def test_log_settings_defaults():
+    s = LogSettings()
+    assert s.base_dir.is_absolute()
+
+
+def test_log_settings_directory_properties(tmp_path: Path):
+    s = LogSettings(base_dir=tmp_path / "logs")
+    assert s.query_log_dir == tmp_path / "logs" / "query_log"
+    assert s.ingestion_log_dir == tmp_path / "logs" / "ingestion_log"
+
+
+def test_log_settings_ensure_directories(tmp_path: Path):
+    s = LogSettings(base_dir=tmp_path / "logs")
+    s.ensure_directories()
+    assert s.query_log_dir.is_dir()
+    assert s.ingestion_log_dir.is_dir()
+
+
+def test_log_settings_from_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    monkeypatch.setenv("PLUGINLAKE_LOG_BASE_DIR", str(tmp_path / "custom"))
+    s = LogSettings()
+    assert s.base_dir == tmp_path / "custom"

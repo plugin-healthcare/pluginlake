@@ -195,3 +195,99 @@ def validate_table_concepts(
         )
 
     return combined
+
+
+def filter_invalid_rows(
+    df: pl.DataFrame,
+    validation_result: pl.DataFrame,
+    table_name: str,
+) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """Split a DataFrame into valid and invalid rows based on vocabulary validation.
+
+    A row is considered invalid if ANY of its concept_id columns contains a
+    concept ID that failed validation. Null concept_id values are treated as valid.
+
+    Args:
+        df: Source clinical data DataFrame.
+        validation_result: Output of ``validate_table_concepts`` with
+            columns ``column_name``, ``concept_id``, ``is_valid``.
+        table_name: OMOP table name (for logging).
+
+    Returns:
+        Tuple of ``(valid_df, invalid_df)`` where ``valid_df`` contains only
+        rows with all-valid concept IDs and ``invalid_df`` contains the rest.
+    """
+    if validation_result.height == 0:
+        return df, df.clear()
+
+    invalid = validation_result.filter(~pl.col("is_valid"))
+    if invalid.height == 0:
+        return df, df.clear()
+
+    invalid_ids_by_column: dict[str, set[int]] = {}
+    for row in invalid.iter_rows(named=True):
+        col = row["column_name"]
+        if col not in invalid_ids_by_column:
+            invalid_ids_by_column[col] = set()
+        invalid_ids_by_column[col].add(row["concept_id"])
+
+    is_invalid = pl.lit(value=False)
+    for col_name, bad_ids in invalid_ids_by_column.items():
+        if col_name not in df.columns:
+            continue
+        is_invalid = is_invalid | (pl.col(col_name).is_in(list(bad_ids)) & pl.col(col_name).is_not_null())
+
+    valid_df = df.filter(~is_invalid)
+    invalid_df = df.filter(is_invalid)
+
+    logger.info(
+        "Filtered %s: %d valid, %d invalid out of %d total rows",
+        table_name,
+        valid_df.height,
+        invalid_df.height,
+        df.height,
+        extra={
+            "table_name": table_name,
+            "valid_count": valid_df.height,
+            "invalid_count": invalid_df.height,
+            "total_count": df.height,
+        },
+    )
+
+    return valid_df, invalid_df
+
+
+def write_audit_table(
+    conn: duckdb.DuckDBPyConnection,
+    validation_result: pl.DataFrame,
+    table_name: str,
+    *,
+    schema: str = "ducklake.omop_audit",
+) -> None:
+    """Persist vocabulary validation results to an audit table.
+
+    Creates or replaces ``{schema}.{table_name}`` with the validation result
+    so users can query which concept IDs passed or failed validation.
+
+    Args:
+        conn: DuckDB connection with DuckLake catalog attached.
+        validation_result: Output of ``validate_table_concepts``.
+        table_name: OMOP table name used as the audit table name.
+        schema: DuckDB schema for audit tables.
+    """
+    if validation_result.height == 0:
+        return
+
+    conn.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
+
+    ref = f"{schema}.{table_name}"
+    conn.register("_audit_data", validation_result)
+    conn.execute(f"CREATE OR REPLACE TABLE {ref} AS SELECT * FROM _audit_data")  # noqa: S608 — schema/table from trusted config
+    conn.unregister("_audit_data")
+
+    logger.info(
+        "Wrote %d audit rows to %s",
+        validation_result.height,
+        ref,
+        extra={"table_name": table_name, "row_count": validation_result.height},
+    )

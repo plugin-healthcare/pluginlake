@@ -359,3 +359,31 @@ def test_get_cohort_multiple_criteria(test_db_with_data):
     )
 
     assert len(result) >= 1
+
+
+def test_get_persons_empty_result(test_db_with_data):
+    """No matching filter returns empty DataFrame."""
+    result = get_persons(con=test_db_with_data, gender_concept_id=999999)
+
+    assert isinstance(result, pl.DataFrame)
+    assert len(result) == 0
+
+
+def test_get_conditions_nonexistent_person(test_db_with_data):
+    """Non-existent person_id returns empty DataFrame."""
+    result = get_conditions_for_person(999999, con=test_db_with_data)
+
+    assert isinstance(result, pl.DataFrame)
+    assert len(result) == 0
+
+
+def test_get_cohort_no_matches(test_db_with_data):
+    """Impossible criteria returns empty DataFrame."""
+    result = get_cohort(
+        con=test_db_with_data,
+        has_condition_concept_id=999999,
+        gender_concept_id=999999,
+    )
+
+    assert isinstance(result, pl.DataFrame)
+    assert len(result) == 0

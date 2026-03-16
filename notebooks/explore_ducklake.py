@@ -77,9 +77,11 @@ def _():
     import duckdb
     import marimo as mo
 
+    from pluginlake.utils.testdata import find_repo_root
+
+    project_root = find_repo_root()
     from pluginlake.core.config import DuckLakeSettings
 
-    project_root = Path(__file__).resolve().parent.parent
     settings = DuckLakeSettings(pg_host="localhost")
     data_path = (project_root / settings.data_path).resolve()
 

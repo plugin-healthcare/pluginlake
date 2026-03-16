@@ -11,6 +11,7 @@ from pluginlake.api.config import IngestionSettings
 from pluginlake.api.routers.ingest import IngestionResponse
 from pluginlake.api.services.ingestion import IngestionError
 from pluginlake.api.services.omop_ingestion import OmopCsvIngestionService
+from pluginlake.config import LogSettings
 from pluginlake.core.dagster_client import DagsterClient
 from pluginlake.omop.config import OMOPSettings
 from pluginlake.utils.logger import get_logger
@@ -21,13 +22,16 @@ router = APIRouter(prefix="/api/v1/omop", tags=["omop"])
 
 
 def _get_csv_service() -> OmopCsvIngestionService:
+
     ingest_settings = IngestionSettings()
     omop_settings = OMOPSettings()
     dagster_client = DagsterClient(webserver_url=ingest_settings.dagster_webserver_url)
+    log_settings = LogSettings()
     return OmopCsvIngestionService(
         dagster_client=dagster_client,
         omop_settings=omop_settings,
         settings=ingest_settings,
+        ingestion_log_dir=log_settings.ingestion_log_dir,
     )
 
 
