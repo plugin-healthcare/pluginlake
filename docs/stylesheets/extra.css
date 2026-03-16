@@ -54,6 +54,13 @@
   margin: 0 auto 2rem;
 }
 
+/* ── Center content on hero pages ──────────────────────── */
+.md-content__inner:has(.hero) {
+  max-width: 960px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
 /* ── Section cards grid ─────────────────────────────────── */
 .grid {
   display: grid;

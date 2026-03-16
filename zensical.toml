@@ -43,6 +43,7 @@ nav = [
         { "Development" = "development/index.md" },
         { "Guidelines" = "development/develop-guidelines.md" },
         { "Future Features" = "development/future-features.md" },
+        { "Release Notes" = "development/release-notes.md" },
     ]},
 ]
 
