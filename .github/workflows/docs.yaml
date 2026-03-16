@@ -35,7 +35,7 @@ jobs:
         run: uv python install
 
       - name: Install dependencies
-        run: uv sync --group docs
+        run: uv sync --group docs --extra fhir
 
       - name: Export OpenAPI schema
         run: uv run python scripts/export_openapi.py
