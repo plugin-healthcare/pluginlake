@@ -7,3 +7,7 @@
 ## OMOP CSV Ingestion
 
 ::: pluginlake.api.services.omop_ingestion
+
+## FHIR NDJSON Ingestion
+
+::: pluginlake.api.services.fhir_ingestion

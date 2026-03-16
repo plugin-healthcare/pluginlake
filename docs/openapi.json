@@ -184,10 +184,457 @@
           }
         }
       }
+    },
+    "/api/v1/omop/statistics": {
+      "get": {
+        "tags": [
+          "omop"
+        ],
+        "summary": "Get OMOP statistics",
+        "description": "Returns aggregated statistics across all OMOP tables.",
+        "operationId": "omop_statistics_api_v1_omop_statistics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Omop Statistics Api V1 Omop Statistics Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/schemas": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "List DuckLake schemas",
+        "description": "Returns all schemas in the DuckLake catalog.",
+        "operationId": "list_schemas_api_v1_catalog_schemas_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "title": "Response List Schemas Api V1 Catalog Schemas Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/tables": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "List DuckLake tables",
+        "description": "Returns tables in the DuckLake catalog, optionally filtered by schema.",
+        "operationId": "list_tables_api_v1_catalog_tables_get",
+        "parameters": [
+          {
+            "name": "schema",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by schema name",
+              "title": "Schema"
+            },
+            "description": "Filter by schema name"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response List Tables Api V1 Catalog Tables Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/columns": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "List columns for a DuckLake table",
+        "description": "Returns column names, types, nullability, and ordinal position for a table.",
+        "operationId": "list_columns_api_v1_catalog_columns_get",
+        "parameters": [
+          {
+            "name": "schema",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Schema name",
+              "title": "Schema"
+            },
+            "description": "Schema name"
+          },
+          {
+            "name": "table",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Table name",
+              "title": "Table"
+            },
+            "description": "Table name"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response List Columns Api V1 Catalog Columns Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/column-stats": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Get column-level statistics for a DuckLake table",
+        "description": "Returns per-column statistics including type, unique count, null percentage, min, max, and quartiles using DuckDB SUMMARIZE.",
+        "operationId": "column_stats_api_v1_catalog_column_stats_get",
+        "parameters": [
+          {
+            "name": "schema",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Schema name",
+              "title": "Schema"
+            },
+            "description": "Schema name"
+          },
+          {
+            "name": "table",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Table name",
+              "title": "Table"
+            },
+            "description": "Table name"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response Column Stats Api V1 Catalog Column Stats Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/layer-summary": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Get per-schema layer summary",
+        "description": "Returns table count and total row count for each DuckLake schema.",
+        "operationId": "layer_summary_api_v1_catalog_layer_summary_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "title": "Response Layer Summary Api V1 Catalog Layer Summary Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/assets": {
+      "get": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "List Dagster assets",
+        "description": "Returns Dagster assets with their latest materialization status and column metadata.",
+        "operationId": "list_assets_api_v1_assets_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "title": "Response List Assets Api V1 Assets Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runs": {
+      "get": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "List recent Dagster runs",
+        "description": "Returns the most recent Dagster pipeline runs.",
+        "operationId": "list_runs_api_v1_runs_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "title": "Response List Runs Api V1 Runs Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{run_id}": {
+      "get": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "Get a single Dagster run",
+        "description": "Returns the status of a specific Dagster pipeline run.",
+        "operationId": "get_run_api_v1_runs__run_id__get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Run Api V1 Runs  Run Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/fhir/{resource_type}/ndjson": {
+      "post": {
+        "tags": [
+          "fhir"
+        ],
+        "summary": "Upload a FHIR resource NDJSON file",
+        "description": "Accepts a multipart NDJSON upload for the named FHIR resource type, writes it to ``FHIR_RAW_DATA_DIR/{resource_type}.ndjson``, and triggers ``fhir_ingest_job`` via Dagster to materialize the asset in DuckLake.\n\n**Supported format:** .ndjson only",
+        "operationId": "ingest_fhir_ndjson_api_v1_fhir__resource_type__ndjson_post",
+        "parameters": [
+          {
+            "name": "resource_type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Resource Type"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_ingest_fhir_ndjson_api_v1_fhir__resource_type__ndjson_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/fhir/statistics": {
+      "get": {
+        "tags": [
+          "fhir"
+        ],
+        "summary": "Get FHIR statistics",
+        "description": "Returns aggregated FHIR ingestion metrics and clinical analytics.",
+        "operationId": "fhir_statistics_api_v1_fhir_statistics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Fhir Statistics Api V1 Fhir Statistics Get"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "Body_ingest_fhir_ndjson_api_v1_fhir__resource_type__ndjson_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_ingest_fhir_ndjson_api_v1_fhir__resource_type__ndjson_post"
+      },
       "Body_ingest_file_api_v1_ingest_post": {
         "properties": {
           "file": {
