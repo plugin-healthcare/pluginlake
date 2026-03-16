@@ -8,13 +8,15 @@ pluginlake uses separate containers for each concern:
 
 | Container | Dockerfile | Purpose |
 |-----------|-----------|---------|
-| **postgres** | `dhi.io/postgres:17-alpine3.22` (pre-built) | Dagster metadata storage |
+| **postgres** | `dhi.io/postgres:17-alpine3.22` (pre-built) | Dagster metadata + DuckLake catalog |
 | **dagster-webserver** | `dagster-webserver.Dockerfile` | Dagster web UI |
 | **dagster-daemon** | `dagster-webserver.Dockerfile` | Schedules, sensors, run queue |
 | **dagster-code-server** | `pluginlake.Dockerfile` | Asset definitions served via gRPC |
 | **pluginlake** | `pluginlake.Dockerfile` | FastAPI service |
+| **pluginlake-ui** | `ui-datastation.Dockerfile` | Datastation Streamlit dashboard |
+| **pluginlake-central** | `ui-central.Dockerfile` | Central aggregation dashboard |
 
-In development, `dagster.dev.Dockerfile` replaces the webserver, daemon, and code-server with a single all-in-one container running `dagster dev`.
+In development, `dagster.dev.Dockerfile` replaces the webserver, daemon, and code-server with a single all-in-one container running `dagster dev`. The UI containers use corresponding `.dev.Dockerfile` variants with hot reload.
 
 ## Building and running
 
@@ -247,11 +249,16 @@ deploy/
 │   ├── .env.example                  # Template for dev (committed)
 │   ├── .env.production               # Prod values (gitignored)
 │   ├── .env.production.example       # Template for prod (committed)
-│   ├── docker-compose.dev.yaml       # Dev: single dagster container + postgres + pluginlake
+│   ├── docker-compose.dev.yaml       # Dev: single dagster container + postgres + pluginlake + UI
+│   ├── docker-compose.central.yaml   # Central dashboard (separate compose)
 │   └── docker-compose.yaml           # Prod: separate webserver, daemon, code-server
 └── docker/
     ├── dagster.dev.Dockerfile         # Dev all-in-one dagster (single stage)
     ├── dagster-webserver.Dockerfile   # Prod webserver + daemon (multi-stage)
     ├── pluginlake.dev.Dockerfile      # Dev FastAPI (single stage)
-    └── pluginlake.Dockerfile          # Prod FastAPI + code-server (multi-stage)
+    ├── pluginlake.Dockerfile          # Prod FastAPI + code-server (multi-stage)
+    ├── ui-datastation.dev.Dockerfile  # Dev datastation dashboard (hot reload)
+    ├── ui-datastation.Dockerfile      # Prod datastation dashboard (multi-stage)
+    ├── ui-central.dev.Dockerfile      # Dev central dashboard (hot reload)
+    └── ui-central.Dockerfile          # Prod central dashboard (multi-stage)
 ```
