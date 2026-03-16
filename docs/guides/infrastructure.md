@@ -167,7 +167,7 @@ Enable it by setting `vm_enabled = true` in your `terraform.tfvars`.
 | `vm_ssh_source_address_prefix` | CIDR allowed to SSH in | `*` |
 | `vm_os_disk_type` | OS disk type | `Standard_LRS` |
 | `vm_os_disk_size_gb` | OS disk size in GB | `30` |
-| `vm_image` | Source image (publisher/offer/sku/version) | Ubuntu 24.04 LTS |
+| `vm_image` | Source image (publisher/offer/sku/version) | Ubuntu 24.04 LTS `24.04.202502210` |
 | `vm_vnet_name` | Virtual network name | `vnet-plugin-demo-d` |
 | `vm_vnet_address_space` | VNet address space | `10.0.0.0/16` |
 | `vm_subnet_name` | Subnet name | `snet-default` |
@@ -179,6 +179,24 @@ Enable it by setting `vm_enabled = true` in your `terraform.tfvars`.
 vm_enabled                   = true
 vm_ssh_public_key            = "ssh-rsa AAAA..."  # content of ~/.ssh/id_rsa.pub
 vm_ssh_source_address_prefix = "203.0.113.10/32"  # restrict to your IP
+```
+
+To use a different Ubuntu image version, override `vm_image` in your `terraform.tfvars`.
+List available versions first:
+
+```bash
+az vm image list --publisher Canonical --offer ubuntu-24_04-lts --sku server --all -o table
+```
+
+Then set the desired version:
+
+```hcl
+vm_image = {
+  publisher = "Canonical"
+  offer     = "ubuntu-24_04-lts"
+  sku       = "server"
+  version   = "24.04.202502210"
+}
 ```
 
 !!! tip

@@ -120,9 +120,14 @@ variable "vm_ssh_public_key" {
 }
 
 variable "vm_ssh_source_address_prefix" {
-  description = "CIDR or IP allowed to SSH into the VM. Use a restrictive value in production."
+  description = "CIDR or IP allowed to SSH into the VM. Must be a specific IP or CIDR (e.g. \"203.0.113.0/24\"). Using \"*\" exposes SSH to the entire internet."
   type        = string
   default     = "*"
+
+  validation {
+    condition     = var.vm_ssh_source_address_prefix != ""
+    error_message = "vm_ssh_source_address_prefix must not be empty. Use a CIDR like \"203.0.113.0/24\" or \"*\" for unrestricted (not recommended)."
+  }
 }
 
 variable "vm_os_disk_type" {
@@ -154,7 +159,9 @@ variable "vm_image" {
     publisher = "Canonical"
     offer     = "ubuntu-24_04-lts"
     sku       = "server"
-    version   = "latest"
+    # Pin to a specific version for reproducible deployments.
+    # Find available versions: az vm image list --publisher Canonical --offer ubuntu-24_04-lts --sku server --all -o table
+    version   = "24.04.202502210"
   }
 }
 

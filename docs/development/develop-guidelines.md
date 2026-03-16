@@ -151,11 +151,32 @@ Runs on every push and pull request to `main` and `dev`:
 
 #### Docker Build Workflow (`docker-build.yaml`)
 
-Automatically builds and pushes Docker images to Azure Container Registry when relevant files change:
-- Triggers on push to `main` or `dev` when `src/`, `deploy/docker/`, `pyproject.toml`, or `uv.lock` change
-- Uses path filtering to only rebuild affected images
-- Tags: `latest` (main), `dev` (dev branch), and commit SHA
-- Includes SLSA provenance and SBOM attestations
+Automatically builds and validates Docker images on every push and pull request to `main` or `dev`. Images are never pushed — the workflow only verifies that all Dockerfiles build successfully.
+
+Triggers on changes to `deploy/docker/**`, `src/**`, `pyproject.toml`, `uv.lock`, `config/dagster/**`.
+
+**Dev images:**
+
+| Image | Dockerfile |
+|-------|-----------|
+| `dagster-dev` | `deploy/docker/dagster.dev.Dockerfile` |
+| `pluginlake-dev` | `deploy/docker/pluginlake.dev.Dockerfile` |
+
+**Production images:**
+
+| Image | Dockerfile |
+|-------|-----------|
+| `dagster` | `deploy/docker/dagster-webserver.Dockerfile` |
+| `pluginlake` | `deploy/docker/pluginlake.Dockerfile` |
+
+All four images are built in parallel. Docker layer caching is shared across runs using the GitHub Actions cache, keyed per image name.
+
+**Required GitHub Actions secrets:**
+
+| Secret | Description |
+|--------|-------------|
+| `DHI_REGISTRY_USERNAME` | Username for pulling base images from `dhi.io` |
+| `DHI_REGISTRY_PASSWORD` | Password for `dhi.io` |
 
 #### Dependabot
 

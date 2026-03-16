@@ -1,0 +1,97 @@
+name: Docker Build
+
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - "deploy/docker/**"
+      - "src/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "config/dagster/**"
+      - ".github/workflows/docker-build.yaml"
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - "deploy/docker/**"
+      - "src/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "config/dagster/**"
+      - ".github/workflows/docker-build.yaml"
+  workflow_dispatch:
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Dev images — build only (no push). Verify the dev Dockerfiles are valid.
+  # ---------------------------------------------------------------------------
+  build-dev:
+    name: Build dev image (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: dagster-dev
+            dockerfile: deploy/docker/dagster.dev.Dockerfile
+          - name: pluginlake-dev
+            dockerfile: deploy/docker/pluginlake.dev.Dockerfile
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to dhi.io registry
+        uses: docker/login-action@v3
+        with:
+          registry: dhi.io
+          username: ${{ secrets.DHI_REGISTRY_USERNAME }}
+          password: ${{ secrets.DHI_REGISTRY_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.name }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: false
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+  # ---------------------------------------------------------------------------
+  # Production images — build only, no push.
+  # ---------------------------------------------------------------------------
+  build-prod:
+    name: Build prod image (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: dagster
+            dockerfile: deploy/docker/dagster-webserver.Dockerfile
+          - name: pluginlake
+            dockerfile: deploy/docker/pluginlake.Dockerfile
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to dhi.io registry
+        uses: docker/login-action@v3
+        with:
+          registry: dhi.io
+          username: ${{ secrets.DHI_REGISTRY_USERNAME }}
+          password: ${{ secrets.DHI_REGISTRY_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.name }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: false
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}

@@ -84,6 +84,13 @@ resource "azurerm_linux_virtual_machine" "main" {
   admin_username                  = var.vm_admin_username
   disable_password_authentication = true
 
+  lifecycle {
+    precondition {
+      condition     = var.vm_ssh_public_key != ""
+      error_message = "vm_ssh_public_key must be set when vm_enabled = true."
+    }
+  }
+
   network_interface_ids = [azurerm_network_interface.main[0].id]
 
   admin_ssh_key {
