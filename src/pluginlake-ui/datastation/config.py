@@ -31,12 +31,28 @@ class DashboardSettings(BaseSettings):
         description="API key for authenticating with pluginlake.",
     )
     page_title: str = Field(
-        default="pluginlake Datastation",
+        default="pluginlake",
         description="Browser tab title.",
     )
     page_icon: str = Field(
         default=":hospital:",
         description="Streamlit page icon.",
+    )
+    dagster_url: str = Field(
+        default="http://localhost:3000/asset-groups",
+        description="URL of the Dagster webserver UI.",
+    )
+    datastation_id: str = Field(
+        default="ds-local-001",
+        description="Unique identifier for this datastation.",
+    )
+    datastation_name: str = Field(
+        default="demo-1",
+        description="Human-readable name for this datastation.",
+    )
+    assets_dir: str = Field(
+        default="/app/assets",
+        description="Path to the shared assets directory (logos, images).",
     )
 
 

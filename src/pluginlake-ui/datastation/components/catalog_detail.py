@@ -56,7 +56,7 @@ def render_column_stats(stats: list[dict[str, Any]]) -> None:
 
     st.dataframe(
         display_data,
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config={
             "Column": st.column_config.TextColumn("Column", width="medium"),

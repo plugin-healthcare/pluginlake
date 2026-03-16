@@ -13,6 +13,28 @@ st.title("Overview")
 
 client = get_client()
 
+assets = fetch_assets(client)
+runs = fetch_runs(client)
+
+try:
+    tables = fetch_catalog_tables(client)
+except (ConnectionError, TimeoutError, ValueError):
+    tables = []
+
+# -- KPI cards ----------------------------------------------------------------
+
+materialized = sum(1 for a in assets if a.get("last_materialized"))
+unique_jobs = {r.get("job_name") for r in runs if r.get("job_name")}
+succeeded = sum(1 for r in runs if r.get("status") == "SUCCESS")
+success_pct = f"{round(succeeded / len(runs) * 100)}%" if runs else "—"
+mat_pct = f"{round(materialized / len(assets) * 100)}%" if assets else "—"
+
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("Pipelines", len(unique_jobs))
+col2.metric("Pipeline Runs", len(runs), delta=f"{success_pct} succeeded")
+col3.metric("Assets", len(assets), delta=f"{mat_pct} materialized")
+col4.metric("Datasets", len(tables))
+
 # ── Schema → layer mapping ────────────────────────────────────────────────
 # Follows ADR-004 medallion layers + "reference" for controlled vocabularies
 # and audit tables that are not patient data.
@@ -48,9 +70,6 @@ def _fmt_ts(ts: float | str | None) -> str:
 # ── 1. Pipelines & runs ──────────────────────────────────────────────────
 
 st.header("Pipelines")
-
-assets = fetch_assets(client)
-runs = fetch_runs(client)
 
 if assets:
     st.caption(f"{len(assets)} registered assets")

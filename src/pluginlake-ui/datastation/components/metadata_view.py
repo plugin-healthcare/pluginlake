@@ -65,7 +65,7 @@ def render_assets_table(assets: list[dict[str, Any]]) -> None:
             if columns:
                 st.dataframe(
                     columns,
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                     column_config={
                         "name": st.column_config.TextColumn("Column"),
@@ -106,7 +106,7 @@ def render_catalog_tables(
                 if columns:
                     st.dataframe(
                         columns,
-                        use_container_width=True,
+                        width="stretch",
                         hide_index=True,
                         column_config={
                             "column_name": st.column_config.TextColumn("Column"),

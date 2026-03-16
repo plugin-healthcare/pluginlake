@@ -39,27 +39,23 @@ pre-commit:
 
 _compose := "docker compose -f deploy/compose/docker-compose.dev.yaml"
 
-# Start dev environment (all services)
+# Start dev environment (all services including dashboards)
 dev-up *args='':
+    {{ _compose }} --profile ui up --build {{ args }}
+
+# Start dev environment without dashboards
+dev-up-headless *args='':
     {{ _compose }} up --build {{ args }}
 
 # Stop dev environment
 dev-down *args='':
-    {{ _compose }} down {{ args }}
-
-# Start datastation dashboard with its API dependency
-dev-datastation *args='':
-    {{ _compose }} up --build pluginlake-ui {{ args }}
+    {{ _compose }} --profile ui down {{ args }}
 
 _compose_central := "docker compose -f deploy/compose/docker-compose.central.yaml"
 
 # Start central dashboard (separate compose)
 dev-central *args='':
     {{ _compose_central }} up --build {{ args }}
-
-# Start only the API (pluginlake + postgres)
-dev-api *args='':
-    {{ _compose }} up --build pluginlake {{ args }}
 
 _smoke-compose := "-f deploy/compose/docker-compose.dev.yaml -f deploy/compose/docker-compose.smoke.yaml"
 

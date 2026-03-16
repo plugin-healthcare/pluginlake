@@ -115,4 +115,4 @@ def render_data_flow(layer_summary: list[dict[str, Any]]) -> None:
         margin={"l": 24, "r": 24, "t": 16, "b": 16},
         height=420,
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")

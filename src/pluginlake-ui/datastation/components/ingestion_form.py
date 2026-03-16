@@ -65,7 +65,7 @@ def render_ingestion_runs(runs: list[dict[str, Any]]) -> None:
 
     st.dataframe(
         display_data,
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config={
             "Status": st.column_config.TextColumn(

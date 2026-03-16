@@ -85,16 +85,35 @@ query RunsQuery {
 }
 """
 
+_RUN_BY_ID_QUERY = """
+query RunById($runId: ID!) {
+  runOrError(runId: $runId) {
+    __typename
+    ... on Run {
+      runId
+      jobName
+      status
+      startTime
+      endTime
+    }
+    ... on RunNotFoundError { message }
+  }
+}
+"""
+
 
 def _graphql_url() -> str:
     settings = IngestionSettings()
     return f"{settings.dagster_webserver_url.rstrip('/')}/graphql"
 
 
-def _query_dagster(query: str) -> dict[str, Any]:
+def _query_dagster(query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
     """Execute a GraphQL query against the Dagster webserver."""
     try:
-        response = httpx.post(_graphql_url(), json={"query": query}, timeout=10.0)
+        payload: dict[str, Any] = {"query": query}
+        if variables:
+            payload["variables"] = variables
+        response = httpx.post(_graphql_url(), json=payload, timeout=10.0)
         response.raise_for_status()
         return response.json()
     except httpx.HTTPError:
@@ -186,3 +205,25 @@ def list_runs() -> list[dict[str, Any]]:
         }
         for run in runs_or_error.get("results", [])
     ]
+
+
+@router.get(
+    "/runs/{run_id}",
+    summary="Get a single Dagster run",
+    description="Returns the status of a specific Dagster pipeline run.",
+)
+def get_run(run_id: str) -> dict[str, Any]:
+    """Get the status of a single Dagster run by ID."""
+    data = _query_dagster(_RUN_BY_ID_QUERY, variables={"runId": run_id})
+    run_or_error = data.get("data", {}).get("runOrError", {})
+
+    if run_or_error.get("__typename") != "Run":
+        return {"run_id": run_id, "status": "NOT_FOUND"}
+
+    return {
+        "run_id": run_or_error.get("runId"),
+        "job_name": run_or_error.get("jobName"),
+        "status": run_or_error.get("status"),
+        "start_time": run_or_error.get("startTime"),
+        "end_time": run_or_error.get("endTime"),
+    }

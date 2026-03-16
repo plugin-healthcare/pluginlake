@@ -47,7 +47,7 @@ st.dataframe(
         }
         for t in tables
     ],
-    use_container_width=True,
+    width="stretch",
     hide_index=True,
 )
 
@@ -66,7 +66,7 @@ if selected:
         if columns:
             st.dataframe(
                 columns,
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
                 column_config={
                     "column_name": st.column_config.TextColumn("Column"),

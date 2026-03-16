@@ -1,9 +1,10 @@
-"""Data Ingestion
+"""Data Ingestion Demo
 
-Upload OMOP CSV and FHIR NDJSON data to the pluginlake API. Polls Dagster
-until all triggered runs have completed.
+Upload Synthea OMOP CSV en FHIR NDJSON testdata naar de pluginlake API.
+Download testdata automatisch, upload het, en poll Dagster totdat alle
+getriggerde runs zijn afgerond.
 
-Requires `just dev-up` for PostgreSQL, Dagster, and FastAPI.
+Vereist `just dev-up` voor PostgreSQL, Dagster en FastAPI.
 """
 
 import marimo
@@ -15,50 +16,58 @@ app = marimo.App(width="medium")
 @app.cell
 def _(mo):
     mo.md(r"""
-    # Data Ingestion
+    # Data Ingestion Demo
 
-    This notebook uploads data to the pluginlake API for processing.
-    It covers both OMOP CSV and FHIR NDJSON ingestion, and polls Dagster
-    until all triggered runs have completed.
+    Dit notebook demonstreert de volledige data-ingestie pipeline van het pluginlake platform aan de hand van synthetische Synthea testdata.
 
-    Sections:
+    Alle interactie met het platform verloopt via de **pluginlake REST API** (`http://localhost:8000/api/v1`).
+    Wanneer je een bestand uploadt naar de API, gebeurt het volgende:
 
-    1. **Pre-flight check** — verify services are running
-    2. **OMOP ingestion** — bulk upload Synthea CSV files
-    3. **FHIR ingestion** — upload FHIR NDJSON bundles
-    4. **Monitor runs** — poll Dagster until all runs finish
+    1. De API valideert het bestand en slaat het tijdelijk op.
+    2. Er wordt automatisch een **Dagster materialisatie-run** gestart die de data transformeert en wegschrijft naar **DuckLake** (een lakehouse met PostgreSQL als metadata-catalog en DuckDB als query-engine).
+    3. De API retourneert een `dagster_run_id` waarmee je de voortgang kunt volgen.
+
+    **Stappen in dit notebook:**
+
+    1. **Pre-flight check**: controleer of alle services draaien
+    2. **Testdata downloaden**: haal Synthea OMOP- en FHIR-datasets op
+    3. **OMOP-ingestie**: upload CSV-bestanden naar de OMOP-endpoint
+    4. **FHIR-ingestie**: upload NDJSON-bestanden naar de FHIR-endpoint
+    5. **Runs monitoren**: volg de Dagster runs via de pluginlake API tot ze klaar zijn
     """)
 
 
 @app.cell
 def _():
-    """Imports, constants, and test data setup."""
-    import io
+    """Imports, constants, and helpers."""
+    import re
     import time
-    from pathlib import Path
 
     import httpx
     import marimo as mo
 
-    from pluginlake.utils.testdata import find_repo_root
+    from pluginlake.utils.testdata import (
+        ensure_synthea1k,
+        ensure_synthea_fhir_ndjson,
+        find_repo_root,
+    )
 
     PROJECT_ROOT = find_repo_root()
-    from pluginlake.utils.testdata import ensure_synthea1k
-
     API_BASE = "http://localhost:8000/api/v1"
-    DAGSTER_GRAPHQL = "http://localhost:3000/graphql"
-    SYNTHEA_DIR = PROJECT_ROOT / "data" / "synthea" / "omop" / "synthea1k"
-    FHIR_DIR = PROJECT_ROOT / "data" / "raw" / "fhir"
+    TIMEOUT = httpx.Timeout(timeout=120.0)
 
-    ensure_synthea1k(project_root=PROJECT_ROOT)
+    def pascal_to_snake(name: str) -> str:
+        return re.sub(r"(?<=[a-z0-9])([A-Z])", r"_\1", name).lower()
+
     return (
         API_BASE,
-        DAGSTER_GRAPHQL,
-        FHIR_DIR,
-        SYNTHEA_DIR,
+        PROJECT_ROOT,
+        TIMEOUT,
+        ensure_synthea1k,
+        ensure_synthea_fhir_ndjson,
         httpx,
-        io,
         mo,
+        pascal_to_snake,
         time,
     )
 
@@ -66,9 +75,16 @@ def _():
 @app.cell
 def _(mo):
     mo.md(r"""
-    ## Pre-flight Check
+    ## Pre-flight check
 
-    The dev stack (`just dev-up`) must be running before we ingest data.
+    Voordat we data kunnen uploaden, moet de dev-stack draaien.
+    Start deze met `just dev-up`. Dit brengt de volgende services op:
+
+    - **PostgreSQL**: database voor Dagster metadata en DuckLake catalog
+    - **Dagster**: orchestrator die data-pipelines aanstuurt
+    - **pluginlake API (FastAPI)**: REST API die als centraal toegangspunt dient
+
+    De cel hieronder controleert of alle services bereikbaar zijn.
     """)
 
 
@@ -95,37 +111,70 @@ def _(mo):
 
 
 @app.cell
+def _(PROJECT_ROOT, ensure_synthea1k, ensure_synthea_fhir_ndjson, mo):
+    """Download Synthea OMOP and FHIR test datasets."""
+    mo.md(r"""
+    ## Testdata downloaden
+
+    We gebruiken **Synthea** testdata: synthetisch gegenereerde patientgegevens in twee formaten:
+
+    - **OMOP CDM** (CSV): het gestandaardiseerde datamodel voor observationeel onderzoek
+    - **FHIR** (NDJSON): het HL7 FHIR uitwisselingsformaat, veelgebruikt in de zorg
+
+    De datasets worden automatisch opgehaald van GitHub releases als ze nog niet lokaal aanwezig zijn.
+    """)
+
+    omop_dir = ensure_synthea1k(project_root=PROJECT_ROOT)
+    fhir_dir = ensure_synthea_fhir_ndjson(project_root=PROJECT_ROOT)
+
+    omop_files = sorted(omop_dir.glob("*.csv"))
+    fhir_files = sorted(fhir_dir.glob("*.ndjson"))
+    mo.md(
+        f"OMOP: **{len(omop_files)}** CSV-bestanden in `{omop_dir.relative_to(PROJECT_ROOT)}`\n\n"
+        f"FHIR: **{len(fhir_files)}** NDJSON-bestanden in `{fhir_dir.relative_to(PROJECT_ROOT)}`"
+    )
+    return fhir_files, omop_files
+
+
+@app.cell
 def _(mo):
     mo.md(r"""
-    ## OMOP Ingestion
+    ## OMOP-ingestie
 
-    Upload every CSV in the Synthea 1K dataset to the OMOP ingest endpoint.
-    Each file triggers a Dagster run that validates the data and writes it to DuckLake.
+    Elk CSV-bestand wordt geupload naar het OMOP ingest-endpoint van de pluginlake API:
+
+    ```
+    POST /api/v1/omop/{tabel_naam}/csv
+    ```
+
+    De API ontvangt het bestand, valideert het tegen het OMOP CDM schema, en triggert een **Dagster materialisatie-run**.
+    Dagster verwerkt de data en schrijft het resultaat weg naar DuckLake als Parquet-bestanden.
+    De response bevat een `dagster_run_id` waarmee je de status van de verwerking kunt volgen.
     """)
 
 
 @app.cell
-def _(API_BASE, SYNTHEA_DIR, httpx, mo):
+def _(API_BASE, TIMEOUT, httpx, mo, omop_files):
     """Upload all Synthea CSVs to the OMOP ingest endpoint."""
     import polars as pl
 
     omop_results: list[dict] = []
-    csv_files = sorted(SYNTHEA_DIR.glob("*.csv"))
 
-    if not csv_files:
-        mo.callout(mo.md(f"No CSV files found in `{SYNTHEA_DIR}`. Run `ensure_synthea1k()` first."), kind="warn")
+    if not omop_files:
+        mo.callout(mo.md("No CSV files found. Check the download step above."), kind="warn")
     else:
-        for _csv_file in csv_files:
+        for _csv_file in omop_files:
             _table_name = _csv_file.stem
             with _csv_file.open("rb") as _f:
                 _resp = httpx.post(
                     f"{API_BASE}/omop/{_table_name}/csv",
                     files={"file": (_csv_file.name, _f, "text/csv")},
-                    timeout=120.0,
+                    timeout=TIMEOUT,
                 )
             omop_results.append(
                 {
                     "table": _table_name,
+                    "size_mb": round(_csv_file.stat().st_size / (1024 * 1024), 1),
                     "status": _resp.status_code,
                     "dagster_run_id": _resp.json().get("dagster_run_id"),
                     "message": _resp.json().get("message"),
@@ -140,118 +189,112 @@ def _(API_BASE, SYNTHEA_DIR, httpx, mo):
 @app.cell
 def _(mo):
     mo.md(r"""
-    ## FHIR Ingestion
+    ## FHIR-ingestie
 
-    Upload FHIR NDJSON files from `data/raw/fhir/`. Each file should be named
-    `{resource_type}.ndjson` (e.g. `patient.ndjson`, `condition.ndjson`).
+    FHIR-data wordt als NDJSON (newline-delimited JSON) geupload naar:
 
-    If no FHIR files exist yet, the cell below creates a small sample Patient bundle
-    to demonstrate the endpoint.
+    ```
+    POST /api/v1/fhir/{resource_type}/ndjson
+    ```
+
+    Niet alle FHIR resource types worden ondersteund. Pluginlake bevat **translators** die FHIR resources omzetten naar OMOP-tabellen (bijv. `Patient` naar `person`, `Condition` naar `condition_occurrence`).
+    Bestanden met een niet-ondersteund resource type worden automatisch overgeslagen.
+
+    Net als bij OMOP triggert elk upload-verzoek een Dagster run die de FHIR-data vertaalt en opslaat in DuckLake.
     """)
 
 
 @app.cell
-def _(API_BASE, FHIR_DIR, httpx, io, mo, pl):
-    """Upload FHIR NDJSON files, or create a sample if none exist."""
-    FHIR_DIR.mkdir(parents=True, exist_ok=True)
+def _(API_BASE, TIMEOUT, fhir_files, httpx, mo, pascal_to_snake, pl):
+    """Upload supported FHIR NDJSON files."""
+    from pluginlake.fhir.translator_registry import FHIR_RESOURCE_TYPES
 
-    _SAMPLE_PATIENT_NDJSON = (
-        '{"resourceType":"Patient","id":"example-1","gender":"male","birthDate":"1980-01-15","name":[{"family":"Smith","given":["John"]}]}\n'
-        '{"resourceType":"Patient","id":"example-2","gender":"female","birthDate":"1992-06-22","name":[{"family":"Doe","given":["Jane"]}]}\n'
-        '{"resourceType":"Patient","id":"example-3","gender":"male","birthDate":"1975-11-03","name":[{"family":"Johnson","given":["Robert"]}]}\n'
-    )
-
-    ndjson_files = sorted(FHIR_DIR.glob("*.ndjson"))
+    supported = set(FHIR_RESOURCE_TYPES)
     fhir_results: list[dict] = []
+    skipped: list[str] = []
 
-    if ndjson_files:
-        mo.md(f"Found **{len(ndjson_files)}** NDJSON files in `{FHIR_DIR}`")
-        for _ndjson_file in ndjson_files:
-            _resource_type = _ndjson_file.stem.lower()
-            with _ndjson_file.open("rb") as _f:
+    if not fhir_files:
+        mo.callout(mo.md("No NDJSON files found. Check the download step above."), kind="warn")
+    else:
+        mapped = []
+        for _f in fhir_files:
+            _api_name = pascal_to_snake(_f.stem)
+            if _api_name in supported:
+                mapped.append((_f, _api_name))
+            else:
+                skipped.append(_f.stem)
+
+        if skipped:
+            mo.md(f"Skipping unsupported resource types: {', '.join(skipped)}")
+
+        for _ndjson_file, _resource_type in mapped:
+            with _ndjson_file.open("rb") as _fp:
                 _resp = httpx.post(
                     f"{API_BASE}/fhir/{_resource_type}/ndjson",
-                    files={"file": (_ndjson_file.name, _f, "application/x-ndjson")},
-                    timeout=120.0,
+                    files={"file": (_ndjson_file.name, _fp, "application/x-ndjson")},
+                    timeout=TIMEOUT,
                 )
             fhir_results.append(
                 {
                     "resource_type": _resource_type,
+                    "size_mb": round(_ndjson_file.stat().st_size / (1024 * 1024), 1),
                     "status": _resp.status_code,
                     "dagster_run_id": _resp.json().get("dagster_run_id"),
                     "message": _resp.json().get("message"),
                 }
             )
-    else:
-        mo.md("No NDJSON files found — uploading a sample Patient bundle.")
-        _resp = httpx.post(
-            f"{API_BASE}/fhir/patient/ndjson",
-            files={"file": ("patient.ndjson", io.BytesIO(_SAMPLE_PATIENT_NDJSON.encode()), "application/x-ndjson")},
-            timeout=120.0,
-        )
-        fhir_results.append(
-            {
-                "resource_type": "patient",
-                "status": _resp.status_code,
-                "dagster_run_id": _resp.json().get("dagster_run_id"),
-                "message": _resp.json().get("message"),
-            }
-        )
 
-    mo.ui.table(pl.DataFrame(fhir_results))
+        mo.md(f"Sent **{len(fhir_results)}** FHIR NDJSON files (skipped {len(skipped)})")
+        mo.ui.table(pl.DataFrame(fhir_results))
     return (fhir_results,)
 
 
 @app.cell
 def _(mo):
     mo.md(r"""
-    ## Monitor Runs
+    ## Runs monitoren
 
-    Poll Dagster for all triggered run IDs until they reach a terminal state.
+    Na het uploaden willen we weten of alle verwerkingsruns succesvol zijn afgerond.
+    We gebruiken hiervoor het pluginlake API endpoint per run:
+
+    ```
+    GET /api/v1/runs/{run_id}
+    ```
+
+    Dit endpoint retourneert de status van een specifieke Dagster run.
+    We pollen dit endpoint elke paar seconden totdat alle getriggerde runs een eindstatus hebben bereikt (`SUCCESS`, `FAILURE`, of `CANCELED`).
+
+    Alle communicatie met Dagster verloopt via de pluginlake API, zodat er later centraal autorisatie en authenticatie aan toegevoegd kan worden.
     """)
 
 
 @app.cell
 def _(
-    DAGSTER_GRAPHQL,
+    API_BASE,
     fhir_results: list[dict],
     httpx,
     mo,
     omop_results: list[dict],
     time,
 ):
-    """Poll Dagster until all runs complete."""
-    TERMINAL_STATUSES = {"SUCCESS", "FAILURE", "CANCELED"}
+    """Poll the pluginlake API for individual run statuses until all complete."""
+    TERMINAL_STATUSES = {"SUCCESS", "FAILURE", "CANCELED", "NOT_FOUND"}
     POLL_INTERVAL = 3
-
-    _RUN_STATUS_QUERY = """
-    query RunStatus($runId: ID!) {
-      runOrError(runId: $runId) {
-        __typename
-        ... on Run { runId, status }
-        ... on RunNotFoundError { message }
-      }
-    }
-    """
 
     all_results = omop_results + fhir_results
     run_ids = [r["dagster_run_id"] for r in all_results if r.get("dagster_run_id")]
 
     if not run_ids:
-        mo.callout(mo.md("No Dagster runs were triggered. Check the results above."), kind="warn")
+        mo.callout(mo.md("Er zijn geen Dagster runs gestart. Controleer de resultaten hierboven."), kind="warn")
     else:
-        mo.md(f"Monitoring **{len(run_ids)}** Dagster runs...")
+        mo.md(f"**{len(run_ids)}** runs worden gemonitord via de pluginlake API...")
 
         while True:
             run_statuses = {}
             for _rid in run_ids:
                 try:
-                    _resp = httpx.post(
-                        DAGSTER_GRAPHQL,
-                        json={"query": _RUN_STATUS_QUERY, "variables": {"runId": _rid}},
-                        timeout=10.0,
-                    )
-                    _data = _resp.json().get("data", {}).get("runOrError", {})
+                    _resp = httpx.get(f"{API_BASE}/runs/{_rid}", timeout=10.0)
+                    _data = _resp.json() if _resp.is_success else {}
                     run_statuses[_rid] = _data.get("status", "UNKNOWN")
                 except httpx.HTTPError:
                     run_statuses[_rid] = "UNREACHABLE"
@@ -267,10 +310,81 @@ def _(
         failed = [rid for rid, s in run_statuses.items() if s != "SUCCESS"]
         if failed:
             mo.output.replace(
-                mo.callout(mo.md(f"{table_md}\n\n**{len(failed)}** run(s) did not succeed."), kind="warn")
+                mo.callout(mo.md(f"{table_md}\n\n**{len(failed)}** run(s) zijn niet geslaagd."), kind="warn")
             )
         else:
-            mo.output.replace(mo.md(f"{table_md}\n\nAll **{len(run_ids)}** runs completed successfully."))
+            mo.output.replace(mo.md(f"{table_md}\n\nAlle **{len(run_ids)}** runs zijn succesvol afgerond."))
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## Failed run triggeren (demo)
+
+    Om te laten zien hoe het platform omgaat met fouten, uploaden we een ongeldig CSV-bestand naar het OMOP-endpoint.
+    Het bestand bevat willekeurige kolommen die niet overeenkomen met het OMOP CDM schema.
+    De API accepteert het bestand (het is immers een geldige CSV), maar de Dagster materialisatie-run zal falen tijdens de transformatiestap.
+
+    Dit is nuttig om te testen of het monitoring-endpoint correct een `FAILURE`-status teruggeeft.
+    """)
+
+
+@app.cell
+def _(API_BASE, httpx, mo, time, TIMEOUT):
+    """Upload an invalid CSV to trigger a failed Dagster run."""
+    import tempfile
+    from pathlib import Path as _Path
+
+    # Create a CSV with bogus columns that will fail OMOP schema validation in Dagster
+    _invalid_csv = "foo,bar,baz\n1,2,3\n4,5,6\n"
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as _tmp:
+        _tmp.write(_invalid_csv.encode())
+        _tmp_path = _Path(_tmp.name)
+
+    with _tmp_path.open("rb") as _f:
+        _fail_resp = httpx.post(
+            f"{API_BASE}/omop/person/csv",
+            files={"file": ("person.csv", _f, "text/csv")},
+            timeout=TIMEOUT,
+        )
+
+    _tmp_path.unlink(missing_ok=True)
+
+    _HTTP_ERROR_THRESHOLD = 400
+    if _fail_resp.status_code >= _HTTP_ERROR_THRESHOLD:
+        mo.callout(
+            mo.md(
+                f"De API heeft het bestand direct geweigerd (HTTP {_fail_resp.status_code}). "
+                "Probeer een ander table_name."
+            ),
+            kind="warn",
+        )
+    else:
+        _fail_run_id = _fail_resp.json().get("dagster_run_id")
+        mo.md(f"Ongeldig bestand geupload. Dagster run: `{_fail_run_id}`")
+
+        # Poll until this run reaches a terminal status
+        _TERMINAL = {"SUCCESS", "FAILURE", "CANCELED", "NOT_FOUND"}
+        _status = "UNKNOWN"
+        while _status not in _TERMINAL:
+            time.sleep(3)
+            try:
+                _poll = httpx.get(f"{API_BASE}/runs/{_fail_run_id}", timeout=10.0)
+                _status = _poll.json().get("status", "UNKNOWN") if _poll.is_success else "UNKNOWN"
+            except httpx.HTTPError:
+                _status = "UNREACHABLE"
+
+        if _status == "FAILURE":
+            mo.callout(
+                mo.md(f"Run `{_fail_run_id[:12]}...` is gefaald zoals verwacht ({_status})."),
+                kind="warn",
+            )
+        else:
+            mo.callout(
+                mo.md(f"Run `{_fail_run_id[:12]}...` eindigde met status **{_status}** (verwacht: FAILURE)."),
+                kind="info",
+            )
 
 
 if __name__ == "__main__":

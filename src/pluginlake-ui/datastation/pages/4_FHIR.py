@@ -84,7 +84,7 @@ with st.expander("FHIR → OMOP Mapping"):
         }
         for resource, info in FHIR_TO_OMOP_MAPPING.items()
     ]
-    st.dataframe(mapping_data, use_container_width=True, hide_index=True)
+    st.dataframe(mapping_data, width="stretch", hide_index=True)
 
 with st.expander("FHIR Raw Tables"):
     fhir_raw = fetch_fhir_tables(client)
@@ -92,7 +92,7 @@ with st.expander("FHIR Raw Tables"):
         st.caption("Each table stores raw FHIR JSON resources in a single `json_data` column.")
         st.dataframe(
             [{"Table": f"fhir_raw.{t['table_name']}"} for t in fhir_raw],
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
     else:

@@ -23,14 +23,13 @@ st.set_page_config(
 
 # --- Logo & branding ----------------------------------------------------------
 
-_logo_path = Path(__file__).resolve().parents[3] / "assets" / "logo_plugin_rgb_flavicon.svg"
+_logo_path = Path(settings.assets_dir) / "logo_plugin_rgb_flavicon.svg"
 if _logo_path.exists():
     st.logo(str(_logo_path))
 
 st.markdown(
     """
     <style>
-    [data-testid="stLogo"] img { height: 3.5rem; }
     [data-baseweb="select"], [data-baseweb="select"] * { cursor: pointer !important; }
     </style>
     """,
@@ -40,7 +39,8 @@ st.markdown(
 # --- Navigation ---------------------------------------------------------------
 
 pages = [
-    st.Page("pages/0_Overview.py", title="Overview", icon=":material/home:", default=True),
+    st.Page("pages/0_Introductie.py", title="Introductie", icon=":material/info:", default=True),
+    st.Page("pages/1_Overview.py", title="Overview", icon=":material/dashboard:"),
     st.Page("pages/1_Data_Catalog.py", title="Data Catalog", icon=":material/table_chart:"),
     st.Page("pages/2_Pipelines.py", title="Pipelines", icon=":material/account_tree:"),
     st.Page("pages/2_OMOP_Statistics.py", title="OMOP", icon=":material/analytics:"),
@@ -52,10 +52,10 @@ pg = st.navigation(pages, position="top")
 
 # --- Sidebar ------------------------------------------------------------------
 
-st.sidebar.title("pluginlake")
-if _logo_path.exists():
-    st.sidebar.image(str(_logo_path), width=150)
-st.sidebar.caption("Datastation Dashboard")
+st.sidebar.title("Datastation dashboard")
+st.sidebar.subheader(settings.datastation_name)
+
+st.sidebar.caption(f"datastation ID: {settings.datastation_id}")
 
 if "last_refreshed" not in st.session_state:
     st.session_state.last_refreshed = datetime.now(UTC)
@@ -69,5 +69,16 @@ st.sidebar.caption(f"Last updated: {st.session_state.last_refreshed:%H:%M:%S}")
 
 with st.sidebar:
     api_status_badge(get_client())
+    st.link_button(
+        "Dagster UI",
+        settings.dagster_url,
+        icon=":material/rocket_launch:",
+    )
+
+st.sidebar.divider()
+
+
+if _logo_path.exists():
+    st.sidebar.image(str(_logo_path), width=100)
 
 pg.run()

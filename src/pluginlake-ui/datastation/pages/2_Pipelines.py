@@ -52,7 +52,7 @@ if assets:
         }
         for a in assets
     ]
-    st.dataframe(display, use_container_width=True, hide_index=True)
+    st.dataframe(display, width="stretch", hide_index=True)
 else:
     st.info(
         "No assets registered. Start the Dagster pipeline to create assets.",
@@ -88,6 +88,6 @@ if runs:
         }
         for r in runs
     ]
-    st.dataframe(display_runs, use_container_width=True, hide_index=True)
+    st.dataframe(display_runs, width="stretch", hide_index=True)
 else:
     st.info("No runs recorded yet.", icon=":material/info:")
