@@ -36,3 +36,25 @@ output "storage_primary_blob_endpoint" {
   description = "Primary blob endpoint URL."
   value       = azurerm_storage_account.main.primary_blob_endpoint
 }
+
+# -- Linux VM --
+
+output "vm_public_ip" {
+  description = "Public IP address of the Linux VM."
+  value       = var.vm_enabled ? azurerm_public_ip.main[0].ip_address : null
+}
+
+output "vm_private_ip" {
+  description = "Private IP address of the Linux VM."
+  value       = var.vm_enabled ? azurerm_network_interface.main[0].private_ip_address : null
+}
+
+output "vm_id" {
+  description = "Resource ID of the Linux VM."
+  value       = var.vm_enabled ? azurerm_linux_virtual_machine.main[0].id : null
+}
+
+output "vm_ssh_command" {
+  description = "SSH command to connect to the VM."
+  value       = var.vm_enabled ? "ssh ${var.vm_admin_username}@${azurerm_public_ip.main[0].ip_address}" : null
+}

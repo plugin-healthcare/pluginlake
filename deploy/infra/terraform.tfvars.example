@@ -32,3 +32,19 @@ tags = {
   environment = "demo"
   managed_by  = "opentofu"
 }
+
+# Linux VM — disabled by default; set vm_enabled = true to provision.
+# vm_enabled       = true
+# vm_name          = "vm-plugin-demo-d"
+# vm_size          = "Standard_B2s"
+# vm_admin_username = "azureuser"
+# vm_ssh_public_key = "ssh-rsa AAAA..."  # paste your ~/.ssh/id_rsa.pub content
+# vm_ssh_source_address_prefix = "203.0.113.0/24"  # restrict SSH to your IP range
+# vm_os_disk_type   = "Standard_LRS"
+# vm_os_disk_size_gb = 30
+# vm_image = {
+#   publisher = "Canonical"
+#   offer     = "ubuntu-24_04-lts"
+#   sku       = "server"
+#   version   = "latest"
+# }
