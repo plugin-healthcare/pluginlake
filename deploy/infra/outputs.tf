@@ -58,3 +58,13 @@ output "vm_ssh_command" {
   description = "SSH command to connect to the VM."
   value       = var.vm_enabled ? "ssh ${var.vm_admin_username}@${azurerm_public_ip.main[0].ip_address}" : null
 }
+
+output "vm_identity_client_id" {
+  description = "Client ID of the VM managed identity (use with `az acr login --identity` or Docker credential helpers)."
+  value       = var.vm_enabled ? azurerm_user_assigned_identity.vm[0].client_id : null
+}
+
+output "vm_identity_principal_id" {
+  description = "Principal ID of the VM managed identity."
+  value       = var.vm_enabled ? azurerm_user_assigned_identity.vm[0].principal_id : null
+}

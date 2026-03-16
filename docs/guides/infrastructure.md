@@ -210,6 +210,8 @@ vm_image = {
 | `vm_private_ip` | Private IP address |
 | `vm_id` | Resource ID |
 | `vm_ssh_command` | Ready-to-use SSH command |
+| `vm_identity_client_id` | Client ID of the VM managed identity |
+| `vm_identity_principal_id` | Principal ID of the VM managed identity |
 
 After apply, connect to the VM:
 
@@ -217,6 +219,45 @@ After apply, connect to the VM:
 tofu output -raw vm_ssh_command
 # ssh azureuser@<public-ip>
 ```
+
+### fail2ban
+
+fail2ban is configured automatically on first boot via cloud-init (`deploy/infra/cloud-init.yaml`).
+It installs the `fail2ban` package and sets up SSH jail protection:
+
+| Setting | Value |
+|---------|-------|
+| Max failed attempts | 5 |
+| Detection window | 10 minutes |
+| Ban duration | 1 hour |
+
+To check the status after SSH-ing into the VM:
+
+```bash
+sudo systemctl status fail2ban
+sudo fail2ban-client status sshd
+```
+
+### ACR pull access
+
+The VM is assigned a user-assigned managed identity (`${vm_name}-identity`) with the `AcrPull` role on the Container Registry.
+This allows the VM to pull images from ACR without storing credentials.
+
+To authenticate Docker on the VM using the managed identity:
+
+```bash
+# Install Azure CLI on the VM, then:
+az login --identity
+az acr login --name $(az acr list --query "[0].name" -o tsv)
+```
+
+Or using the `acr` credential helper:
+
+```bash
+docker pull <acr-login-server>/pluginlake:latest
+```
+
+The managed identity client ID is available via `tofu output -raw vm_identity_client_id`.
 
 ## Common variables
 

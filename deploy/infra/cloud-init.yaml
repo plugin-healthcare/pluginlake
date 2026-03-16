@@ -1,0 +1,27 @@
+#cloud-config
+# First-boot provisioning for the pluginlake VM.
+# Installs and configures fail2ban to block brute-force SSH login attempts.
+
+package_update: true
+
+packages:
+  - fail2ban
+
+write_files:
+  - path: /etc/fail2ban/jail.d/sshd.conf
+    owner: root:root
+    permissions: "0644"
+    content: |
+      [sshd]
+      enabled  = true
+      port     = ssh
+      filter   = sshd
+      maxretry = 1
+      findtime = 10m
+      bantime  = 1h
+      logpath  = %(sshd_log)s
+      backend  = %(sshd_backend)s
+
+runcmd:
+  - systemctl enable fail2ban
+  - systemctl restart fail2ban

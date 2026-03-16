@@ -74,6 +74,23 @@ resource "azurerm_network_interface" "main" {
   tags = var.tags
 }
 
+# User-assigned managed identity — grants the VM pull-only access to the Container Registry.
+resource "azurerm_user_assigned_identity" "vm" {
+  count               = var.vm_enabled ? 1 : 0
+  name                = "${var.vm_name}-identity"
+  resource_group_name = data.azurerm_resource_group.main.name
+  location            = var.location
+
+  tags = var.tags
+}
+
+resource "azurerm_role_assignment" "vm_acr_pull" {
+  count                = var.vm_enabled ? 1 : 0
+  scope                = azurerm_container_registry.main.id
+  role_definition_name = "AcrPull"
+  principal_id         = azurerm_user_assigned_identity.vm[0].principal_id
+}
+
 resource "azurerm_linux_virtual_machine" "main" {
   count               = var.vm_enabled ? 1 : 0
   name                = var.vm_name
@@ -83,6 +100,7 @@ resource "azurerm_linux_virtual_machine" "main" {
 
   admin_username                  = var.vm_admin_username
   disable_password_authentication = true
+  custom_data                     = filebase64("${path.module}/cloud-init.yaml")
 
   lifecycle {
     precondition {
@@ -92,6 +110,11 @@ resource "azurerm_linux_virtual_machine" "main" {
   }
 
   network_interface_ids = [azurerm_network_interface.main[0].id]
+
+  identity {
+    type         = "UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.vm[0].id]
+  }
 
   admin_ssh_key {
     username   = var.vm_admin_username
