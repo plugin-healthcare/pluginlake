@@ -59,3 +59,9 @@
 - Brand colors, typography, spacing and component styles are defined in `.github/skills/plugin-brand.md`.
 - Always reference that file when generating or modifying UI, documentation themes, or Streamlit custom CSS.
 - Logo and brand assets live in `assets/` at the project root.
+
+## GitHub issues & project boards
+
+- Use the `github-issues` skill (`.github/skills/github-issues/SKILL.md`) when creating epics, stories, or populating project boards.
+- Always discover project field IDs dynamically via `gh project field-list`; never hardcode them.
+- Use the `gh` CLI and `gh-sub-issue` extension for parent/child linking.
