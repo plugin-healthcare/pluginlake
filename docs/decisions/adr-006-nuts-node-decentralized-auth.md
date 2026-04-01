@@ -243,6 +243,8 @@ Example: Processing Hub-A suppresses a group of 3 patients. Processing Hub-B, ru
 
 Nuts does not prevent this — credentials are bilateral, and a hospital can issue identical scopes to multiple Processing Hubs. This must be a governance rule: a hospital should not issue overlapping data-scope credentials to multiple Processing Hubs unless the SDC implications are explicitly accepted.
 
+> **-> User can only be assigned to one processing hub per permit (federation agreement) !! **
+
 #### No Processing Hub (not supported)
 
 A federation without a Processing Hub is not possible in the PLUGIN model. The Processing Hub has three structural responsibilities that cannot be distributed:
