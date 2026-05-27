@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1
 
-# Dev Dockerfile for dagster (runs `dagster dev` — all-in-one).
+# Dev Dockerfile for dagster (webserver, daemon, code-server).
+# Installs all extras so it can be used for any dagster role.
+# Command is specified in docker-compose.dev.yaml.
 
 FROM dhi.io/python:3.13-debian13-dev
 
@@ -15,9 +17,4 @@ COPY . .
 RUN uv sync --frozen --extra infra --extra fhir
 
 ENV PATH="/app/.venv/bin:$PATH" \
-    DAGSTER_HOME="/app/config/dagster" \
-    DAGSTER_MODULE="pluginlake.definitions"
-
-EXPOSE 3000
-
-CMD dagster dev -h 0.0.0.0 -p 3000 -m "$DAGSTER_MODULE"
+    DAGSTER_HOME="/app/config/dagster"

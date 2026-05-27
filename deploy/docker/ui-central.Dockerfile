@@ -11,6 +11,7 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-install-project --only-group dashboard
 
 COPY src/pluginlake-ui/central/ src/pluginlake-ui/central/
+COPY .streamlit/config.toml .streamlit/config.toml
 
 # --- Runtime stage ---
 FROM dhi.io/python:3.13-debian13
@@ -18,6 +19,7 @@ FROM dhi.io/python:3.13-debian13
 WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/src/pluginlake-ui/central /app
+COPY --from=builder /app/.streamlit /app/.streamlit
 
 ENV PATH="/app/.venv/bin:$PATH"
 

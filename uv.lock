@@ -1961,6 +1961,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "python-multipart" },
+    { name = "uvicorn" },
 ]
 
 [package.optional-dependencies]
@@ -2041,6 +2042,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.9.1" },
     { name = "python-multipart", specifier = ">=0.0.18" },
     { name = "tqdm", marker = "extra == 'synthea'", specifier = ">=4.67.3" },
+    { name = "uvicorn", specifier = ">=0.34.0" },
 ]
 provides-extras = ["infra", "azure", "synthea", "fhir"]
 

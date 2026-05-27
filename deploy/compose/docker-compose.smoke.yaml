@@ -3,7 +3,7 @@ services:
     volumes:
       - smoke-pgdata:/var/lib/postgresql/data
 
-  dagster:
+  dagster-code-server:
     env_file:
       - smoke.env
     environment:

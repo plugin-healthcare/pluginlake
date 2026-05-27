@@ -2,43 +2,88 @@ services:
   postgres:
     image: dhi.io/postgres:17-alpine3.22
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:-pluginlake}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pluginlake}
+      POSTGRES_DB: ${DAGSTER_PG_DB:-dagster}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - ${POSTGRES_DATA:-../../.data/postgres}:/var/lib/postgresql/data
-    env_file:
-      - ../../.env
+      - ../../.data/postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pluginlake}"]
       interval: 3s
       timeout: 3s
       retries: 10
       start_period: 5s
 
-  dagster:
+  dagster-webserver:
     build:
       context: ../../
       dockerfile: deploy/docker/dagster.dev.Dockerfile
+    environment:
+      HOME: /app
+      DAGSTER_HOME: /app/config/dagster
+      DAGSTER_PG_HOST: postgres
+      DAGSTER_PG_USER: ${POSTGRES_USER:-pluginlake}
+      DAGSTER_PG_PASSWORD: ${POSTGRES_PASSWORD:-pluginlake}
+      DAGSTER_PG_DB: ${DAGSTER_PG_DB:-dagster}
     ports:
-      - "3000:3000"
+      - "${DAGSTER_PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dagster-code-server:
+        condition: service_healthy
+    volumes:
+      - ../../config/dagster:/app/config/dagster
+      - ../../.data/dagster/compute_logs:/app/compute_logs
+    command:
+      [
+        "dagster-webserver",
+        "-h", "0.0.0.0",
+        "-p", "3000",
+        "-w", "/app/config/dagster/workspace.yaml",
+      ]
+
+  dagster-daemon:
+    build:
+      context: ../../
+      dockerfile: deploy/docker/dagster.dev.Dockerfile
+    environment:
+      HOME: /app
+      DAGSTER_HOME: /app/config/dagster
+      DAGSTER_PG_HOST: postgres
+      DAGSTER_PG_USER: ${POSTGRES_USER:-pluginlake}
+      DAGSTER_PG_PASSWORD: ${POSTGRES_PASSWORD:-pluginlake}
+      DAGSTER_PG_DB: ${DAGSTER_PG_DB:-dagster}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dagster-code-server:
+        condition: service_healthy
+    volumes:
+      - ../../config/dagster:/app/config/dagster
+      - ../../.data/dagster/compute_logs:/app/compute_logs
+    command: ["dagster-daemon", "run", "-w", "/app/config/dagster/workspace.yaml"]
+
+  dagster-code-server:
+    build:
+      context: ../../
+      dockerfile: deploy/docker/pluginlake.dev.Dockerfile
     environment:
       DAGSTER_HOME: /app/config/dagster
-      DAGSTER_MODULE: ${DAGSTER_MODULE:-pluginlake.definitions}
       DAGSTER_PG_HOST: postgres
-      DAGSTER_PG_USER: ${DAGSTER_PG_USER:-${POSTGRES_USER}}
-      DAGSTER_PG_PASSWORD: ${DAGSTER_PG_PASSWORD:-${POSTGRES_PASSWORD}}
+      DAGSTER_PG_USER: ${POSTGRES_USER:-pluginlake}
+      DAGSTER_PG_PASSWORD: ${POSTGRES_PASSWORD:-pluginlake}
       DAGSTER_PG_DB: ${DAGSTER_PG_DB:-dagster}
       DUCKLAKE_PG_HOST: postgres
       DUCKLAKE_PG_PORT: "5432"
-      DUCKLAKE_PG_USER: ${DUCKLAKE_PG_USER:-${POSTGRES_USER}}
-      DUCKLAKE_PG_PASSWORD: ${DUCKLAKE_PG_PASSWORD:-${POSTGRES_PASSWORD}}
+      DUCKLAKE_PG_USER: ${POSTGRES_USER:-pluginlake}
+      DUCKLAKE_PG_PASSWORD: ${POSTGRES_PASSWORD:-pluginlake}
       DUCKLAKE_PG_DB: ${DUCKLAKE_PG_DB:-ducklake}
       PLUGINLAKE_STORAGE_BASE_DIR: .data/storage
-    env_file:
-      - ../../.env
+    ports:
+      - "${CODE_SERVER_PORT:-4000}:4000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -46,72 +91,70 @@ services:
       - ../../src:/app/src
       - ../../examples:/app/examples
       - ../../config/dagster:/app/config/dagster
-      - ${PLUGINLAKE_DATA:-../../.data}:/app/.data
-      - ${DAGSTER_COMPUTE_LOGS:-../../.data/dagster/compute_logs}:/app/compute_logs
+      - ../../.data:/app/.data
+      - ../../.data/dagster/compute_logs:/app/compute_logs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.create_connection(('localhost',4000),2); s.close()"]
+      interval: 5s
+      timeout: 5s
+      start_period: 15s
+      retries: 10
+    command:
+      [
+        "dagster", "code-server", "start",
+        "-h", "0.0.0.0",
+        "-p", "4000",
+        "-m", "pluginlake.definitions",
+      ]
 
   pluginlake:
     build:
       context: ../../
       dockerfile: deploy/docker/pluginlake.dev.Dockerfile
-    env_file:
-      - ../../.env
-    depends_on:
-      postgres:
-        condition: service_healthy
-      dagster:
-        condition: service_started
     environment:
-      PLUGINLAKE_SERVER_HOST: ${PLUGINLAKE_SERVER_HOST:-0.0.0.0}
+      PLUGINLAKE_SERVER_HOST: "0.0.0.0"
       PLUGINLAKE_SERVER_PORT: ${PLUGINLAKE_SERVER_PORT:-8000}
-      PLUGINLAKE_DEBUG: ${PLUGINLAKE_DEBUG:-True}
+      PLUGINLAKE_DEBUG: "true"
       DUCKLAKE_PG_HOST: postgres
       DUCKLAKE_PG_PORT: "5432"
-      DUCKLAKE_PG_USER: ${DUCKLAKE_PG_USER:-${POSTGRES_USER}}
-      DUCKLAKE_PG_PASSWORD: ${DUCKLAKE_PG_PASSWORD:-${POSTGRES_PASSWORD}}
+      DUCKLAKE_PG_USER: ${POSTGRES_USER:-pluginlake}
+      DUCKLAKE_PG_PASSWORD: ${POSTGRES_PASSWORD:-pluginlake}
       DUCKLAKE_PG_DB: ${DUCKLAKE_PG_DB:-ducklake}
-      PLUGINLAKE_INGEST_DAGSTER_WEBSERVER_URL: http://dagster:3000
-      PLUGINLAKE_INGEST_MAX_FILE_SIZE_MB: ${PLUGINLAKE_INGEST_MAX_FILE_SIZE_MB:-2000}
+      PLUGINLAKE_INGEST_DAGSTER_WEBSERVER_URL: http://dagster-webserver:3000
       PLUGINLAKE_STORAGE_BASE_DIR: .data/storage
     ports:
       - "${PLUGINLAKE_SERVER_PORT:-8000}:${PLUGINLAKE_SERVER_PORT:-8000}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../../src:/app/src
+      - ../../.data:/app/.data
     healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:${PLUGINLAKE_SERVER_PORT:-8000}/health')",
-        ]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${PLUGINLAKE_SERVER_PORT:-8000}/health')"]
       interval: 5s
       timeout: 3s
       retries: 10
       start_period: 5s
-    volumes:
-      - ../../src:/app/src
-      - ${PLUGINLAKE_DATA:-../../.data}:/app/.data
+    command: ["uvicorn", "pluginlake.__main__:app", "--host", "0.0.0.0", "--port", "${PLUGINLAKE_SERVER_PORT:-8000}", "--reload"]
 
-  pluginlake-ui:
+  dashboard-datastation:
     build:
       context: ../../
       dockerfile: deploy/docker/ui-datastation.dev.Dockerfile
     ports:
       - "8501:8501"
+    profiles: [ui]
     environment:
       DASHBOARD_API_URL: http://pluginlake:${PLUGINLAKE_SERVER_PORT:-8000}
-      DASHBOARD_DATASTATION_ID: ${DASHBOARD_DATASTATION_ID:-ds-local-001}
-      DASHBOARD_DATASTATION_NAME: ${DASHBOARD_DATASTATION_NAME:-demo-1}
+      DASHBOARD_DATASTATION_ID: ${DATASTATION_ID:-ds-local-001}
+      DASHBOARD_DATASTATION_NAME: ${DATASTATION_NAME:-Local Dev}
     depends_on:
       pluginlake:
         condition: service_healthy
     healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')",
-        ]
-      interval: 5s
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"]
+      interval: 10s
       timeout: 3s
       retries: 3
     volumes:

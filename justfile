@@ -39,11 +39,11 @@ pre-commit:
 
 _compose := "docker compose -f deploy/compose/docker-compose.dev.yaml"
 
-# Start dev environment (all services including dashboards)
+# Start dev environment (all services including dashboard)
 dev-up *args='':
     {{ _compose }} --profile ui up --build {{ args }}
 
-# Start dev environment without dashboards
+# Start dev environment without dashboard
 dev-up-headless *args='':
     {{ _compose }} up --build {{ args }}
 
@@ -59,26 +59,30 @@ dev-central *args='':
 
 _smoke-compose := "-f deploy/compose/docker-compose.dev.yaml -f deploy/compose/docker-compose.smoke.yaml"
 
-# Run smoke test against running stack
+# Run smoke test script against a running dev stack
 smoke-test:
     uv run python scripts/smoke_test.py
 
-# Start isolated stack, run smoke test, tear down (clean volumes)
+# Start isolated stack, run smoke test, tear down (ephemeral, safe for CI)
 smoke-test-full:
-    docker compose {{ _smoke-compose }} up -d
-    uv run python scripts/smoke_test.py; rc=$?; docker compose {{ _smoke-compose }} down -v; exit $rc
+    docker compose {{ _smoke-compose }} up -d --build
+    uv run python scripts/smoke_test.py; rc=$$?; docker compose {{ _smoke-compose }} down -v; exit $$rc
 
 # Start local dev with titanic example (no Docker)
 dev-local:
     uv run dg dev -f examples/titanic.py
 
-# Start production environment
+# Start production stack (requires deploy/compose/.env with paths set)
 up *args='':
-    docker compose -f deploy/compose/docker-compose.yaml up --build {{ args }}
+    docker compose -f deploy/compose/docker-compose.yaml --env-file deploy/compose/.env up -d --build {{ args }}
 
-# Stop production environment
+# Start production stack with dashboard
+up-ui *args='':
+    docker compose -f deploy/compose/docker-compose.yaml --env-file deploy/compose/.env --profile ui up -d --build {{ args }}
+
+# Stop production stack
 down *args='':
-    docker compose -f deploy/compose/docker-compose.yaml down {{ args }}
+    docker compose -f deploy/compose/docker-compose.yaml --env-file deploy/compose/.env --profile ui down {{ args }}
 
 # --- Infrastructure (OpenTofu) ---
 

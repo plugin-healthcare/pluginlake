@@ -40,11 +40,13 @@ def _(mo):
 @app.cell
 def _():
     """Imports, constants, and helpers."""
+    import os
     import re
     import time
 
     import httpx
     import marimo as mo
+    from dotenv import load_dotenv
 
     from pluginlake.utils.testdata import (
         ensure_synthea1k,
@@ -52,8 +54,11 @@ def _():
         find_repo_root,
     )
 
+    load_dotenv()
+
     PROJECT_ROOT = find_repo_root()
-    API_BASE = "http://localhost:8000/api/v1"
+    _port = os.getenv("PLUGINLAKE_SERVER_PORT", "8000")
+    API_BASE = f"http://localhost:{_port}/api/v1"
     TIMEOUT = httpx.Timeout(timeout=120.0)
 
     def pascal_to_snake(name: str) -> str:
@@ -330,7 +335,7 @@ def _(mo):
 
 
 @app.cell
-def _(API_BASE, httpx, mo, time, TIMEOUT):
+def _(API_BASE, TIMEOUT, httpx, mo, time):
     """Upload an invalid CSV to trigger a failed Dagster run."""
     import tempfile
     from pathlib import Path as _Path

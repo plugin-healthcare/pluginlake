@@ -113,9 +113,12 @@ def _query_dagster(query: str, variables: dict[str, Any] | None = None) -> dict[
         payload: dict[str, Any] = {"query": query}
         if variables:
             payload["variables"] = variables
-        response = httpx.post(_graphql_url(), json=payload, timeout=10.0)
+        response = httpx.post(_graphql_url(), json=payload, timeout=30.0)
         response.raise_for_status()
         return response.json()
+    except httpx.TimeoutException:
+        logger.warning("Dagster GraphQL request timed out — webserver may be overloaded")
+        return {}
     except httpx.HTTPError:
         logger.exception("Failed to query Dagster GraphQL")
         return {}

@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1
 
 # Dev Dockerfile for pluginlake (FastAPI).
+# Installs fhir + infra extras for both API and code-server usage.
+# Command is specified in docker-compose.dev.yaml.
 
 FROM dhi.io/python:3.13-debian13-dev
 
@@ -10,11 +12,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /
 
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --extra fhir --no-install-project
+RUN uv sync --frozen --extra fhir --extra infra --no-install-project
 
 COPY . .
-RUN uv sync --frozen --extra fhir
+RUN uv sync --frozen --extra fhir --extra infra
 
-ENV PATH="/app/.venv/bin:$PATH"
-
-CMD ["uvicorn", "pluginlake.__main__:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+ENV PATH="/app/.venv/bin:$PATH" \
+    DAGSTER_HOME="/app/config/dagster"

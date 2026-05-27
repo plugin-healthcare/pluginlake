@@ -49,8 +49,8 @@ Data stations that need custom assets have two options:
 | Container | Image | Purpose |
 |-----------|-------|---------|
 | dagster-code-server | `pluginlake.Dockerfile` (or custom) | Loads asset definitions via gRPC |
-| dagster-webserver | `dagster-webserver.Dockerfile` | Web UI, no source code |
-| dagster-daemon | `dagster-webserver.Dockerfile` | Schedules, sensors, run queue |
+| dagster-webserver | `dagster.Dockerfile` | Web UI + GraphQL API, no source code |
+| dagster-daemon | `dagster.Dockerfile` | Schedules, sensors, run queue |
 | pluginlake | `pluginlake.Dockerfile` | FastAPI service |
 
 ## Alternatives considered

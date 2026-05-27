@@ -185,6 +185,15 @@ class ServerSettings(BaseSettings):
 
     host: str = Field(default="0.0.0.0", description="Bind address for the HTTP server.")  # noqa: S104
     port: int = Field(default=8000, description="Port for the HTTP server.")
+    workers: int = Field(default=1, description="Number of uvicorn worker processes.")
+    limit_concurrency: int | None = Field(
+        default=100,
+        description="Maximum number of concurrent connections before uvicorn returns 503.",
+    )
+    timeout_keep_alive: int = Field(
+        default=30,
+        description="Seconds to keep idle connections alive.",
+    )
 
 
 # ---------------------------------------------------------------------------
