@@ -22,6 +22,7 @@ dependencies = [
     "pydantic>=2.12.5",
     "pydantic-settings>=2.9.1",
     "python-multipart>=0.0.18",
+    "uvicorn>=0.34.0",
 ]
 
 [project.urls]
@@ -47,6 +48,9 @@ synthea = [
 fhir = [
     "plugin-rosetta",
 ]
+
+[project.scripts]
+pluginlake = "pluginlake.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.10.0,<0.11.0"]
@@ -185,6 +189,10 @@ strict = true
     "D104",    # Missing docstring in public package
     "S101",    # Use of assert
     "ANN401",  # HTTP client _get returns response.json() which is inherently Any
+]
+"src/pluginlake/cli/**/*.py" = [
+    "T201",    # print() is the primary output mechanism for CLI
+    "PLC0415", # Inline imports for lazy loading in CLI dispatch
 ]
 "src/pluginlake/api/routers/catalog.py" = [
     "S608",    # SQL queries use validated identifiers; cannot parameterise schema/table names

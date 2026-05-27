@@ -4,6 +4,7 @@ Orchestrates the flow from file upload to raw storage layer and Dagster job
 triggering, with proper validation and error handling.
 """
 
+import asyncio
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -92,7 +93,7 @@ class IngestionService:
 
         self._validate_extension(filename)
         content = await self._read_and_validate_size(file, filename)
-        file_path = self._store_file(content, filename, dataset, file_id)
+        file_path = await asyncio.to_thread(self._store_file, content, filename, dataset, file_id)
         dagster_run_id = await self._trigger_dagster(file_path, dataset, filename)
 
         status = "completed" if dagster_run_id else "stored"

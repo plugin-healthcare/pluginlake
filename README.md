@@ -50,21 +50,40 @@ uv run dagster dev -m pluginlake.definitions
 
 ### Docker
 
-Start the full dev environment with Docker Compose (Dagster + Postgres + FastAPI):
+Start the full dev environment with Docker Compose:
 
 ```bash
-just dev-up
+just dev-up           # With dashboard UI
+just dev-up-headless  # Without dashboard
 ```
 
-This starts:
+This mirrors the production architecture with source code mounted for hot reload:
 
-| Container  | Purpose                                        |
-| ---------- | ---------------------------------------------- |
-| postgres   | Dagster metadata storage                       |
-| dagster    | All-in-one: webserver + daemon + code location |
-| pluginlake | FastAPI service                                |
+| Container           | Purpose                                          |
+| ------------------- | ------------------------------------------------ |
+| postgres            | Dagster metadata + DuckLake catalog              |
+| dagster-webserver   | Web UI + GraphQL API (port 3000)                 |
+| dagster-daemon      | Schedules, sensors, run queue                    |
+| dagster-code-server | Asset definitions via gRPC (port 4000)           |
+| pluginlake          | FastAPI service (port 8000)                      |
 
-Source code is volume-mounted for hot reload. Stop with `just dev-down`.
+Stop with `just dev-down`.
+
+### Smoke test
+
+Run an end-to-end integration test against the full stack:
+
+```bash
+just smoke-test-full
+```
+
+This starts an isolated stack with test fixtures (ephemeral volumes), runs `scripts/smoke_test.py` to validate the entire pipeline, then tears everything down. Safe for CI — leaves no state behind.
+
+To run against an already-running dev stack:
+
+```bash
+just smoke-test
+```
 
 ### Quality checks
 
@@ -78,23 +97,35 @@ just ci           # Run all checks (lint + test + secure)
 
 ## Production
 
-Start the production deployment:
+### Quick start (with CLI)
 
 ```bash
+uv pip install -e .
+pluginlake init
+pluginlake up --instance ds-001
+```
+
+### Quick start (without CLI)
+
+```bash
+cp deploy/compose/.env.example deploy/compose/.env
+# Edit .env — set POSTGRES_PASSWORD and paths
 just up
 ```
+
+See [docs/guides/deployment.md](docs/guides/deployment.md) for full setup instructions.
 
 This runs the full container architecture:
 
 | Container           | Image                           | Purpose                                       |
 | ------------------- | ------------------------------- | --------------------------------------------- |
-| postgres            | `dhi.io/postgres:17-alpine3.22` | Dagster metadata storage                      |
-| dagster-webserver   | `dagster-webserver.Dockerfile`  | Web UI (port 3000)                            |
-| dagster-daemon      | `dagster-webserver.Dockerfile`  | Schedules, sensors, run queue                 |
-| dagster-code-server | `pluginlake.Dockerfile`         | Serves asset definitions via gRPC (port 4000) |
-| pluginlake          | `pluginlake.Dockerfile`         | FastAPI service                               |
+| postgres            | `dhi.io/postgres:17-alpine3.22` | Dagster metadata + DuckLake catalog            |
+| dagster-webserver   | `dagster.Dockerfile`            | Web UI + GraphQL API (port 3000)               |
+| dagster-daemon      | `dagster.Dockerfile`            | Schedules, sensors, run queue                  |
+| dagster-code-server | `pluginlake.Dockerfile`         | Serves asset definitions via gRPC (port 4000)  |
+| pluginlake          | `pluginlake.Dockerfile`         | FastAPI service                                |
 
-Stop with `just down`.
+Stop with `pluginlake down --instance ds-001` or `just down`.
 
 ## Using pluginlake as a package
 

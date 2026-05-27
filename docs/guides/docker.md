@@ -9,8 +9,8 @@ pluginlake uses separate containers for each concern:
 | Container | Dockerfile | Purpose |
 |-----------|-----------|---------|
 | **postgres** | `dhi.io/postgres:17-alpine3.22` (pre-built) | Dagster metadata + DuckLake catalog |
-| **dagster-webserver** | `dagster-webserver.Dockerfile` | Dagster web UI |
-| **dagster-daemon** | `dagster-webserver.Dockerfile` | Schedules, sensors, run queue |
+| **dagster-webserver** | `dagster.Dockerfile` | Dagster web UI + GraphQL API |
+| **dagster-daemon** | `dagster.Dockerfile` | Schedules, sensors, run queue |
 | **dagster-code-server** | `pluginlake.Dockerfile` | Asset definitions served via gRPC |
 | **pluginlake** | `pluginlake.Dockerfile` | FastAPI service |
 | **pluginlake-ui** | `ui-datastation.Dockerfile` | Datastation Streamlit dashboard |
@@ -43,7 +43,7 @@ This uses `deploy/compose/docker-compose.yaml`. Images are fully self-contained 
 ```bash
 # From the project root:
 docker build -f deploy/docker/pluginlake.Dockerfile -t pluginlake .
-docker build -f deploy/docker/dagster-webserver.Dockerfile -t dagster-webserver .
+docker build -f deploy/docker/dagster.Dockerfile -t dagster .
 ```
 
 The build context is always the project root (`../../` in the compose files) because Dockerfiles need access to `pyproject.toml`, `uv.lock`, `src/`, and `config/`.
@@ -168,24 +168,32 @@ POSTGRES_PASSWORD=dagster
 
 A committed `.env.example` documents which variables are needed. The `.env` file itself is gitignored.
 
-### Production: `env_file`
+### Production: `--env-file` with XDG paths
 
-The production compose file uses `env_file` to load variables from a separate file:
+The production compose file uses `--env-file` to load instance-specific configuration. You can either use the `pluginlake` CLI or set it up manually.
 
-```yaml
-# docker-compose.yaml
-services:
-  postgres:
-    env_file: .env.production
-```
-
-Operators create `.env.production` on the server from the committed `.env.production.example` template and fill in real credentials. This file is gitignored and should be readable only by the user running Docker.
+**Option A: with CLI** (requires `uv pip install -e .`):
 
 ```bash
-cp deploy/compose/.env.production.example deploy/compose/.env.production
-chmod 600 deploy/compose/.env.production
-# Edit with real values
+pluginlake init        # Creates ~/.config/pluginlake/<id>/.env
+pluginlake up -i <id>  # Passes --env-file automatically
 ```
+
+**Option B: manual** (Docker only, no Python install needed):
+
+```bash
+cp deploy/compose/.env.example deploy/compose/.env
+chmod 600 deploy/compose/.env
+# Edit .env — fill in POSTGRES_PASSWORD and paths
+
+docker compose \
+  -f deploy/compose/docker-compose.yaml \
+  --env-file deploy/compose/.env \
+  -p pluginlake-ds-001 \
+  up -d --build
+```
+
+The `.env.example` template documents all required variables. See [deployment.md](deployment.md) for the full walkthrough.
 
 ### Docker Compose secrets (Swarm mode)
 
@@ -247,14 +255,17 @@ deploy/
 ├── compose/
 │   ├── .env                          # Dev values (gitignored)
 │   ├── .env.example                  # Template for dev (committed)
-│   ├── .env.production               # Prod values (gitignored)
-│   ├── .env.production.example       # Template for prod (committed)
+│   ├── .env                          # Instance values (gitignored, created from .env.example)
 │   ├── docker-compose.dev.yaml       # Dev: single dagster container + postgres + pluginlake + UI
 │   ├── docker-compose.central.yaml   # Central dashboard (separate compose)
 │   └── docker-compose.yaml           # Prod: separate webserver, daemon, code-server
+├── templates/
+│   ├── .env.template                 # Template for CLI-generated .env files
+│   ├── dagster.yaml                  # Dagster instance config template
+│   └── workspace.yaml                # Dagster workspace config template
 └── docker/
     ├── dagster.dev.Dockerfile         # Dev all-in-one dagster (single stage)
-    ├── dagster-webserver.Dockerfile   # Prod webserver + daemon (multi-stage)
+    ├── dagster.Dockerfile             # Prod webserver + daemon (multi-stage)
     ├── pluginlake.dev.Dockerfile      # Dev FastAPI (single stage)
     ├── pluginlake.Dockerfile          # Prod FastAPI + code-server (multi-stage)
     ├── ui-datastation.dev.Dockerfile  # Dev datastation dashboard (hot reload)

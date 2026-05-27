@@ -9,8 +9,8 @@ FROM dhi.io/python:3.13-debian13-dev AS builder
 COPY --from=dhi.io/uv:0-debian13-dev /usr/local/bin/uv /usr/local/bin/uvx /usr/local/bin/
 
 WORKDIR /app
-COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --extra infra --no-install-project
+COPY pyproject.toml uv.lock README.md ./
+RUN uv sync --frozen --no-dev --extra infra --no-install-project
 
 # --- Runtime stage ---
 FROM dhi.io/python:3.13-debian13

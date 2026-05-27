@@ -65,3 +65,17 @@
 - Use the `github-issues` skill (`.github/skills/github-issues/SKILL.md`) when creating epics, stories, or populating project boards.
 - Always discover project field IDs dynamically via `gh project field-list`; never hardcode them.
 - Use the `gh` CLI and `gh-sub-issue` extension for parent/child linking.
+
+## Session tracking
+
+Every Copilot session that makes changes must update the following files before completing:
+
+- **`CHANGELOG.md`** — Add entries under `[Unreleased]` using Keep a Changelog format. Group changes as Added, Changed, Fixed, Deprecated, Removed, or Security.
+- **`SESSION_HANDOFF.md`** — Update all sections: current state, what was done, what needs to be done, known issues, and context for next session. This is the primary handoff mechanism between sessions.
+
+Rules:
+- Read `SESSION_HANDOFF.md` at the start of every session to understand current project state and priorities.
+- Update `SESSION_HANDOFF.md` at the end of every session (or before committing).
+- Keep changelog entries concise but specific enough to be useful without reading the diff.
+- Mark completed items in the "What Needs To Be Done" section and add new items discovered during work.
+- If switching branches, note the branch name and status clearly.

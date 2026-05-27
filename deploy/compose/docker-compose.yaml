@@ -1,13 +1,17 @@
 services:
   postgres:
     image: dhi.io/postgres:17-alpine3.22
-    env_file: .env.production
+    restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pluginlake}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: ${DAGSTER_PG_DB:-dagster}
     volumes:
-      - dagster-postgres:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pluginlake}"]
       interval: 3s
       timeout: 3s
       retries: 10
@@ -16,12 +20,24 @@ services:
   dagster-webserver:
     build:
       context: ../../
-      dockerfile: deploy/docker/dagster-webserver.Dockerfile
-    ports:
-      - "3000:3000"
-    env_file: .env.production
+      dockerfile: deploy/docker/dagster.Dockerfile
+    restart: unless-stopped
+    user: "${PUID:?PUID must be set}:${PGID:?PGID must be set}"
     environment:
+      HOME: /app
       DAGSTER_HOME: /app/config/dagster
+      DAGSTER_PG_HOST: postgres
+      DAGSTER_PG_USER: ${POSTGRES_USER:-pluginlake}
+      DAGSTER_PG_PASSWORD: ${POSTGRES_PASSWORD}
+      DAGSTER_PG_DB: ${DAGSTER_PG_DB:-dagster}
+    ports:
+      - "${DAGSTER_PORT:-3000}:3000"
+    volumes:
+      - ${PLUGINLAKE_CONFIG_DIR:?PLUGINLAKE_CONFIG_DIR must be set}/dagster.yaml:/app/config/dagster/dagster.yaml:ro
+      - ${PLUGINLAKE_CONFIG_DIR}/workspace.yaml:/app/config/dagster/workspace.yaml:ro
+      - ${PLUGINLAKE_STATE_DIR:?PLUGINLAKE_STATE_DIR must be set}/logs/compute:/app/compute_logs
+      - ${PLUGINLAKE_STATE_DIR}/logs/dagster:/app/config/dagster/logs
+      - ${PLUGINLAKE_STATE_DIR}/dagster:/app/.dagster
     depends_on:
       postgres:
         condition: service_healthy
@@ -38,38 +54,60 @@ services:
   dagster-daemon:
     build:
       context: ../../
-      dockerfile: deploy/docker/dagster-webserver.Dockerfile
-    env_file: .env.production
+      dockerfile: deploy/docker/dagster.Dockerfile
+    restart: unless-stopped
+    user: "${PUID}:${PGID}"
     environment:
+      HOME: /app
       DAGSTER_HOME: /app/config/dagster
+      DAGSTER_PG_HOST: postgres
+      DAGSTER_PG_USER: ${POSTGRES_USER:-pluginlake}
+      DAGSTER_PG_PASSWORD: ${POSTGRES_PASSWORD}
+      DAGSTER_PG_DB: ${DAGSTER_PG_DB:-dagster}
     volumes:
-      - dagster-compute-logs:/app/compute_logs
+      - ${PLUGINLAKE_CONFIG_DIR}/dagster.yaml:/app/config/dagster/dagster.yaml:ro
+      - ${PLUGINLAKE_CONFIG_DIR}/workspace.yaml:/app/config/dagster/workspace.yaml:ro
+      - ${PLUGINLAKE_STATE_DIR}/logs/compute:/app/compute_logs
+      - ${PLUGINLAKE_STATE_DIR}/logs/dagster:/app/config/dagster/logs
+      - ${PLUGINLAKE_STATE_DIR}/dagster:/app/.dagster
     depends_on:
       postgres:
         condition: service_healthy
       dagster-code-server:
         condition: service_healthy
-    command: ["dagster-daemon", "run"]
+    command: ["dagster-daemon", "run", "-w", "/app/config/dagster/workspace.yaml"]
 
   dagster-code-server:
     build:
       context: ../../
       dockerfile: deploy/docker/pluginlake.Dockerfile
+    restart: unless-stopped
+    user: "${PUID}:${PGID}"
     ports:
-      - "4000:4000"
-    env_file: .env.production
+      - "${CODE_SERVER_PORT:-4000}:4000"
     environment:
+      DAGSTER_HOME: /app/config/dagster
+      DAGSTER_PG_HOST: postgres
+      DAGSTER_PG_USER: ${POSTGRES_USER:-pluginlake}
+      DAGSTER_PG_PASSWORD: ${POSTGRES_PASSWORD}
+      DAGSTER_PG_DB: ${DAGSTER_PG_DB:-dagster}
       DUCKLAKE_PG_HOST: postgres
       DUCKLAKE_PG_PORT: "5432"
+      DUCKLAKE_PG_USER: ${POSTGRES_USER:-pluginlake}
+      DUCKLAKE_PG_PASSWORD: ${POSTGRES_PASSWORD}
       DUCKLAKE_PG_DB: ${DUCKLAKE_PG_DB:-ducklake}
       PLUGINLAKE_STORAGE_BASE_DIR: .data/storage
     volumes:
-      - pluginlake-data:/app/.data
+      - ${PLUGINLAKE_CONFIG_DIR}/dagster.yaml:/app/config/dagster/dagster.yaml:ro
+      - ${PLUGINLAKE_CONFIG_DIR}/workspace.yaml:/app/config/dagster/workspace.yaml:ro
+      - ${PLUGINLAKE_DATA_DIR:?PLUGINLAKE_DATA_DIR must be set}/storage:/app/.data
+      - ${PLUGINLAKE_STATE_DIR}/logs/compute:/app/compute_logs
+      - ${PLUGINLAKE_STATE_DIR}/logs/dagster:/app/config/dagster/logs
     healthcheck:
-      test: ["CMD", "dagster", "api", "grpc-health-check", "-p", "4000"]
-      interval: 3s
-      timeout: 3s
-      start_period: 3s
+      test: ["CMD", "python", "-c", "import socket; s=socket.create_connection(('localhost',4000),2); s.close()"]
+      interval: 5s
+      timeout: 5s
+      start_period: 15s
       retries: 10
     depends_on:
       postgres:
@@ -86,19 +124,22 @@ services:
     build:
       context: ../../
       dockerfile: deploy/docker/pluginlake.Dockerfile
-    env_file: .env.production
+    restart: unless-stopped
+    user: "${PUID}:${PGID}"
     environment:
-      PLUGINLAKE_SERVER_HOST: ${PLUGINLAKE_SERVER_HOST:-0.0.0.0}
+      PLUGINLAKE_SERVER_HOST: "0.0.0.0"
       PLUGINLAKE_SERVER_PORT: ${PLUGINLAKE_SERVER_PORT:-8000}
       DUCKLAKE_PG_HOST: postgres
       DUCKLAKE_PG_PORT: "5432"
+      DUCKLAKE_PG_USER: ${POSTGRES_USER:-pluginlake}
+      DUCKLAKE_PG_PASSWORD: ${POSTGRES_PASSWORD}
       DUCKLAKE_PG_DB: ${DUCKLAKE_PG_DB:-ducklake}
       PLUGINLAKE_INGEST_DAGSTER_WEBSERVER_URL: http://dagster-webserver:3000
       PLUGINLAKE_STORAGE_BASE_DIR: .data/storage
     ports:
       - "${PLUGINLAKE_SERVER_PORT:-8000}:${PLUGINLAKE_SERVER_PORT:-8000}"
     volumes:
-      - pluginlake-data:/app/.data
+      - ${PLUGINLAKE_DATA_DIR}/storage:/app/.data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${PLUGINLAKE_SERVER_PORT:-8000}/health')"]
       interval: 5s
@@ -113,11 +154,14 @@ services:
   dashboard-datastation:
     build:
       context: ../../
-      dockerfile: deploy/docker/dashboard-datastation.Dockerfile
+      dockerfile: deploy/docker/ui-datastation.Dockerfile
+    restart: unless-stopped
+    user: "${PUID}:${PGID}"
     ports:
       - "8501:8501"
+    profiles: [ui]
     environment:
-      DASHBOARD_API_URL: http://pluginlake:8000
+      DASHBOARD_API_URL: http://pluginlake:${PLUGINLAKE_SERVER_PORT:-8000}
     depends_on:
       pluginlake:
         condition: service_healthy
@@ -128,6 +172,4 @@ services:
       retries: 3
 
 volumes:
-  dagster-postgres:
-  dagster-compute-logs:
-  pluginlake-data:
+  postgres-data:

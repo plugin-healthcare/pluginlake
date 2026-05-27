@@ -9,4 +9,11 @@ app = create_app()
 
 if __name__ == "__main__":
     server = ServerSettings()
-    uvicorn.run(app, host=server.host, port=server.port)
+    uvicorn.run(
+        "pluginlake.__main__:app",
+        host=server.host,
+        port=server.port,
+        workers=server.workers,
+        limit_concurrency=server.limit_concurrency,
+        timeout_keep_alive=server.timeout_keep_alive,
+    )
