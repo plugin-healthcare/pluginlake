@@ -197,6 +197,38 @@ We follow the [Linux Foundation policy on generative AI](https://www.linuxfounda
 - GitHub Copilot-specific configuration is in [`.github/copilot-instructions.md`](../../.github/copilot-instructions.md), which references `AGENTS.md`.
 - Other AI tools (Cursor, Claude, etc.) should follow `AGENTS.md` directly.
 
+### Writing good agent instructions
+
+Keep `AGENTS.md` short and precise (under 50 lines). Long instruction files dilute signal because agents lose focus when given too much context at once.
+
+**Principles:**
+
+- State hard rules (what to always/never do), not tutorials.
+- Include project-specific facts an agent cannot infer from code alone (e.g., "use `uv`, not `pip`" or "always read `pyproject.toml` for linting settings").
+- Use hierarchical linking: a top-level file links to domain-specific instruction files that load contextually.
+- Prefer showing one correct example over explaining in prose.
+
+**What to include in the top-level file:**
+
+- What the project is (one sentence).
+- Repository layout (condensed tree).
+- Hard rules (5-10 bullet points max).
+- Links to detailed instruction files.
+
+**What belongs in separate instruction files** (e.g., `.github/instructions/*.md`):
+
+- Language conventions with examples (Python style, type annotations).
+- Framework-specific patterns (Dagster assets, pipeline structure).
+- Deployment and infrastructure context (secrets, known issues).
+
+These files can use `applyTo` patterns so agents only load them when relevant (e.g., Python rules only when editing `*.py`).
+
+**What NOT to put in agent instructions:**
+
+- Anything the agent can infer from `pyproject.toml`, linter config, or existing code.
+- Full API documentation or runbooks. Link to docs instead.
+- Frequently changing information (versions, URLs) that goes stale fast.
+
 ## CI/CD
 
 ### Pre-commit hooks
