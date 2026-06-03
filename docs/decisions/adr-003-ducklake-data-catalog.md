@@ -102,7 +102,7 @@ Dagster is not in the read path because reads don't mutate data and routing thro
 | Approach                                                    | Rejected because                                                                              |
 |-------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
 | Synchronous (FastAPI validates + writes + notifies Dagster) | User waits for full pipeline. Dagster only gets a notification, not lineage                   |
-| Landing zone (FastAPI → staging → Dagster)                  | Adds complexity and decouples ingestion from processing. Staging area needed for raw payloads |
+| Decoupled landing zone (FastAPI dumps to disk, Dagster polls/watches) | Decouples ingestion from processing — Dagster discovers files independently rather than being triggered directly. Adds complexity without benefit since FastAPI already knows when to trigger |
 
 ---
 

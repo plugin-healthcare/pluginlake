@@ -115,6 +115,72 @@ We use [pytest](https://docs.pytest.org/en/stable/) as our testing framework. We
 uv run pytest
 ```
 
+## Branching and Releases
+
+For branch naming and the basic contribution flow, see [CONTRIBUTING.md](../../CONTRIBUTING.md).
+
+### Branch strategy
+
+We use GitHub Flow: one long-lived branch (`main`) with short-lived feature branches.
+
+| Branch | Purpose |
+|--------|---------|
+| `main` | Always deployable. Protected, requires PR review. |
+| Feature branches | Short-lived, branched from `main`. Named `<category>/<description>` (e.g., `docs/adrs-changelog`, `feat/cli-module`, `fix/port-mismatch`). |
+
+Releases are tagged commits on `main`, not separate branches.
+
+### Versioning
+
+We follow [Semantic Versioning](https://semver.org/):
+
+- **Patch** (`0.1.x`): bug fixes, security bumps, small corrections.
+- **Minor** (`0.x.0`): new features, new modules, non-breaking changes to the package.
+- **Major** (`x.0.0`): breaking changes to public APIs or data formats.
+
+**What does NOT bump the version:**
+
+- Documentation-only changes (deployed continuously via GitHub Pages).
+- CI/CD workflow updates.
+- Test additions or refactors with no code change.
+- ADRs and design specs.
+
+**What bumps the version:**
+
+- Any change to `src/pluginlake/` that affects behavior.
+- Dependency updates that change runtime behavior.
+- Docker image changes that affect deployment.
+
+### Release process
+
+1. Ensure `CHANGELOG.md` is up to date with an `[Unreleased]` section describing all changes since the last release.
+2. Update the version in `pyproject.toml`.
+3. Rename `[Unreleased]` to `[x.y.z] — YYYY-MM-DD` in the changelog (use today's date — the release date is when you tag, not when the code was merged).
+4. Add a fresh empty `[Unreleased]` section above it.
+5. Commit the version bump (can be part of the feature PR that completes the milestone, or a separate small PR).
+6. Merge to `main` via PR.
+7. Tag the merge commit: `git tag vx.y.z && git push --tags`.
+8. Create a GitHub Release from the tag (copies changelog entry as release notes).
+
+### Changelog conventions
+
+We follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Use these categories:
+
+- **Added** for new features or files.
+- **Changed** for changes in existing functionality.
+- **Deprecated** for soon-to-be removed features.
+- **Removed** for removed features or files.
+- **Fixed** for bug fixes.
+- **Security** for vulnerability fixes.
+
+Write entries from the user's perspective. Reference ADRs or PRs where helpful.
+
+**Workflow:**
+
+- Add entries to `[Unreleased]` as you merge PRs (in the PR itself, or right after).
+- When releasing, move entries from `[Unreleased]` into the new version section.
+- The tag should point to the commit that contains the changelog update, so the tagged state is self-documenting.
+
 ## CI/CD
 
 ### Pre-commit hooks
