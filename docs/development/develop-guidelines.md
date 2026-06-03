@@ -181,6 +181,22 @@ Write entries from the user's perspective. Reference ADRs or PRs where helpful.
 - When releasing, move entries from `[Unreleased]` into the new version section.
 - The tag should point to the commit that contains the changelog update, so the tagged state is self-documenting.
 
+## AI-assisted contributions
+
+We follow the [Linux Foundation policy on generative AI](https://www.linuxfoundation.org/legal/generative-ai): AI-generated code is treated the same as any other contribution.
+
+### Rules
+
+1. **You own your commits.** The contributor is fully responsible for every line they commit, regardless of whether AI assisted in writing it. Review, understand, and validate before committing.
+2. **License compliance.** Ensure the AI tool's terms do not conflict with our Apache-2.0 license. If the output includes identifiable third-party code, verify it is compatibly licensed and provide attribution.
+3. **No special process.** AI-assisted contributions go through the same PR review as any other change.
+
+### Agent configuration
+
+- Agent-agnostic coding instructions live in [`AGENTS.md`](../../AGENTS.md) at the repository root.
+- GitHub Copilot-specific configuration is in [`.github/copilot-instructions.md`](../../.github/copilot-instructions.md), which references `AGENTS.md`.
+- Other AI tools (Cursor, Claude, etc.) should follow `AGENTS.md` directly.
+
 ## CI/CD
 
 ### Pre-commit hooks

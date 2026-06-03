@@ -2,7 +2,7 @@
 name = "pluginlake"
 version = "0.1.0"
 description = "The federated lakehouse."
-license = { text = "MIT" }
+license = { text = "Apache-2.0" }
 authors = [
     { name = "Yannick Vinkesteijn" },
     { name = "Tim Hendriks" },
