@@ -1,4 +1,4 @@
-# ADR-007: Dataspace Protocol, authentication, and authorization architecture for pluginlake
+# ADR-008: Dataspace Protocol, authentication, and authorization architecture for pluginlake
 
 **Status:** Proposed
 **Date:** 2026-05-28
@@ -221,11 +221,11 @@ These hold across all phases, including the placeholder middleware used while st
 ### Must resolve before implementation
 
 1. **Pluginlake ODRL profile specification** — define the exact actions (`pluginlake:aggregate`, `pluginlake:query`, `pluginlake:count`, `pluginlake:compute`), constraint types, and asset URN scheme (`urn:pluginlake:dataset:{name}`).
-2. **PluginlakeAccessCredential schema** — the VC type, required fields, issuer rules, how ODRL permissions are embedded. Candidate for ADR-008.
+2. **PluginlakeAccessCredential schema** — the VC type, required fields, issuer rules, how ODRL permissions are embedded. Candidate for ADR-009.
 3. **Hub signing key distribution** — how stations learn to trust hub signing keys. Likely: hub's DID document contains the signing key.
 4. **Collaboration hub credential issuance** — governance decision per collaboration.
 
-### Deferred to ADR-008: Contract-to-compute mapping and query safety
+### Deferred to ADR-009: Contract-to-compute mapping and query safety
 
 5. Structured filter AST and query parameterization
 6. Pre-approved algorithm and container registry

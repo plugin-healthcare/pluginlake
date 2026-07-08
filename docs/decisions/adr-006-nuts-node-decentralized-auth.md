@@ -5,16 +5,16 @@
 
 ## TL;DR
 
-This ADR defines how pluginlake integrates [Nuts](https://nuts-node.readthedocs.io/) as the decentralized identity layer for inter-node communication (trust boundary 2: node-to-node). Nuts handles organizational identity only. Per-user authorization, contract negotiation, and enforcement are defined in [ADR-007](adr-007-dataspace-protocol-authz-authc-rbac.md).
+This ADR defines how pluginlake integrates [Nuts](https://nuts-node.readthedocs.io/) as the decentralized identity layer for inter-node communication (trust boundary 2: node-to-node). Nuts handles organizational identity only. Per-user authorization, contract negotiation, and enforcement are defined in [ADR-008](adr-008-dataspace-protocol-authz-authc-rbac.md).
 
 **Scope of Nuts in pluginlake:**
 
 | Nuts does | Nuts does NOT do |
 |---|---|
 | Prove which organization operates a node | Decide what a specific user may access |
-| Establish bilateral trust between nodes | Negotiate data access contracts (→ DSP, ADR-007) |
-| Provide network membership discovery | Enforce per-dataset or per-query permissions (→ ODRL, ADR-007) |
-| Validate DPoP proofs per request | Issue or verify per-user credentials (→ PluginlakeAccessCredential, ADR-007) |
+| Establish bilateral trust between nodes | Negotiate data access contracts (→ DSP, ADR-008) |
+| Provide network membership discovery | Enforce per-dataset or per-query permissions (→ ODRL, ADR-008) |
+| Validate DPoP proofs per request | Issue or verify per-user credentials (→ PluginlakeAccessCredential, ADR-008) |
 
 ---
 
@@ -186,7 +186,7 @@ These are two separate Dagster code locations, deployed on separate instances in
 
 ### One hub, many stations (standard federation)
 
-The primary model. One processing hub receives bilateral agreements (via DSP, see ADR-007) from participating hospitals. The hub aggregates results and applies SDC.
+The primary model. One processing hub receives bilateral agreements (via DSP, see ADR-008) from participating hospitals. The hub aggregates results and applies SDC.
 
 ```
 Hosp. A ──agreement──► Hub (IKNL oncology) ◄──agreement── Hosp. B
@@ -238,9 +238,9 @@ pluginlake defines one Bolt (`pluginlake-data-access`) for the Nuts network:
 - **Category:** server-to-server, Organization (RFC003 §7)
 - **No patient subject, no user context in the Nuts layer**
 
-The Bolt establishes that any node presenting a valid `NutsOrganizationCredential` is a recognized participant in the pluginlake network. It does NOT carry per-user permissions or data access scopes (those are handled by DSP agreements and ODRL VCs in ADR-007).
+The Bolt establishes that any node presenting a valid `NutsOrganizationCredential` is a recognized participant in the pluginlake network. It does NOT carry per-user permissions or data access scopes (those are handled by DSP agreements and ODRL VCs in ADR-008).
 
-**Network role enforcement:** The `NutsOrganizationCredential` includes a `role` claim (`hub` or `station`). The station's Bolt policy validates that the requesting node holds `role: hub` — stations cannot initiate data requests to other stations. This is the first protection layer (boundary 2 in ADR-007) that rejects wrong-role requests before DSP/ODRL logic runs.
+**Network role enforcement:** The `NutsOrganizationCredential` includes a `role` claim (`hub` or `station`). The station's Bolt policy validates that the requesting node holds `role: hub` — stations cannot initiate data requests to other stations. This is the first protection layer (boundary 2 in ADR-008) that rejects wrong-role requests before DSP/ODRL logic runs.
 
 The Bolt is deployed as a JSON policy file per Nuts node, shipped as a default in the pluginlake repository.
 
@@ -254,7 +254,7 @@ The Nuts node is not multi-tenant. Each pluginlake instance runs its own Nuts no
 
 ### Scope granularity
 
-Nuts scopes map to static presentation definitions, not individual resources. Per-dataset access control is not achievable at the Nuts layer. This is by design: Nuts handles organizational membership, the VC-based ODRL profile (ADR-007) handles fine-grained per-user access.
+Nuts scopes map to static presentation definitions, not individual resources. Per-dataset access control is not achievable at the Nuts layer. This is by design: Nuts handles organizational membership, the VC-based ODRL profile (ADR-008) handles fine-grained per-user access.
 
 ### Credential model and FHIR
 
@@ -262,7 +262,7 @@ RFC014's `resources` array uses FHIR operation names, and the abstract says "cur
 
 ### `localParameters` limitations
 
-RFC014 `localParameters` cannot be used as a general-purpose permission carrier: parameters may not influence the credential subject, a Bolt may not require them, and they are of value only to the issuer. Fine-grained permissions belong in the PluginlakeAccessCredential (VC with ODRL profile, ADR-007), not in Nuts credentials.
+RFC014 `localParameters` cannot be used as a general-purpose permission carrier: parameters may not influence the credential subject, a Bolt may not require them, and they are of value only to the issuer. Fine-grained permissions belong in the PluginlakeAccessCredential (VC with ODRL profile, ADR-008), not in Nuts credentials.
 
 ### DPoP validation
 
@@ -293,7 +293,7 @@ For pluginlake, the primary approach is **institutional OIDC** (SURFconext, Entr
 
 1. Researcher logs in via institutional SSO at the processing hub.
 2. The hub maps the OIDC issuer to a known Nuts DID (verified mapping).
-3. The hub issues a PluginlakeAccessCredential (VC) to the researcher (see ADR-007).
+3. The hub issues a PluginlakeAccessCredential (VC) to the researcher (see ADR-008).
 4. For hub→station communication, the hub uses its own Nuts identity (org-to-org).
 
 The alternative Nuts-native flow (PractitionerLogin contract) is available for organizations that prefer it. Both approaches produce the same result: verified organizational identity + user identity.
@@ -320,7 +320,7 @@ The Nuts Node is explicitly not multi-tenant. If a processing hub serves users f
 - Each node runs a Nuts Node sidecar (~200 MB memory) with its own DID.
 - Station operators need PKIoverheid certificates for the production network.
 - The FastAPI middleware gains a dependency on the local Nuts Node for DPoP validation.
-- Nuts handles organizational identity only. Per-user authorization is handled by DSP + ODRL VCs (ADR-007).
+- Nuts handles organizational identity only. Per-user authorization is handled by DSP + ODRL VCs (ADR-008).
 - A researcher's identity is scoped to a single processing hub. No cross-hub credential sharing.
 - The pluginlake Bolt (`pluginlake-data-access`) requires only `NutsOrganizationCredential`, no fine-grained scopes.
 - Network discovery is via DHD's Discovery Service server. Joining the network = registering there.
@@ -355,7 +355,7 @@ Start with OIDC + DID mapping for researchers (standard SSO UX). Nuts Practition
 
 - [ADR-001: Asset Architecture](adr-001-asset-architecture.md) — Dagster definitions and `Definitions.merge()` pattern
 - [ADR-005: FastAPI Gateway](adr-005-fastapi-gateway.md) — the gateway that Nuts middleware integrates into
-- [ADR-007: DSP + Authorization](adr-007-dataspace-protocol-authz-authc-rbac.md) — contract negotiation, per-user VCs, enforcement (trust boundary 3)
+- [ADR-008: DSP + Authorization](adr-008-dataspace-protocol-authz-authc-rbac.md) — contract negotiation, per-user VCs, enforcement (trust boundary 3)
 
 ## References
 

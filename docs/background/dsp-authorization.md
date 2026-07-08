@@ -2,7 +2,7 @@
 
 Design specification for how the Eclipse Dataspace Protocol, Nuts identity, and ODRL authorization map onto pluginlake's existing components (FastAPI, Dagster, DuckLake).
 
-This document is the implementation companion to [ADR-007](../decisions/adr-007-dataspace-protocol-authz-authc-rbac.md) (the decision record).
+This document is the implementation companion to [ADR-008](../decisions/adr-008-dataspace-protocol-authz-authc-rbac.md) (the decision record).
 
 ---
 
@@ -340,7 +340,7 @@ GET  /dsp/data/{transfer_id}       → Pull result data (scoped token required)
 
 **Delivers:**
 - `src/pluginlake/authz/`: ODRL evaluator, VC verification, enforcement
-- PluginlakeAccessCredential schema (ADR-008)
+- PluginlakeAccessCredential schema (ADR-009)
 - Hub issues VCs, station verifies per-request
 - Operation registry (YAML → SQL templates / Dagster jobs)
 - Constraint enforcement (columns, rows, privacy)
@@ -451,7 +451,7 @@ sequenceDiagram
 - Interoperable with Dutch healthcare ecosystem via Nuts
 
 **Drawbacks:**
-- Custom user context token format must be standardized (candidate for ADR-008)
+- Custom user context token format must be standardized (candidate for ADR-009)
 - Hub signing key management is an operational concern
 - OPA sidecar adds a deployment component per station and per hub
 - JSON-LD credentials must be flattened before passing to OPA (no native JSON-LD in Rego)
@@ -1250,7 +1250,7 @@ graph TD
 
 ## Enforcement: translating contracts to compute and data
 
-> This section describes the enforcement architecture at a high level. The detailed specification of query safety, filter validation, algorithm approval, and container sandboxing is deferred to **ADR-008: Contract-to-compute mapping and query safety**.
+> This section describes the enforcement architecture at a high level. The detailed specification of query safety, filter validation, algorithm approval, and container sandboxing is deferred to **ADR-009: Contract-to-compute mapping and query safety**.
 
 ### The translation problem
 
@@ -1425,7 +1425,7 @@ def enforce_request(
     # NOTE: request.filters uses a structured filter AST (not raw SQL).
     # Only allowed columns/operators are accepted. Values are parameterized.
     # Station row constraints are combined with AND before SQL generation.
-    # Full filter validation and query-to-compute mapping is specified in ADR-008.
+    # Full filter validation and query-to-compute mapping is specified in ADR-009.
     operation = operation_registry.resolve(request.operation)
     query = operation.build_sql(
         schema=asset.ducklake_schema,
@@ -1589,7 +1589,7 @@ The full architecture (DSP + Nuts + ODRL profile + VC-based credentials + enforc
 
 **Delivers:**
 - `src/pluginlake/authz/` module: ODRL profile evaluator, VC verification, enforcement layer
-- PluginlakeAccessCredential schema definition (ADR-008)
+- PluginlakeAccessCredential schema definition (ADR-009)
 - Hub issues VCs to researchers (signed by hub DID)
 - Station verifies VC at request time + cross-checks against active agreement
 - Station operation registry (YAML: maps actions to SQL templates / Dagster jobs)
@@ -1652,13 +1652,13 @@ The full architecture (DSP + Nuts + ODRL profile + VC-based credentials + enforc
 ### Must resolve before implementation
 
 1. **Pluginlake ODRL profile specification** -- define the exact actions (`pluginlake:aggregate`, `pluginlake:query`, `pluginlake:count`, `pluginlake:compute`), constraint types (`purpose`, `dateTime`, `maxCardinality`, `columns`), and asset URN scheme (`urn:pluginlake:dataset:{name}`).
-2. **PluginlakeAccessCredential schema** -- the VC type, required fields, issuer rules, how ODRL permissions are embedded. Candidate for ADR-008.
+2. **PluginlakeAccessCredential schema** -- the VC type, required fields, issuer rules, how ODRL permissions are embedded. Candidate for ADR-009.
 3. **Hub signing key distribution** -- how stations learn to trust hub signing keys. Likely resolved by: hub's DID document contains the signing key, station resolves DID via Nuts network.
 4. **Collaboration hub credential issuance** -- governance decision per collaboration.
 
-### Deferred to ADR-008: Contract-to-compute mapping and query safety
+### Deferred to ADR-009: Contract-to-compute mapping and query safety
 
-The following questions are in scope for ADR-008 (not resolved here):
+The following questions are in scope for ADR-009 (not resolved here):
 
 5. **Structured filter AST and query parameterization** -- requests must use a validated filter structure (not raw SQL). Define allowed operators, column references, and how values are parameterized to prevent injection/bypass.
 6. **Pre-approved algorithm and container registry** -- which Docker images, Dagster jobs, and query patterns are allowed. How new algorithms get reviewed and approved before they can be referenced in a contract.

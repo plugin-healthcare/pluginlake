@@ -10,4 +10,5 @@ This directory contains Architecture Decision Records (ADRs) for the pluginlake 
 | [ADR-004](adr-004-data-organization.md)         | Data organization and naming conventions         | Proposed | 2026-02-24 |
 | [ADR-005](adr-005-fastapi-gateway.md)           | FastAPI as unified API gateway                   | Proposed | 2026-03-05 |
 | [ADR-006](adr-006-nuts-node-decentralized-auth.md) | Nuts Node integration for decentralized identity | Accepted | 2026-03-19 |
-| [ADR-007](adr-007-dataspace-protocol-authz-authc-rbac.md) | DSP, authentication, and authorization architecture | Proposed | 2026-05-28 |
+| [ADR-007](adr-007-column-level-lineage.md)         | Column-level lineage strategy                  | Proposed | 2026-04-12 |
+| [ADR-008](adr-008-dataspace-protocol-authz-authc-rbac.md) | DSP, authentication, and authorization architecture | Proposed | 2026-05-28 |
