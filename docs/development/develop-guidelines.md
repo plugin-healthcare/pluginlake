@@ -253,23 +253,23 @@ We use GitHub Actions to automate our CI/CD pipeline. All workflows are defined 
 
 #### CI Workflow (`ci.yaml`)
 
-Runs on every push and pull request to `main` and `dev`:
+Runs on every push and pull request to `main`:
 - **Ruff check** linting only (no auto-fixing)
 - **Pytest**: Unit tests on all python code
 
 #### Security Workflow (`security.yaml`)
 
 - Runs **daily at 06:00 UTC** on the default branch
-- Also runs on push to `dev`
+- Can also be triggered manually via workflow dispatch
 - Checks for security vulnerabilities using `uv-secure`
 
-#### Docker Build Workflow (`docker-build.yaml`)
+#### Docker Build Workflow (`docker-build.yaml.disabled`)
 
-Automatically builds and pushes Docker images to Azure Container Registry when relevant files change:
-- Triggers on push to `main` or `dev` when `src/`, `deploy/docker/`, `pyproject.toml`, or `uv.lock` change
-- Uses path filtering to only rebuild affected images
-- Tags: `latest` (main), `dev` (dev branch), and commit SHA
-- Includes SLSA provenance and SBOM attestations
+A disabled scaffold for building and pushing the production images to Azure Container Registry. It is kept with a `.disabled` extension so GitHub does not run it, and needs auth configured (OIDC recommended for a public repo) before being enabled. When enabled it will:
+- Trigger on push to `main` when `src/`, `deploy/docker/`, `pyproject.toml`, or `uv.lock` change
+- Build all images (`pluginlake/pluginlake`, `pluginlake/dagster-webserver`, `pluginlake/ui-central`, `pluginlake/ui-datastation`)
+- Tag: `latest` and commit SHA
+- Include SLSA provenance and SBOM attestations
 
 #### Dependabot
 
@@ -278,4 +278,4 @@ Dependabot is configured to check daily for updates to:
 - GitHub Actions versions
 - Docker base images
 
-All update PRs target the `dev` branch.
+All update PRs target the `main` branch.
