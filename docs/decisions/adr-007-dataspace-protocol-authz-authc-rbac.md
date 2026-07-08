@@ -50,7 +50,7 @@ Per-request calls carry two layers: the Nuts DPoP-bound access token in the `Aut
 |---|---|
 | **DID** (Decentralized Identifier) | A globally unique identifier (like a URL) that an organization controls itself — no central registry needed. Each pluginlake instance has its own DID. |
 | **Credential** | A digitally signed statement about a subject. Example: "Hospital X is a recognized PLUGIN participant with role station." |
-| **Verifiable Credential (VC)** | A credential in a standard format (W3C) that anyone can verify without calling the issuer. Contains claims, a subject, an issuer, and a cryptographic signature. |
+| **Verifiable Credential (VC)** | A credential in a standard format (W3C) that anyone can verify without calling the issuer. Contains claims, a subject, an issuer, and a cryptographic signature. In pluginlake, a VC is the *container* that carries permissions from hub to station. |
 | **Verifiable Presentation (VP)** | A wrapper that a holder uses to present one or more VCs to a verifier. The VP proves the holder actually controls the credential (not just copied it). |
 | **Signature** | Cryptographic proof that a credential was issued by a specific DID and has not been tampered with. Verifiers check the signature against the issuer's public key. |
 | **OIDC** (OpenID Connect) | Standard protocol for "log in with your institution." Handles usernames, passwords, MFA — the normal login experience. Used at boundary 1 only. |
@@ -58,12 +58,11 @@ Per-request calls carry two layers: the Nuts DPoP-bound access token in the `Aut
 | **DSP** (Dataspace Protocol) | Eclipse standard for how two organizations negotiate data access. Defines catalog browsing, contract negotiation, and data transfer as HTTP message exchanges. |
 | **ODRL** (Open Digital Rights Language) | A W3C standard for expressing permissions and constraints ("user X may read columns A,B of dataset Y where region=NL"). Used inside VCs for boundary 3. |
 | **Contract / Agreement** | The result of a successful DSP negotiation. Both parties store a copy. It defines what is allowed in principle — individual requests are still verified against it. |
-| **Verifiable Credential (VC)** | A credential in a standard format (W3C) that anyone can verify without calling the issuer. Contains claims, a subject, an issuer, and a cryptographic signature. In pluginlake, a VC is the *container* that carries permissions from hub to station. |
 | **Permission** (ODRL) | A specific rule inside a VC that says "user X may perform action Y on asset Z subject to constraints." The atomic unit of authorization at boundary 3. |
-
-**How they relate:** A DSP contract sets the outer bounds ("hub and station agree to collaborate"). The hub then issues VCs to its researchers — each VC contains one or more ODRL permissions scoped within the contract's bounds. The station verifies the VC signature and evaluates each permission against the request.
 | **DPoP** (Demonstration of Proof-of-Possession) | A mechanism that binds an access token to a specific key pair, preventing token theft. Each request includes a fresh proof that the caller holds the private key. |
 | **Bolt** | A Nuts "use case definition" — a configuration that says which credentials are required for a specific interaction pattern (e.g. pluginlake data access). |
+
+**How they relate:** A DSP contract sets the outer bounds ("hub and station agree to collaborate"). The hub then issues VCs to its researchers — each VC contains one or more ODRL permissions scoped within the contract's bounds. The station verifies the VC signature and evaluates each permission against the request.
 
 ### pluginlake-specific terms
 
@@ -180,13 +179,24 @@ Five options were evaluated. The adopted architecture is a VC-native ODRL approa
 ## Consequences
 
 - pluginlake gains a DSP-compliant external surface aligned with Health-RI and EHDS
-- Every station runs three sidecars: Nuts node, PostgresQL server and Dagster code server. OPA is not required.
+- Every station runs three sidecars: Nuts node, PostgreSQL server and Dagster code server. OPA is not required.
 - The pluginlake ODRL profile (credential schema + actions + constraint types) is the highest priority deliverable
 - Hub signing key distribution must be resolved (DID document, DSP negotiation, or discovery parameters)
 - Station asset registry and operation registry must be defined per station (YAML config)
 - Collaboration hubs need a governance decision on organizational identity before deployment
 - New modules required: `src/pluginlake/authz/` and `src/pluginlake/dsp/`
 - Streamlit UI gets new pages: credential management (central) and access control (datastation)
+
+---
+
+## Security invariants
+
+These hold across all phases, including the placeholder middleware used while station internals are built first:
+
+- **Single enforcement point (PEP):** No request reaches station compute (Dagster, DuckLake, PostgreSQL) except through one mandatory authn/authz enforcer. Every route, including `POST /api/assets/{key}/materialize`, catalog routes and any local admin path, passes through it. No request is served without authn/authz.
+- **Network perimeter:** The station cluster and its services are isolated from outside contact. Only curated, explicitly exposed endpoints are reachable. Internal services (Nuts node, PostgreSQL, Dagster) are never directly accessible from outside the wall.
+- **Transport independence:** If FastAPI is later replaced by a leaner protocol or service mesh, enforcement stays in the proxy or sidecar so no transport can bypass the PEP.
+- **Layer separation:** Nuts governs machine-to-machine network membership and coarse machine roles (hub, analytics, ml) only. Fine-grained, user-based, contract-scoped access lives in the separate authz layer on top, because Nuts does not provide that granularity.
 
 ---
 
@@ -233,3 +243,4 @@ Five options were evaluated. The adopted architecture is a VC-native ODRL approa
 15. Credential validity duration (start with 24-hour VCs)
 16. Processing hub specification alignment (contribute to Health-RI §4.4)
 17. Processing hub DSP client implementation (Phase 2)
+18. **Service-to-service transport** — investigate replacing FastAPI with a leaner protocol or service mesh for internal node-to-node traffic, keeping enforcement in a proxy or sidecar so no transport bypasses the PEP.
