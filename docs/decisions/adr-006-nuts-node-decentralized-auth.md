@@ -80,7 +80,7 @@ services:
     environment:
       NUTS_CONFIGFILE: /opt/nuts/nuts.yaml
     ports:
-      - "1323:1323"  # internal API (localhost only)
+      - "127.0.0.1:1323:1323"  # internal API (localhost only)
       - "5555:5555"  # gRPC (public, mTLS)
     volumes:
       - "./config/nuts/nuts.yaml:/opt/nuts/nuts.yaml:ro"

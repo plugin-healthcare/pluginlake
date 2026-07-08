@@ -253,9 +253,10 @@ We use GitHub Actions to automate our CI/CD pipeline. All workflows are defined 
 
 #### CI Workflow (`ci.yaml`)
 
-Runs on every push and pull request to `main`:
-- **Ruff check** linting only (no auto-fixing)
-- **Pytest**: Unit tests on all python code
+Runs on every pull request to `main`:
+- **Ruff check**: linting only (no auto-fixing)
+- **ty check**: static type checking
+- **Pytest**: unit tests with coverage (`--cov=pluginlake`)
 
 #### Security Workflow (`security.yaml`)
 

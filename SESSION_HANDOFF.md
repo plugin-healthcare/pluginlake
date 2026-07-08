@@ -69,7 +69,7 @@ Each session must update this file before completing.
 - [ ] Fix ADR-004 cross-references (points to ADR-002 for staging/logs, should be ADR-003) — minor.
 - [ ] Commit docs restructure.
 - [ ] Commit and push `docker-deploy-cli` branch (40 files from previous session).
-- [ ] Open PR against `dev`.
+- [ ] Open PR against `main`.
 
 ### Next priorities
 
@@ -90,6 +90,6 @@ Each session must update this file before completing.
 - ADR-008 = "what users/queries are allowed" (DSP + VC + ODRL, trust boundaries 1 & 3). Now includes foundational glossary. Points to `background/dsp-authorization.md` for implementation detail (private, not in nav).
 - `docs/background/federated-infrastructure.md` is the published platform comparison. Explicitly acknowledges pluginml uses vantage6 in production.
 - ADR-008 is needed for: structured filter AST, pre-approved algorithm registry, privacy validation for non-aggregates, station-side credential sync, techniques to limit destructive operations.
-- All work is on `docker-deploy-cli` branch, branched from `dev`.
+- All work is on `docker-deploy-cli` branch, branched from `main`.
 - Tests pass (`uv run pytest` — 250 tests).
 - Linting clean (`uv run ruff check .`).
