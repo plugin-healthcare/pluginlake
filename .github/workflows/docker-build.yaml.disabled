@@ -1,0 +1,75 @@
+# DISABLED SCAFFOLD — not active.
+#
+# This workflow is intentionally kept with a `.disabled` extension so GitHub
+# does NOT run it. It is a starting point for building and pushing the four
+# production images to ACR.
+#
+# Before enabling (rename to `docker-build.yaml`):
+#   1. Decide auth. OIDC federated login is recommended for a public repo
+#      (add `azure/login`, `permissions: id-token: write`, no stored secret).
+#      The SP-secret variant below needs `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET`.
+#   2. Confirm the registry host and image namespace.
+#   3. Review the push trigger and path filters.
+
+name: Docker Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Extra tag to push (defaults to commit SHA)"
+        required: false
+        default: ""
+
+env:
+  AZURE_CONTAINER_REGISTRY: drplugindhdprd.azurecr.io
+
+jobs:
+  build-and-push:
+    name: Build and push ${{ matrix.image }}
+    # Hard stop: this scaffold must never run until auth is configured.
+    if: false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    concurrency:
+      group: docker-${{ github.ref }}-${{ matrix.image }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: pluginlake
+            dockerfile: deploy/docker/pluginlake.Dockerfile
+          - image: dagster-webserver
+            dockerfile: deploy/docker/dagster-webserver.Dockerfile
+          - image: ui-central
+            dockerfile: deploy/docker/ui-central.Dockerfile
+          - image: ui-datastation
+            dockerfile: deploy/docker/ui-datastation.Dockerfile
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.AZURE_CONTAINER_REGISTRY }}
+          username: ${{ secrets.AZURE_CLIENT_ID }}
+          password: ${{ secrets.AZURE_CLIENT_SECRET }}
+
+      - name: Build and push ${{ matrix.image }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          provenance: true
+          sbom: true
+          tags: |
+            ${{ env.AZURE_CONTAINER_REGISTRY }}/pluginlake/${{ matrix.image }}:latest
+            ${{ env.AZURE_CONTAINER_REGISTRY }}/pluginlake/${{ matrix.image }}:${{ github.sha }}
+            ${{ inputs.image_tag != '' && format('{0}/pluginlake/{1}:{2}', env.AZURE_CONTAINER_REGISTRY, matrix.image, inputs.image_tag) || '' }}

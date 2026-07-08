@@ -38,6 +38,9 @@ nav = [
         { "ADR-003: DuckLake + Dagster Integration" = "decisions/adr-003-ducklake-data-catalog.md" },
         { "ADR-004: Data Organization" = "decisions/adr-004-data-organization.md" },
         { "ADR-005: FastAPI Gateway" = "decisions/adr-005-fastapi-gateway.md" },
+        { "ADR-006: Nuts Node" = "decisions/adr-006-nuts-node-decentralized-auth.md" },
+        { "ADR-007: Column-Level Lineage" = "decisions/adr-007-column-level-lineage.md" },
+        { "ADR-008: DSP Authorization" = "decisions/adr-008-dataspace-protocol-authz-authc-rbac.md" },
     ]},
     { "Development" = [
         { "Development" = "development/index.md" },
