@@ -1,0 +1,18 @@
+services:
+  nuts:
+    image: nutsfoundation/nuts-node:6.2.8
+    user: "${UID:-1000}:${GID:-1000}"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:8081/status/diagnostics"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    volumes:
+      - ../../config/nuts/nuts.yaml:/nuts/config/nuts.yaml:ro
+      - ../../config/nuts/discovery:/nuts/config/discovery:ro
+      - ../../config/nuts/policy:/nuts/config/policy:ro
+      - ../../.data/nuts:/nuts/data
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8081:8081"

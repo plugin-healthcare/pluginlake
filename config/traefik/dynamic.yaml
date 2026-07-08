@@ -1,0 +1,30 @@
+# Traefik dynamic configuration — routes and TLS
+# Routes .localhost subdomains to the appropriate Nuts node.
+
+tls:
+  certificates:
+    - certFile: /certs/wildcard.pem
+      keyFile: /certs/wildcard.key
+
+http:
+  routers:
+    nuts-hub:
+      rule: "Host(`nuts-hub.localhost`)"
+      service: nuts-hub
+      tls: {}
+
+    nuts-station:
+      rule: "Host(`nuts-station.localhost`)"
+      service: nuts-station
+      tls: {}
+
+  services:
+    nuts-hub:
+      loadBalancer:
+        servers:
+          - url: "http://nuts-hub:8080"
+
+    nuts-station:
+      loadBalancer:
+        servers:
+          - url: "http://nuts-station:8080"

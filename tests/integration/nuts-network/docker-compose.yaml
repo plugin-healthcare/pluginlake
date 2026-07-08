@@ -1,0 +1,80 @@
+# Nuts two-node integration test network
+#
+# Simulates a pluginlake hub and station, each with their own Nuts node.
+# The hub's Nuts node acts as the discovery server for the network.
+# Traefik provides TLS termination so did:web resolution works between nodes.
+#
+# Usage (from repo root):
+#   scripts/generate-dev-certs.sh        # first time only
+#   cd tests/integration/nuts-network
+#   docker compose up -d
+#   ./bootstrap.sh
+#
+services:
+  # --- TLS reverse proxy ---
+  traefik:
+    image: traefik:v3.4
+    networks:
+      default:
+        aliases:
+          - nuts-hub.localhost
+          - nuts-station.localhost
+    ports:
+      - "127.0.0.1:443:443"
+      - "127.0.0.1:8888:8080"
+    volumes:
+      - ../../../config/traefik/traefik.yaml:/etc/traefik/traefik.yaml:ro
+      - ../../../config/traefik/dynamic.yaml:/etc/traefik/dynamic.yaml:ro
+      - ../../../.data/traefik/certs:/certs:ro
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:8080/api/overview"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # --- Hub side ---
+  nuts-hub:
+    image: nutsfoundation/nuts-node:6.2.8
+    user: "${UID:-1000}:${GID:-1000}"
+    tmpfs:
+      - /nuts/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:8081/status/diagnostics"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    volumes:
+      - ../../../config/nuts/hub/nuts.yaml:/nuts/config/nuts.yaml:ro
+      - ../../../config/nuts/discovery:/nuts/config/discovery:ro
+      - ../../../config/nuts/policy:/nuts/config/policy:ro
+      # Mount dev CA so the node trusts our self-signed certs for did:web resolution
+      - ../../../.data/traefik/certs/ca.pem:/etc/ssl/certs/pluginlake-dev-ca.pem:ro
+    ports:
+      - "127.0.0.1:8081:8081"
+    depends_on:
+      traefik:
+        condition: service_healthy
+
+  # --- Station side ---
+  nuts-station:
+    image: nutsfoundation/nuts-node:6.2.8
+    user: "${UID:-1000}:${GID:-1000}"
+    tmpfs:
+      - /nuts/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:8081/status/diagnostics"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    volumes:
+      - ../../../config/nuts/station/nuts.yaml:/nuts/config/nuts.yaml:ro
+      - ../../../config/nuts/discovery:/nuts/config/discovery:ro
+      - ../../../config/nuts/policy:/nuts/config/policy:ro
+      - ../../../.data/traefik/certs/ca.pem:/etc/ssl/certs/pluginlake-dev-ca.pem:ro
+    ports:
+      - "127.0.0.1:9081:8081"
+    depends_on:
+      traefik:
+        condition: service_healthy

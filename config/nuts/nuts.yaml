@@ -1,0 +1,26 @@
+# Nuts Node configuration for pluginlake development
+# Docs: https://nuts-node.readthedocs.io/en/latest/pages/deployment/configuration.html
+
+strictmode: false
+verbosity: debug
+datadir: /nuts/data
+url: http://nuts:8080
+
+didmethods:
+  - web
+
+http:
+  internal:
+    address: :8081
+  public:
+    address: :8080
+
+crypto:
+  storage: fs
+
+policy:
+  directory: /nuts/config/policy
+
+discovery:
+  definitions:
+    directory: /nuts/config/discovery

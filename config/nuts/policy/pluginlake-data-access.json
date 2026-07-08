@@ -1,0 +1,45 @@
+{
+  "pluginlake-data-access": {
+    "organization": {
+      "id": "pluginlake-data-access-pd",
+      "format": {
+        "ldp_vc": {
+          "proof_type": ["JsonWebSignature2020"]
+        },
+        "ldp_vp": {
+          "proof_type": ["JsonWebSignature2020"]
+        }
+      },
+      "input_descriptors": [
+        {
+          "id": "organization_credential",
+          "constraints": {
+            "fields": [
+              {
+                "path": ["$.type"],
+                "filter": {
+                  "type": "string",
+                  "const": "NutsOrganizationCredential"
+                }
+              },
+              {
+                "id": "organization_name",
+                "path": ["$.credentialSubject.organization.name"],
+                "filter": {
+                  "type": "string"
+                }
+              },
+              {
+                "id": "organization_city",
+                "path": ["$.credentialSubject.organization.city"],
+                "filter": {
+                  "type": "string"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

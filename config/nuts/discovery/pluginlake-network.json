@@ -1,0 +1,56 @@
+{
+  "id": "pluginlake-network",
+  "did_methods": ["web"],
+  "endpoint": "https://nuts-hub.localhost/discovery/pluginlake-network",
+  "presentation_max_validity": 7200,
+  "presentation_definition": {
+    "id": "pluginlake-network-pd",
+    "format": {
+      "jwt_vp": {
+        "alg": ["ES256"]
+      },
+      "ldp_vc": {
+        "proof_type": ["JsonWebSignature2020"]
+      }
+    },
+    "input_descriptors": [
+      {
+        "id": "NutsOrganizationCredential",
+        "constraints": {
+          "fields": [
+            {
+              "path": ["$.type"],
+              "filter": {
+                "type": "string",
+                "const": "NutsOrganizationCredential"
+              }
+            },
+            {
+              "path": ["$.credentialSubject.organization.name"],
+              "filter": {
+                "type": "string"
+              }
+            },
+            {
+              "path": ["$.credentialSubject.organization.city"],
+              "filter": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "DiscoveryRegistrationCredential",
+        "constraints": {
+          "fields": [
+            {
+              "id": "auth_server_url",
+              "path": ["$.credentialSubject.authServerURL"]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

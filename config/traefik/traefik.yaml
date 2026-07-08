@@ -1,0 +1,17 @@
+# Traefik static configuration for pluginlake development
+# Terminates TLS for Nuts nodes and routes by hostname.
+
+api:
+  dashboard: true
+  insecure: true
+
+entryPoints:
+  websecure:
+    address: :443
+
+providers:
+  file:
+    filename: /etc/traefik/dynamic.yaml
+
+log:
+  level: DEBUG
