@@ -1,0 +1,25 @@
+# $project_id
+
+A [pluginlake](https://github.com/plugin-healthcare/pluginlake) project package.
+
+This project plugs into a pluginlake node through a single `ProjectManifest`
+(see `src/$package_name/manifest.py`) and owns one DuckLake catalog
+(`$catalog`) and asset-URN namespace (`$namespace`).
+
+## Develop
+
+```bash
+uv sync
+uv run pluginlake verify   # conformance check
+uv run pytest
+```
+
+## What it contributes
+
+- **Config:** `$config_prefix`-prefixed settings (`src/$package_name/config.py`).
+- **Dagster code location:** `$package_name.definitions` (ingestion assets).
+- **API routers:** mounted uniformly by the core gateway.
+- **Connectors:** framework-agnostic data connectors (`src/$package_name/connectors.py`).
+
+Core interprets the manifest and mounts these within the project's namespace and
+the authn/authz scope; the project never mints bare endpoints.

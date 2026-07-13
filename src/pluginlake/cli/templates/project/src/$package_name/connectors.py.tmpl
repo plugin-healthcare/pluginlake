@@ -1,0 +1,26 @@
+"""Data connectors for the $project_id project.
+
+Connectors are framework-agnostic (no Dagster import) so the same connector can
+back both the ingestion path and the DuckDB/DuckLake query engine (ADR-009).
+"""
+
+import duckdb
+
+from pluginlake.plugins.base import Connector
+
+
+class ExampleConnector(Connector):
+    """A minimal DuckDB-native connector.
+
+    Replace this with a connector for your actual source. Connectors loaded into
+    the query-engine process must stay DuckDB-native; sources needing arbitrary
+    Python are ingest-only through an isolated Dagster code location.
+    """
+
+    @property
+    def name(self) -> str:
+        return "$package_name-example"
+
+    def configure_duckdb(self, conn: duckdb.DuckDBPyConnection) -> None:
+        # Install/load extensions, set credentials, or attach the source here.
+        del conn
