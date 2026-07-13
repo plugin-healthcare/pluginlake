@@ -15,16 +15,13 @@ from pluginlake.api.middleware import RequestLoggingMiddleware
 from pluginlake.api.routers import (
     assets,
     catalog,
-    fhir,
-    fhir_statistics,
     health,
     ingest,
-    omop,
-    omop_statistics,
 )
 from pluginlake.config import LogSettings, Settings
 from pluginlake.core.config import DuckLakeSettings
 from pluginlake.core.ducklake.setup import ensure_database
+from pluginlake.plugins.discovery import discover_manifests, load_router
 from pluginlake.utils.logger import get_logger, setup_logging
 
 logger = get_logger(__name__)
@@ -85,12 +82,17 @@ def _add_middleware(app: FastAPI, log_settings: LogSettings) -> None:
 
 
 def _include_routers(app: FastAPI) -> None:
-    """Register all API routers."""
+    """Register API routers.
+
+    Core exposes the uniform routers directly. Project-specific routers are
+    contributed declaratively through each project's manifest and mounted
+    uniformly, so no project code is imported here (ADR-009).
+    """
     app.include_router(health.router)
     app.include_router(ingest.router)
-    app.include_router(omop.router)
-    app.include_router(omop_statistics.router)
     app.include_router(catalog.router)
     app.include_router(assets.router)
-    app.include_router(fhir.router)
-    app.include_router(fhir_statistics.router)
+
+    for manifest in discover_manifests():
+        for spec in manifest.routers:
+            app.include_router(load_router(spec))

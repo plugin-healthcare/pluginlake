@@ -5,6 +5,13 @@ It is tool-agnostic and applies to any AI assistant (GitHub Copilot, Claude, Cur
 
 For tool-specific configuration, see `.github/copilot-instructions.md`.
 
+## Session and working documents
+
+- Local, session-guiding docs written by or for agents (handoffs, execution plans, scratch notes, task breakdowns) belong in the gitignored `.agent/memory/` folder, **not** in the repo tree or the docs website.
+- Do not commit these files and do not add them to the docs nav (`zensical.toml`). Keep the repo and published site free of agent/session clutter.
+- Repo content that is a genuine, durable artifact — ADRs (`docs/decisions/`), design specs (`docs/background/`), user-facing guides (`docs/development/`) — stays tracked and, where appropriate, in the nav. When unsure whether a doc is a real artifact or session guidance, ask.
+- The session handoff lives at `.agent/memory/SESSION_HANDOFF.md`; read and update it each session.
+
 ## Python
 
 - Target Python 3.13+. Do not use `from __future__ import annotations`.

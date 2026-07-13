@@ -41,6 +41,7 @@ nav = [
         { "ADR-006: Nuts Node" = "decisions/adr-006-nuts-node-decentralized-auth.md" },
         { "ADR-007: Column-Level Lineage" = "decisions/adr-007-column-level-lineage.md" },
         { "ADR-008: DSP Authorization" = "decisions/adr-008-dataspace-protocol-authz-authc-rbac.md" },
+        { "ADR-009: Core + Project Plugin Architecture" = "decisions/adr-009-core-project-plugin-architecture.md" },
     ]},
     { "Development" = [
         { "Development" = "development/index.md" },
