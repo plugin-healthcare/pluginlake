@@ -34,11 +34,9 @@ Repository = "https://github.com/plugin-healthcare/pluginlake"
 Issues = "https://github.com/plugin-healthcare/pluginlake/issues"
 Documentation = "https://github.com/plugin-healthcare/pluginlake#readme"
 
-# In-tree project registration. Proves the plugin contract while OMOP/FHIR
-# still live in the core package; Phase 3 of the split moves this to the
-# standalone pluginlake-ehds-demo package (see ADR-009).
-[project.entry-points."pluginlake.projects"]
-ehds-demo = "pluginlake.projects.ehds_demo:manifest"
+# Projects register through the "pluginlake.projects" entry-point group from
+# their own packages (ADR-009). The OMOP/FHIR demo now lives in the separate
+# pluginlake-ehds-demo package; core ships no in-tree project registration.
 
 [project.optional-dependencies]
 infra = [
