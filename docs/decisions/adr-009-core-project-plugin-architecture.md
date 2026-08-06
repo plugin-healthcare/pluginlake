@@ -199,6 +199,10 @@ Open question: renumber this packaging ADR, or add the authz/query-safety ADR un
 
 ## Architecture
 
+The rendered C4 view below shows how projects plug into the data station through the `pluginlake.projects` entry point (source of truth: the LikeC4 model in the `architectuur` repo).
+
+![How projects relate to the data station](../assets/images/project-datastation.png)
+
 ```
    Capability axis (this ADR)                 Governance axis (ADR-006/008)
 

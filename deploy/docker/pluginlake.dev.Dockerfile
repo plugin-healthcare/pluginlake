@@ -10,11 +10,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /
 
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --extra fhir --no-install-project
+RUN uv sync --frozen --no-install-project
 
 COPY . .
-RUN uv sync --frozen --extra fhir
+RUN uv sync --frozen
 
-ENV PATH="/app/.venv/bin:$PATH"
+ENV PATH="/app/.venv/bin:$PATH" \
+    VIRTUAL_ENV="/app/.venv"
 
+RUN cp deploy/docker/entrypoint.sh /usr/local/bin/pluginlake-entrypoint.sh \
+    && chmod +x /usr/local/bin/pluginlake-entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/pluginlake-entrypoint.sh"]
 CMD ["uvicorn", "pluginlake.__main__:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

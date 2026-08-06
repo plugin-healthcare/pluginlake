@@ -48,20 +48,9 @@ azure = [
     "azure-identity>=1.25.2",
     "azure-storage-blob>=12.28.0",
 ]
-synthea = [
-    "boto3>=1.42.45",
-    "tqdm>=4.67.3",
-]
-fhir = [
-    "plugin-rosetta",
-]
-
 [build-system]
 requires = ["uv_build>=0.10.0,<0.11.0"]
 build-backend = "uv_build"
-
-[tool.uv.sources]
-plugin-rosetta = { git = "https://github.com/plugin-healthcare/plugin-rosetta", rev = "c08aa5ce47f72a3030ac14d877f28d2de49711c3" }
 
 [dependency-groups]
 dev = [
@@ -174,10 +163,6 @@ strict = true
     "N806",    # Variable should be lowercase (constants in notebook cells)
     "PLR0913", # Too many arguments (marimo cell dependency injection)
     "ARG001",  # Unused function argument (marimo dependency ordering)
-]
-"src/pluginlake/omop/queries.py" = [
-    "PLR0913", # Too many arguments acceptable for filter functions with optional criteria
-    "S608",    # SQL queries use parameterized values with ? placeholders; string concatenation for structure only
 ]
 "notebooks/**/*.py" = [
     "N807",    # Marimo uses __ for anonymous cell functions
