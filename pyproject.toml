@@ -215,6 +215,9 @@ exclude = [
     "external_repos/",
     "notebooks/",
     "src/pluginlake-ui/",  # Streamlit modifies sys.path at runtime; ty cannot resolve cross-module imports
+    # TODO: re-enable once the plugin-rosetta package is available again upstream.
+    "src/pluginlake/fhir/translator_registry.py",
+    "tests/unit/pluginlake/fhir/test_translator_registry.py",
 ]
 
 [tool.ty.environment]
