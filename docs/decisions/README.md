@@ -12,3 +12,4 @@ This directory contains Architecture Decision Records (ADRs) for the pluginlake 
 | [ADR-006](adr-006-nuts-node-decentralized-auth.md) | Nuts Node integration for decentralized identity | Accepted | 2026-03-19 |
 | [ADR-007](adr-007-column-level-lineage.md)         | Column-level lineage strategy                  | Proposed | 2026-04-12 |
 | [ADR-008](adr-008-dataspace-protocol-authz-authc-rbac.md) | DSP, authentication, and authorization architecture | Proposed | 2026-05-28 |
+| [ADR-009](adr-009-core-project-plugin-architecture.md) | Core platform and project plugin architecture | Proposed | 2026-07-08 |

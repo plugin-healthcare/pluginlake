@@ -1,0 +1,15 @@
+"""Example router for the $project_id project.
+
+Core mounts this router within the project's namespace and behind the platform's
+authn/authz enforcement point. Keep routes scoped to your project prefix.
+"""
+
+from fastapi import APIRouter
+
+router = APIRouter(prefix="/api/v1/$project_id", tags=["$project_id"])
+
+
+@router.get("/info")
+def info() -> dict[str, str]:
+    """Return basic project information."""
+    return {"project": "$project_id", "catalog": "$catalog"}
