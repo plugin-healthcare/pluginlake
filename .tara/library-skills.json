@@ -1,0 +1,6 @@
+{
+  "fastapi": {
+    "package": "fastapi",
+    "version": "0.141.1"
+  }
+}
