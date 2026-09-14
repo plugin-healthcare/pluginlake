@@ -1,0 +1,20 @@
+# Tara setup state, written by `tara init`. Safe to edit by hand.
+tool = "copilot"
+stack = "python"
+
+# --- optional settings (uncomment to enable) ---
+# [standards]  # override the opinionated tooling baseline
+# default_stack = "python"
+# pyproject_categories = ["ruff", "pytest", "ty", "uv"]
+# dev_tools = ["ruff", "ty", "pytest", "pre-commit"]
+
+# [agents]  # keep parts of the .agents/ doc store local (untracked)
+# gitignore = ["memory"]  # e.g. do not commit session scratch/handover
+
+[artifacts]
+skills = ["gh-stack", "release-semver-changelog", "securing-github-actions", "structuring-python-packages", "structuring-streamlit-apps", "writing-adrs", "writing-documentation"]
+agents = ["gilfoyle.agent.md", "linux-support.agent.md", "skill-reviewer.agent.md"]
+prompts = ["design.prompt.md", "implement.prompt.md", "integrate.prompt.md", "plan.prompt.md", "refine.prompt.md"]
+instructions = []
+hooks = []
+mcp = ["git", "github", "likec4", "polars"]

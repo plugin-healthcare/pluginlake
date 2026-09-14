@@ -232,3 +232,17 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 .tmp_dagster_home_*
+
+# Tara-managed agent artifacts, restored from .tara/ (config.toml, skills.toml,
+# skills.lock) with `tara rebuild` and `tara skill sync`. Skills fetched from
+# upstream repos are third-party content and are not vendored into this repo.
+.github/skills/*
+!.github/skills/github-issues/
+!.github/skills/writing-epics-stories/
+!.github/skills/plugin-brand.md
+
+# Working docs kept local: name third parties, cite non-public reports, or
+# discuss unremediated findings. This repository is public.
+.agents/review/202609091502_second-opinion-architectuurreview-informatiebeveiliging.md
+.agents/memory/202609091535_security-review-second-opinion-handoff.md
+.agents/memory/viscosuite-integration-discussion.md

@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/"
+    },
+    "git": {
+      "command": "uvx",
+      "args": [
+        "mcp-server-git@2026.6.16"
+      ]
+    },
+    "polars": {
+      "type": "http",
+      "url": "https://mcp.pola.rs/mcp"
+    },
+    "likec4": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@likec4/mcp@1.58.0"
+      ]
+    }
+  }
+}

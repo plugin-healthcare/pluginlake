@@ -1,0 +1,98 @@
+{
+  "attach-db": {
+    "commit": "7feda8e01e22bc0886c86123f3884947e36d8c69",
+    "path": "skills/attach-db",
+    "ref": "main",
+    "repo": "https://github.com/duckdb/duckdb-skills"
+  },
+  "convert-file": {
+    "commit": "7feda8e01e22bc0886c86123f3884947e36d8c69",
+    "path": "skills/convert-file",
+    "ref": "main",
+    "repo": "https://github.com/duckdb/duckdb-skills"
+  },
+  "dagster-expert": {
+    "commit": "a0774616a075182cd84b4fafc63d788f35431bc1",
+    "path": "skills/dagster-expert/skills/dagster-expert",
+    "ref": "master",
+    "repo": "https://github.com/dagster-io/skills"
+  },
+  "developing-with-streamlit": {
+    "commit": "c69a265613f17cdd69d42e6f67b704214178fae5",
+    "path": "developing-with-streamlit",
+    "ref": "main",
+    "repo": "https://github.com/streamlit/agent-skills"
+  },
+  "dignified-python": {
+    "commit": "a0774616a075182cd84b4fafc63d788f35431bc1",
+    "path": "skills/dignified-python/skills/dignified-python",
+    "ref": "master",
+    "repo": "https://github.com/dagster-io/skills"
+  },
+  "duckdb-docs": {
+    "commit": "7feda8e01e22bc0886c86123f3884947e36d8c69",
+    "path": "skills/duckdb-docs",
+    "ref": "main",
+    "repo": "https://github.com/duckdb/duckdb-skills"
+  },
+  "gh-stack": {
+    "commit": "4f9188e61196f793dcf79ae765ac855cef093060",
+    "path": "skills/gh-stack",
+    "ref": "main",
+    "repo": "https://github.com/github/gh-stack"
+  },
+  "install-duckdb": {
+    "commit": "7feda8e01e22bc0886c86123f3884947e36d8c69",
+    "path": "skills/install-duckdb",
+    "ref": "main",
+    "repo": "https://github.com/duckdb/duckdb-skills"
+  },
+  "likec4-dsl": {
+    "commit": "84ff665d18e3d7eb8f5b9ffcd8c2a7a059e936f1",
+    "path": "skills/likec4-dsl",
+    "ref": "main",
+    "repo": "https://github.com/likec4/likec4"
+  },
+  "mcp-builder": {
+    "commit": "3b3fad96af16a10759d930941b4520ba0c40edae",
+    "path": "skills/mcp-builder",
+    "ref": "main",
+    "repo": "https://github.com/anthropics/skills"
+  },
+  "query": {
+    "commit": "7feda8e01e22bc0886c86123f3884947e36d8c69",
+    "path": "skills/query",
+    "ref": "main",
+    "repo": "https://github.com/duckdb/duckdb-skills"
+  },
+  "read-file": {
+    "commit": "7feda8e01e22bc0886c86123f3884947e36d8c69",
+    "path": "skills/read-file",
+    "ref": "main",
+    "repo": "https://github.com/duckdb/duckdb-skills"
+  },
+  "s3-explore": {
+    "commit": "7feda8e01e22bc0886c86123f3884947e36d8c69",
+    "path": "skills/s3-explore",
+    "ref": "main",
+    "repo": "https://github.com/duckdb/duckdb-skills"
+  },
+  "skill-creator": {
+    "commit": "3b3fad96af16a10759d930941b4520ba0c40edae",
+    "path": "skills/skill-creator",
+    "ref": "main",
+    "repo": "https://github.com/anthropics/skills"
+  },
+  "spatial": {
+    "commit": "7feda8e01e22bc0886c86123f3884947e36d8c69",
+    "path": "skills/spatial",
+    "ref": "main",
+    "repo": "https://github.com/duckdb/duckdb-skills"
+  },
+  "webapp-testing": {
+    "commit": "3b3fad96af16a10759d930941b4520ba0c40edae",
+    "path": "skills/webapp-testing",
+    "ref": "main",
+    "repo": "https://github.com/anthropics/skills"
+  }
+}
