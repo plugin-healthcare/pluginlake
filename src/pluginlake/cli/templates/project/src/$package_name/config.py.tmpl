@@ -1,0 +1,16 @@
+"""Configuration for the $project_id project."""
+
+from pluginlake.plugins.base import ProjectSettings, project_settings_config
+
+
+class Settings(ProjectSettings):
+    """Settings for $project_id.
+
+    Environment variables are prefixed with ``$config_prefix``. Every field has
+    a default so the project's config loads without external configuration,
+    which the conformance suite requires.
+    """
+
+    model_config = project_settings_config("$config_prefix")
+
+    source_url: str = ""

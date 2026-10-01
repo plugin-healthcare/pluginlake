@@ -1,0 +1,32 @@
+"""Project manifest for $project_id.
+
+The single registration surface for this project. Core discovers it through the
+``pluginlake.projects`` entry point and wires the declared contributions
+uniformly (ADR-009).
+"""
+
+from pluginlake.plugins.manifest import (
+    CodeLocationSpec,
+    ConnectorSpec,
+    ProjectManifest,
+    RouterSpec,
+    SettingsSpec,
+)
+
+manifest = ProjectManifest(
+    id="$project_id",
+    catalog="$catalog",
+    namespace="$namespace",
+    config_prefix="$config_prefix",
+    requires_core="$requires_core",
+    code_locations=[
+        CodeLocationSpec(module="$package_name.definitions"),
+    ],
+    routers=[
+        RouterSpec(module="$package_name.api.routers.example"),
+    ],
+    connectors=[
+        ConnectorSpec(module="$package_name.connectors", attribute="ExampleConnector"),
+    ],
+    settings=SettingsSpec(module="$package_name.config", attribute="Settings"),
+)

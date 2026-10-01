@@ -1,29 +1,13 @@
-"""Dagster code location definitions for pluginlake.
+"""Dagster code location for pluginlake.
 
-This package provides pre-composed Definitions for common data models.
-Each submodule bundles the assets for a specific standard:
+Loaded by the Dagster code server as ``-m pluginlake.definitions``. The
+combined ``defs`` is composed from the code locations declared by every
+discovered project manifest (ADR-009), rather than importing project modules
+directly. Target a single project's code location directly if preferred::
 
-- ``pluginlake.definitions.omop``  — OMOP CDM assets
-- ``pluginlake.definitions.fhir``  — FHIR assets (planned)
-
-Use this module as the code location to load all definitions::
-
-    dagster dev -m pluginlake.definitions
-
-Or target a specific submodule directly::
-
-    dagster dev -m pluginlake.definitions.omop
-
-Or import individual assets from ``pluginlake.assets`` and compose
-a custom ``Definitions`` in their own repo.
-
-When loaded as ``-m pluginlake.definitions`` (the default), this
-module exposes a combined ``defs`` that merges all submodule assets.
+    dagster dev -m <project_package>.definitions.<code_location>
 """
 
-from dagster import Definitions
+from pluginlake.plugins.dagster import load_merged_definitions
 
-from pluginlake.definitions import fhir as _fhir
-from pluginlake.definitions import omop as _omop
-
-defs = Definitions.merge(_omop.defs, _fhir.defs)
+defs = load_merged_definitions()

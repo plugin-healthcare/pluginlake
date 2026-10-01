@@ -22,13 +22,21 @@ dependencies = [
     "pydantic>=2.12.5",
     "pydantic-settings>=2.9.1",
     "python-multipart>=0.0.27",
+    "packaging>=24.0",
 ]
+
+[project.scripts]
+pluginlake = "pluginlake.cli.main:main"
 
 [project.urls]
 Homepage = "https://github.com/plugin-healthcare/pluginlake"
 Repository = "https://github.com/plugin-healthcare/pluginlake"
 Issues = "https://github.com/plugin-healthcare/pluginlake/issues"
 Documentation = "https://github.com/plugin-healthcare/pluginlake#readme"
+
+# Projects register through the "pluginlake.projects" entry-point group from
+# their own packages (ADR-009). The OMOP/FHIR demo now lives in the separate
+# pluginlake-ehds-demo package; core ships no in-tree project registration.
 
 [project.optional-dependencies]
 infra = [
@@ -40,20 +48,9 @@ azure = [
     "azure-identity>=1.25.2",
     "azure-storage-blob>=12.28.0",
 ]
-synthea = [
-    "boto3>=1.42.45",
-    "tqdm>=4.67.3",
-]
-fhir = [
-    "plugin-rosetta",
-]
-
 [build-system]
 requires = ["uv_build>=0.10.0,<0.11.0"]
 build-backend = "uv_build"
-
-[tool.uv.sources]
-plugin-rosetta = { git = "https://github.com/plugin-healthcare/plugin-rosetta", rev = "c08aa5ce47f72a3030ac14d877f28d2de49711c3" }
 
 [dependency-groups]
 dev = [
@@ -167,10 +164,6 @@ strict = true
     "PLR0913", # Too many arguments (marimo cell dependency injection)
     "ARG001",  # Unused function argument (marimo dependency ordering)
 ]
-"src/pluginlake/omop/queries.py" = [
-    "PLR0913", # Too many arguments acceptable for filter functions with optional criteria
-    "S608",    # SQL queries use parameterized values with ? placeholders; string concatenation for structure only
-]
 "notebooks/**/*.py" = [
     "N807",    # Marimo uses __ for anonymous cell functions
     "D415",    # First line ending with period not required for notebooks
@@ -185,6 +178,9 @@ strict = true
     "D104",    # Missing docstring in public package
     "S101",    # Use of assert
     "ANN401",  # HTTP client _get returns response.json() which is inherently Any
+]
+"src/pluginlake/cli/**/*.py" = [
+    "T201",    # print() is the CLI's user-facing output channel, not logging
 ]
 "src/pluginlake/api/routers/catalog.py" = [
     "S608",    # SQL queries use validated identifiers; cannot parameterise schema/table names

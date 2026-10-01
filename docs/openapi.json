@@ -132,83 +132,6 @@
         }
       }
     },
-    "/api/v1/omop/{table_name}/csv": {
-      "post": {
-        "tags": [
-          "omop"
-        ],
-        "summary": "Upload an OMOP table CSV file",
-        "description": "Accepts a multipart CSV upload for the named OMOP table, writes it to ``OMOP_RAW_DATA_DIR/{table_name}.csv``, and triggers ``omop_ingest_job`` via Dagster to materialize the asset in DuckLake.\n\n**Supported format:** .csv only",
-        "operationId": "ingest_omop_csv_api_v1_omop__table_name__csv_post",
-        "parameters": [
-          {
-            "name": "table_name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Table Name"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_ingest_omop_csv_api_v1_omop__table_name__csv_post"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/IngestionResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/omop/statistics": {
-      "get": {
-        "tags": [
-          "omop"
-        ],
-        "summary": "Get OMOP statistics",
-        "description": "Returns aggregated statistics across all OMOP tables.",
-        "operationId": "omop_statistics_api_v1_omop_statistics_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Omop Statistics Api V1 Omop Statistics Get"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/catalog/schemas": {
       "get": {
         "tags": [
@@ -540,101 +463,10 @@
           }
         }
       }
-    },
-    "/api/v1/fhir/{resource_type}/ndjson": {
-      "post": {
-        "tags": [
-          "fhir"
-        ],
-        "summary": "Upload a FHIR resource NDJSON file",
-        "description": "Accepts a multipart NDJSON upload for the named FHIR resource type, writes it to ``FHIR_RAW_DATA_DIR/{resource_type}.ndjson``, and triggers ``fhir_ingest_job`` via Dagster to materialize the asset in DuckLake.\n\n**Supported format:** .ndjson only",
-        "operationId": "ingest_fhir_ndjson_api_v1_fhir__resource_type__ndjson_post",
-        "parameters": [
-          {
-            "name": "resource_type",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Resource Type"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_ingest_fhir_ndjson_api_v1_fhir__resource_type__ndjson_post"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/IngestionResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/fhir/statistics": {
-      "get": {
-        "tags": [
-          "fhir"
-        ],
-        "summary": "Get FHIR statistics",
-        "description": "Returns aggregated FHIR ingestion metrics and clinical analytics.",
-        "operationId": "fhir_statistics_api_v1_fhir_statistics_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Fhir Statistics Api V1 Fhir Statistics Get"
-                }
-              }
-            }
-          }
-        }
-      }
     }
   },
   "components": {
     "schemas": {
-      "Body_ingest_fhir_ndjson_api_v1_fhir__resource_type__ndjson_post": {
-        "properties": {
-          "file": {
-            "type": "string",
-            "format": "binary",
-            "title": "File"
-          }
-        },
-        "type": "object",
-        "required": [
-          "file"
-        ],
-        "title": "Body_ingest_fhir_ndjson_api_v1_fhir__resource_type__ndjson_post"
-      },
       "Body_ingest_file_api_v1_ingest_post": {
         "properties": {
           "file": {
@@ -654,20 +486,6 @@
           "dataset"
         ],
         "title": "Body_ingest_file_api_v1_ingest_post"
-      },
-      "Body_ingest_omop_csv_api_v1_omop__table_name__csv_post": {
-        "properties": {
-          "file": {
-            "type": "string",
-            "format": "binary",
-            "title": "File"
-          }
-        },
-        "type": "object",
-        "required": [
-          "file"
-        ],
-        "title": "Body_ingest_omop_csv_api_v1_omop__table_name__csv_post"
       },
       "ErrorResponse": {
         "properties": {

@@ -18,7 +18,7 @@ jobs:
         run: uv python install
 
       - name: Install dependencies
-        run: uv sync --group lint --extra fhir
+        run: uv sync --group lint
 
       - name: Run ruff check
         run: uv run ruff check .
@@ -39,7 +39,7 @@ jobs:
         run: uv python install
 
       - name: Install dependencies
-        run: uv sync --group test --extra fhir
+        run: uv sync --group test
 
       - name: Run tests
         run: uv run pytest --cov=pluginlake

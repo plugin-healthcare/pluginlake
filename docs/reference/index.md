@@ -17,7 +17,10 @@ Each page is built from source code docstrings using mkdocstrings.
 | [Configuration](config.md) | Root settings, environment variables, and Pydantic models. |
 | [DuckLake](ducklake.md) | Catalog setup, connection management, and IO manager. |
 | [Storage](storage.md) | Data persistence layer and file handling. |
-| [OMOP](omop.md) | OMOP CDM table definitions and transformations. |
-| [FHIR](fhir.md) | FHIR translator registry, loader, and configuration. |
-| [Ingestion](ingestion.md) | Data ingestion services and validation pipeline. |
+| [Ingestion](ingestion.md) | Generic ingestion service and validation pipeline. |
 | [Utilities](utils.md) | Shared helpers: logging, formatting, and common functions. |
+
+Domain modules (OMOP, FHIR, and other clinical models) are not part of core.
+They live in project packages that plug into a node via the
+`pluginlake.projects` entry point (ADR-009) and are documented in each project's
+own reference docs.

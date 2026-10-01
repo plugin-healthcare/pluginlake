@@ -1,10 +1,14 @@
-"""Smoke test for the full ingestion pipeline with vocabulary validation.
+"""Smoke test for the pluginlake core stack.
 
-Runs against the Docker dev stack. Tests:
-1. Trigger vocabulary materialization (fixture vocab files mounted in container)
-2. Upload clinical person table with a known invalid concept ID (race_concept_id=999999)
-3. Trigger clinical materialization
-4. Verify validation metadata in Dagster (invalid_concept_count > 0)
+Runs against the Docker dev stack and verifies core, project-agnostic
+behaviour only. Project pipelines such as the EHDS/OMOP assets live in their
+own repositories (ADR-009) and are tested there.
+
+Checks:
+1. API and Dagster webserver come up and answer health probes
+2. Core API routers respond (health, ingest info, catalog, assets)
+3. Every Dagster code location loads without errors
+4. A generic file upload through ``POST /api/v1/ingest`` is stored
 
 Usage:
     just smoke-test-full     # start isolated stack, test, tear down
@@ -13,6 +17,7 @@ Usage:
 """
 
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -22,11 +27,10 @@ DAGSTER_URL = "http://localhost:3000"
 API_URL = "http://localhost:8000"
 GRAPHQL_URL = f"{DAGSTER_URL}/graphql"
 
-FIXTURES_DIR = Path(__file__).parent.parent / "tests" / "integration" / "fixtures"
-CLINICAL_DIR = FIXTURES_DIR / "clinical"
-
 POLL_INTERVAL = 2
 POLL_TIMEOUT = 120
+
+SMOKE_DATASET = "smoke"
 
 RUN_STATUS_QUERY = """
 query RunStatus($runId: ID!) {
@@ -39,33 +43,29 @@ query RunStatus($runId: ID!) {
 }
 """
 
-ASSET_MATERIALIZATION_QUERY = """
-query AssetMaterialization($assetKey: AssetKeyInput!) {
-  assetOrError(assetKey: $assetKey) {
+WORKSPACE_QUERY = """
+query Workspace {
+  workspaceOrError {
     __typename
-    ... on Asset {
-      assetMaterializations(limit: 1) {
-        runId
-        metadataEntries {
+    ... on Workspace {
+      locationEntries {
+        name
+        loadStatus
+        locationOrLoadError {
           __typename
-          label
-          ... on IntMetadataEntry { intValue }
-          ... on JsonMetadataEntry { jsonString }
-          ... on TextMetadataEntry { text }
+          ... on RepositoryLocation {
+            name
+            repositories {
+              name
+              jobs { name }
+              assetNodes { assetKey { path } }
+            }
+          }
+          ... on PythonError { message }
         }
       }
     }
-  }
-}
-"""
-
-LAUNCH_JOB_MUTATION = """
-mutation LaunchRun($executionParams: ExecutionParams!) {
-  launchRun(executionParams: $executionParams) {
-    __typename
-    ... on LaunchRunSuccess { run { runId status } }
     ... on PythonError { message }
-    ... on RunConfigValidationInvalid { errors { message } }
   }
 }
 """
@@ -85,27 +85,8 @@ def _graphql(query: str, variables: dict | None = None) -> dict:
     return r.json()
 
 
-def _launch_job(job_name: str, asset_selection: list[list[str]] | None = None) -> str:
-    params: dict = {
-        "selector": {
-            "repositoryLocationName": "pluginlake.definitions",
-            "repositoryName": "__repository__",
-            "jobName": job_name,
-        },
-        "runConfigData": {},
-    }
-    if asset_selection:
-        params["selector"]["assetSelection"] = [{"path": p} for p in asset_selection]
-
-    result = _graphql(LAUNCH_JOB_MUTATION, {"executionParams": params})
-    launch = result["data"]["launchRun"]
-
-    if launch["__typename"] != "LaunchRunSuccess":
-        raise SmokeTestError(f"Failed to launch {job_name}: {launch}")
-
-    run_id = launch["run"]["runId"]
-    print(f"  Launched: {run_id}")
-    return run_id
+def _get(path: str) -> httpx.Response:
+    return httpx.get(f"{API_URL}{path}", timeout=30)
 
 
 def wait_for_services() -> None:
@@ -151,108 +132,86 @@ def wait_for_run(run_id: str, label: str = "run") -> str:
     raise SmokeTestError(f"Run {run_id} timed out after {POLL_TIMEOUT}s")
 
 
-def step_vocab() -> None:
-    print("\n--- Step 1: Materialize vocabulary tables ---")
-    run_id = _launch_job("omop_vocab_ingest_job")
-    status = wait_for_run(run_id, "vocab")
-    if status != "SUCCESS":
-        raise SmokeTestError(f"Vocab job ended with: {status}")
+def step_api() -> None:
+    print("\n--- Step 1: Core API endpoints ---")
+    for path in ("/health", "/ready", "/api/v1/ingest/info", "/api/v1/catalog/schemas", "/api/v1/assets"):
+        r = _get(path)
+        if r.status_code != 200:
+            raise SmokeTestError(f"GET {path} returned {r.status_code}: {r.text}")
+        print(f"  {path}: 200")
+
+    info = _get("/api/v1/ingest/info").json()
+    if not info.get("allowed_extensions"):
+        raise SmokeTestError(f"Ingest info missing allowed_extensions: {info}")
+    print(f"  allowed_extensions = {info['allowed_extensions']}")
 
 
-def step_clinical() -> None:
-    print("\n--- Step 2: Upload and materialize clinical data ---")
-    person_csv = CLINICAL_DIR / "person.csv"
-    if not person_csv.exists():
-        raise SmokeTestError(f"Fixture not found: {person_csv}")
+def step_dagster_workspace() -> None:
+    print("\n--- Step 2: Dagster code locations ---")
+    workspace = _graphql(WORKSPACE_QUERY)["data"]["workspaceOrError"]
+    if workspace["__typename"] != "Workspace":
+        raise SmokeTestError(f"Workspace query error: {workspace}")
 
-    with person_csv.open("rb") as fp:
-        r = httpx.post(
-            f"{API_URL}/api/v1/omop/person/csv",
-            files={"file": (person_csv.name, fp, "text/csv")},
-            timeout=30,
-        )
+    entries = workspace["locationEntries"]
+    if not entries:
+        raise SmokeTestError("Dagster reports no code locations")
+
+    for entry in entries:
+        location = entry["locationOrLoadError"]
+        if location["__typename"] != "RepositoryLocation":
+            raise SmokeTestError(f"Code location '{entry['name']}' failed to load: {location}")
+
+        repos = location["repositories"]
+        jobs = [job["name"] for repo in repos for job in repo["jobs"]]
+        assets = ["/".join(node["assetKey"]["path"]) for repo in repos for node in repo["assetNodes"]]
+        print(f"  {entry['name']}: {entry['loadStatus']}, {len(jobs)} job(s), {len(assets)} asset(s)")
+        if assets:
+            print(f"    assets: {sorted(assets)[:10]}")
+
+    print("  PASS: all code locations loaded without errors")
+
+
+def step_ingest() -> None:
+    print("\n--- Step 3: Generic file ingestion ---")
+    with tempfile.TemporaryDirectory() as tmp:
+        csv_path = Path(tmp) / "smoke.csv"
+        csv_path.write_text("id,value\n1,alpha\n2,beta\n")
+
+        with csv_path.open("rb") as fp:
+            r = httpx.post(
+                f"{API_URL}/api/v1/ingest",
+                files={"file": (csv_path.name, fp, "text/csv")},
+                data={"dataset": SMOKE_DATASET},
+                timeout=30,
+            )
+
     if r.status_code != 201:
         raise SmokeTestError(f"Upload failed: {r.status_code} {r.text}")
 
     data = r.json()
+    print(f"  Stored at {data['file_path']} ({data['size_bytes']} bytes, status={data['status']})")
+    if data["size_bytes"] <= 0:
+        raise SmokeTestError(f"Unexpected size_bytes: {data['size_bytes']}")
+
     run_id = data.get("dagster_run_id")
-    print(f"  Uploaded person.csv (run_id={run_id})")
-
     if run_id:
-        status = wait_for_run(run_id, "clinical")
+        status = wait_for_run(run_id, "ingest")
         if status != "SUCCESS":
-            raise SmokeTestError(f"Clinical job ended with: {status}")
+            raise SmokeTestError(f"Ingest run ended with: {status}")
     else:
-        print("  No run_id returned, triggering manually...")
-        run_id = _launch_job("omop_ingest_job", [["omop", "person"]])
-        status = wait_for_run(run_id, "clinical")
-        if status != "SUCCESS":
-            raise SmokeTestError(f"Clinical job ended with: {status}")
-
-
-def step_verify() -> None:
-    print("\n--- Step 3: Verify validation metadata ---")
-    data = _graphql(
-        ASSET_MATERIALIZATION_QUERY,
-        {"assetKey": {"path": ["omop", "person"]}},
-    )
-    asset = data["data"]["assetOrError"]
-    if asset["__typename"] != "Asset":
-        raise SmokeTestError(f"Asset query error: {asset}")
-
-    mats = asset.get("assetMaterializations", [])
-    if not mats:
-        raise SmokeTestError("No materializations found for omop/person")
-
-    entries = {e["label"]: e for e in mats[0].get("metadataEntries", [])}
-    print(f"  Metadata keys: {sorted(entries.keys())}")
-
-    passed = True
-
-    if "row_count" in entries:
-        row_count = entries["row_count"].get("intValue")
-        print(f"  row_count = {row_count}")
-        if row_count != 5:
-            print(f"  WARN: Expected 5 rows, got {row_count}")
-    else:
-        print("  FAIL: row_count missing")
-        passed = False
-
-    if "invalid_concept_count" in entries:
-        count = entries["invalid_concept_count"].get("intValue")
-        print(f"  invalid_concept_count = {count}")
-        if count is not None and count > 0:
-            print("  PASS: Vocabulary validation detected invalid concepts")
-        else:
-            print("  FAIL: Expected invalid concepts (race_concept_id=999999) but count=0")
-            passed = False
-    else:
-        print("  FAIL: invalid_concept_count missing — validation did not run")
-        passed = False
-
-    if "invalid_concepts" in entries:
-        detail = entries["invalid_concepts"].get("jsonString") or entries["invalid_concepts"].get("text", "present")
-        print(f"  invalid_concepts = {detail}")
-        print("  PASS: Invalid concept summary attached")
-    else:
-        if entries.get("invalid_concept_count", {}).get("intValue", 0) > 0:
-            print("  FAIL: invalid_concepts summary missing despite count > 0")
-            passed = False
-
-    if not passed:
-        raise SmokeTestError("Validation metadata checks failed")
+        print("  No Dagster run triggered (no project pipeline installed)")
 
 
 def main() -> int:
     print("=" * 60)
-    print("PLUGINLAKE SMOKE TEST — Vocabulary Validation Pipeline")
+    print("PLUGINLAKE SMOKE TEST — Core Stack")
     print("=" * 60)
 
     try:
         wait_for_services()
-        step_vocab()
-        step_clinical()
-        step_verify()
+        step_api()
+        step_dagster_workspace()
+        step_ingest()
 
         print("\n" + "=" * 60)
         print("SMOKE TEST PASSED")

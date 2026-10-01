@@ -1,6 +1,6 @@
 # Using pluginlake as a package
 
-This guide shows how to use `pluginlake` as a dependency in your own data station project. You get the core assets and utilities out of the box, and can add your own custom assets alongside them.
+This guide shows how to use `pluginlake` as a dependency in your own data station project. You get the core platform — the DuckLake IO manager, shared utilities, the FastAPI gateway, and the plugin host — and can add your own custom assets alongside it.
 
 ## Prerequisites
 
@@ -40,22 +40,26 @@ def patient_summary() -> pl.DataFrame:
 
 ## Compose definitions
 
-Create a `definitions.py` that combines pluginlake assets with your own:
+Create a `definitions.py` that combines your assets into a Dagster
+`Definitions` object:
 
 ```python
 # my_station/definitions.py
 
 from dagster import Definitions
-from pluginlake.assets.omop import omop_condition, omop_observation
 
 from my_station.assets.patient_summary import patient_summary
 
 defs = Definitions(
-    assets=[omop_condition, omop_observation, patient_summary],
+    assets=[patient_summary],
 )
 ```
 
-You pick exactly which core assets you need — not every station uses all of them.
+Core provides the platform — the DuckLake IO manager, the FastAPI gateway, and
+the plugin host — while your assets and any installed project packages provide
+the domain logic. Clinical models such as OMOP and FHIR are not bundled in core;
+they ship as project packages that plug in via the `pluginlake.projects` entry
+point (see [Deploying a Station](deploying-a-station.md) and ADR-009).
 
 ## Using pluginlake utilities
 
