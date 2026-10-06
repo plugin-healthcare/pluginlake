@@ -1,0 +1,21 @@
+[project]
+name = "$project_id"
+version = "0.1.0"
+description = "A pluginlake project package."
+requires-python = ">=3.13"
+dependencies = [
+    "pluginlake$requires_core",
+]
+
+# Single registration surface: core discovers this manifest and mounts the
+# project's contributions uniformly (ADR-009).
+[project.entry-points."pluginlake.projects"]
+$project_id = "$package_name.manifest:manifest"
+
+[build-system]
+requires = ["uv_build>=0.10.0,<0.11.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "$package_name"
+module-root = "src"

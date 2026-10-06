@@ -1,0 +1,16 @@
+# Station deployment config (dev default).
+#
+# Declares the projects this data station deploys. `pluginlake up` reads this
+# file, installs the listed projects into the standardized images, and discovery
+# wires their code locations and routers automatically (ADR-009). See
+# src/pluginlake/deploy/config.py for the full schema.
+
+[station]
+endpoint_url = "http://localhost:8000"
+
+[[projects]]
+name = "ehds-demo"
+# Dev: local sibling checkout, mounted and editable-installed into the images.
+path = "../pluginlake-ehds-demo"
+# Prod alternative (pinned, no local checkout needed):
+# source = "pluginlake-ehds-demo @ git+https://github.com/plugin-healthcare/pluginlake-ehds-demo@v0.1.0"
