@@ -50,8 +50,9 @@ The build context is always the project root (`../../` in the compose files) bec
 
 ## Projects and database provisioning
 
-The images share the entrypoint `deploy/docker/entrypoint.sh`.
+The development images (`pluginlake.dev.Dockerfile` and `dagster.dev.Dockerfile`) share the entrypoint `deploy/docker/entrypoint.sh`.
 It runs before the service starts and reads two environment variables.
+The production images used by `just up` do not run the entrypoint, so these variables have no effect there.
 
 | Variable | Purpose |
 |----------|---------|
@@ -65,7 +66,7 @@ In development, point `PLUGINLAKE_PROJECTS` at a local editable checkout:
 PLUGINLAKE_PROJECTS="-e /opt/projects/my-project"
 ```
 
-In production, use a pinned spec:
+As an alternative to an editable checkout, use a pinned spec:
 
 ```bash
 PLUGINLAKE_PROJECTS="my-project@git+https://github.com/org/my-project@v1.2.3"
