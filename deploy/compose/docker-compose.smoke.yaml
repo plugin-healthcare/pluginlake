@@ -1,21 +1,15 @@
 services:
   postgres:
-    env_file: !override
-      - smoke.env
     volumes:
       - smoke-pgdata:/var/lib/postgresql/data
 
   dagster:
-    env_file: !override
-      - smoke.env
     volumes:
       - ./smoke.env:/app/.env
       - smoke-lakehouse:/app/.data/lakehouse
       - smoke-compute-logs:/app/compute_logs
 
   pluginlake:
-    env_file: !override
-      - smoke.env
     volumes:
       - ./smoke.env:/app/.env
 

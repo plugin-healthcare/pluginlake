@@ -10,7 +10,7 @@ services:
     volumes:
       - ${POSTGRES_DATA:-../../.data/postgres}:/var/lib/postgresql/data
     env_file:
-      - ../../.env
+      - ${PLUGINLAKE_ENV_FILE:-../../.env}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 3s
@@ -39,7 +39,7 @@ services:
       DUCKLAKE_PG_DB: ${DUCKLAKE_PG_DB:-ducklake}
       PLUGINLAKE_STORAGE_BASE_DIR: .data/storage
     env_file:
-      - ../../.env
+      - ${PLUGINLAKE_ENV_FILE:-../../.env}
     depends_on:
       postgres:
         condition: service_healthy
@@ -55,7 +55,7 @@ services:
       context: ../../
       dockerfile: deploy/docker/pluginlake.dev.Dockerfile
     env_file:
-      - ../../.env
+      - ${PLUGINLAKE_ENV_FILE:-../../.env}
     depends_on:
       postgres:
         condition: service_healthy
