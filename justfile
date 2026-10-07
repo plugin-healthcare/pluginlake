@@ -57,7 +57,7 @@ _compose_central := "docker compose -f deploy/compose/docker-compose.central.yam
 dev-central *args='':
     {{ _compose_central }} up --build {{ args }}
 
-_smoke-compose := "-f deploy/compose/docker-compose.dev.yaml -f deploy/compose/docker-compose.smoke.yaml"
+_smoke-compose := 'env -i HOME="$HOME" PATH="$PATH" docker compose --env-file deploy/compose/smoke.env -f deploy/compose/docker-compose.dev.yaml -f deploy/compose/docker-compose.smoke.yaml'
 
 # Run smoke test against running stack
 smoke-test:
@@ -65,8 +65,8 @@ smoke-test:
 
 # Start isolated stack, run smoke test, tear down (clean volumes)
 smoke-test-full:
-    docker compose {{ _smoke-compose }} up -d
-    uv run python scripts/smoke_test.py; rc=$?; docker compose {{ _smoke-compose }} down -v; exit $rc
+    {{ _smoke-compose }} up -d
+    uv run python scripts/smoke_test.py; rc=$?; {{ _smoke-compose }} down -v; exit $rc
 
 # Start local dev with titanic example (no Docker)
 dev-local:

@@ -1,6 +1,6 @@
 ---
 name: github-issues
-description: "Create GitHub issues for epics and stories, link parent/child relationships, set project board fields (Story Level, Product/Feature, Status, Priority). Use when: creating epics, creating stories, populating project board, bulk issue creation, setting up initiative hierarchy, setting project labels/fields."
+description: "Create GitHub issues for epics and stories, link parent/child relationships, set the organisation issue type (Initiative, Epic, Story) and project board fields (Product/Feature, Status, Priority, Sprint). Use when: creating epics, creating stories, populating project board, bulk issue creation, setting up initiative hierarchy, setting project labels/fields."
 argument-hint: "Describe what epics/stories to create, which project to use, or point to the spec file"
 ---
 
@@ -12,7 +12,8 @@ Create and manage GitHub issues with epic/story hierarchy, parent-child linking,
 
 - Creating epics and stories from a markdown specification
 - Bulk-creating issues and linking them in a parent/child hierarchy
-- Setting project board fields (Story Level, Product/Feature, Status, Priority, Story Points)
+- Setting the issue type (Initiative, Epic, Story, Task, Bug, Feature)
+- Setting project board fields (Product/Feature, Status, Priority, Story Points, Sprint)
 - Populating a new initiative with epics and stories
 - Adding labels or project metadata to existing issues
 
@@ -36,7 +37,15 @@ gh project list --owner "$OWNER" --format json | jq '.projects[] | {number, titl
 
 # List all fields, their IDs, types, and options
 gh project field-list <PROJECT_NUMBER> --owner "$OWNER" --format json | jq '.fields[] | {name, id, type, options}'
+
+# Organisation issue types (Initiative, Epic, Story, Task, Bug, Feature)
+gh api graphql -f query='{organization(login:"'"$OWNER"'"){issueTypes(first:20){nodes{id name}}}}'
+
+# Sprint iterations (field-list does not show them)
+gh api graphql -f query='{node(id:"<SPRINT_FIELD_ID>"){...on ProjectV2IterationField{configuration{iterations{id title startDate}}}}}'
 ```
+
+The level of an issue (Initiative, Epic, Story) is the organisation issue type, not a project field.
 
 Save the output so you can reference field IDs and option IDs throughout the process. See [references/project-fields.md](./references/project-fields.md) for a concrete example.
 
@@ -94,7 +103,7 @@ ITEM_ID=$(gh project item-add <PROJECT_NUMBER> \
   --url "https://github.com/$OWNER/$REPO/issues/<NUMBER>" \
   --format json | jq -r '.id')
 
-# Set a single-select field (e.g. Story Level, Status, Priority, Product/Feature)
+# Set a single-select field (e.g. Status, Priority, Product/Feature)
 gh project item-edit \
   --project-id "<PROJECT_NODE_ID>" \
   --id "$ITEM_ID" \
@@ -107,7 +116,33 @@ gh project item-edit \
   --id "$ITEM_ID" \
   --field-id "<FIELD_ID>" \
   --number 5
+
+# Set the sprint (iteration field)
+gh project item-edit \
+  --project-id "<PROJECT_NODE_ID>" \
+  --id "$ITEM_ID" \
+  --field-id "<SPRINT_FIELD_ID>" \
+  --iteration-id "<ITERATION_ID>"
+
+# Set the issue type (Initiative, Epic, Story)
+NODE_ID=$(gh issue view <NUMBER> --repo "$OWNER/$REPO" --json id -q .id)
+gh api graphql -f query="mutation{updateIssueIssueType(input:{issueId:\"$NODE_ID\",issueTypeId:\"<ISSUE_TYPE_ID>\"}){issue{number}}}"
 ```
+
+Priority, Story Points and Effort are organisation issue fields, not project fields. `gh project item-edit` fails on them; use `updateIssueFieldValue`:
+
+```bash
+# Discover issue fields and options
+gh api graphql -f query='{organization(login:"'"$OWNER"'"){issueFields(first:20){nodes{__typename ...on IssueFieldNumber{id name} ...on IssueFieldSingleSelect{id name options{id name}}}}}}'
+
+gh api graphql -f query="mutation{updateIssueFieldValue(input:{issueId:\"$NODE_ID\",issueField:{fieldId:\"<FIELD_ID>\",numberValue:4}}){clientMutationId}}"
+gh api graphql -f query="mutation{updateIssueFieldValue(input:{issueId:\"$NODE_ID\",issueField:{fieldId:\"<FIELD_ID>\",singleSelectOptionId:\"<OPTION_ID>\"}}){clientMutationId}}"
+```
+
+- Story points are binary: 1, 2, 4, 8, 16 or 32. Split a story that is larger than 32.
+- Priority is `!!!` for pick up first, then `!!` and `!`. Never use `CRIT` when planning.
+
+Link a pull request to an issue in the issue's Development sidebar in the UI. The API cannot link an existing PR, and `Closes #n` keywords are not used.
 
 ### 6. Batch creation with the template script
 
@@ -123,9 +158,9 @@ export GH_PROJECT_NODE_ID="PVT_kw..."
 export GH_INITIATIVE="71"  # or "" to skip
 
 # Discover these with Step 0 above
-export GH_FIELD_STORY_LEVEL="PVTSSF_..."
-export GH_OPTION_STORY_LEVEL_EPIC="abc123"
-export GH_OPTION_STORY_LEVEL_STORY="def456"
+# Organisation issue types (see "Set the issue type" above)
+export GH_TYPE_EPIC="IT_..."
+export GH_TYPE_STORY="IT_..."
 
 # Optional fields (leave empty to skip)
 export GH_FIELD_PRODUCT=""

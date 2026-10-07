@@ -48,6 +48,47 @@ docker build -f deploy/docker/dagster-webserver.Dockerfile -t dagster-webserver 
 
 The build context is always the project root (`../../` in the compose files) because Dockerfiles need access to `pyproject.toml`, `uv.lock`, `src/`, and `config/`.
 
+## Projects and database provisioning
+
+The images share the entrypoint `deploy/docker/entrypoint.sh`.
+It runs before the service starts and reads two environment variables.
+
+| Variable | Purpose |
+|----------|---------|
+| `PLUGINLAKE_PROJECTS` | Whitespace-separated `uv pip install` arguments for the project packages to install. |
+| `PLUGINLAKE_ENSURE_DB` | Whitespace-separated database names to create in Postgres when they do not exist yet. |
+
+Projects register themselves through the `pluginlake.projects` entry point, so the core discovers their code locations and routers without importing project code (ADR-009).
+In development, point `PLUGINLAKE_PROJECTS` at a local editable checkout:
+
+```bash
+PLUGINLAKE_PROJECTS="-e /opt/projects/my-project"
+```
+
+In production, use a pinned spec:
+
+```bash
+PLUGINLAKE_PROJECTS="my-project@git+https://github.com/org/my-project@v1.2.3"
+```
+
+Projects are installed with `--no-sources`, so the `[tool.uv.sources]` table of a project is ignored inside the image.
+`PLUGINLAKE_ENSURE_DB` is idempotent and safe to run on every start.
+The databases are currently created with the Postgres superuser; per-component roles are tracked in #224.
+
+## Smoke test
+
+The smoke test checks the core stack only, without any project installed.
+It verifies that the API and Dagster answer, that the core API routers respond, that every Dagster code location loads, and that a generic file upload through `POST /api/v1/ingest` is stored.
+Project pipelines are tested in their own repositories.
+
+```bash
+just smoke-test        # Run against an already running stack
+just smoke-test-full   # Start an isolated stack, run the test, tear it down (removes volumes)
+```
+
+`smoke-test-full` reads `deploy/compose/smoke.env`, so it does not depend on your local `.env`.
+It publishes the same host ports as the dev stack, so stop `just dev-up` first if a port is already in use.
+
 ## Hardened base images
 
 All Dockerfiles use hardened images from `dhi.io/` instead of the default Docker Hub images:
