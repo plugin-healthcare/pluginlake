@@ -68,7 +68,7 @@ PLUGINLAKE_PROJECTS="-e /opt/projects/my-project"
 In production, use a pinned spec:
 
 ```bash
-PLUGINLAKE_PROJECTS="my-project @ git+https://github.com/org/my-project@v1.2.3"
+PLUGINLAKE_PROJECTS="my-project@git+https://github.com/org/my-project@v1.2.3"
 ```
 
 Projects are installed with `--no-sources`, so the `[tool.uv.sources]` table of a project is ignored inside the image.
