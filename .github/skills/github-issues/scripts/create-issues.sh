@@ -13,9 +13,8 @@
 #   GH_PROJECT_NUMBER   - Org project number (e.g. "4")
 #   GH_PROJECT_NODE_ID  - Project node ID (from discovery, e.g. "PVT_kw...")
 #   GH_INITIATIVE       - Parent issue number for epics (optional, "" to skip)
-#   GH_FIELD_STORY_LEVEL      - Story Level field ID
-#   GH_OPTION_STORY_LEVEL_EPIC  - Story Level "Epic" option ID
-#   GH_OPTION_STORY_LEVEL_STORY - Story Level "Story" option ID
+#   GH_TYPE_EPIC        - Organisation issue type ID for Epic (IT_...)
+#   GH_TYPE_STORY       - Organisation issue type ID for Story (IT_...)
 #   GH_FIELD_PRODUCT    - Product/Feature field ID (optional, "" to skip)
 #   GH_OPTION_PRODUCT   - Product/Feature option ID (optional)
 #   GH_FIELD_STATUS     - Status field ID (optional, "" to skip)
@@ -24,6 +23,7 @@
 # Discover these values with:
 #   gh project list --owner $GH_OWNER --format json | jq '.projects[] | {number, title, id}'
 #   gh project field-list $GH_PROJECT_NUMBER --owner $GH_OWNER --format json | jq '.fields[] | {name, id, type, options}'
+#   gh api graphql -f query='{organization(login:"'$GH_OWNER'"){issueTypes(first:20){nodes{id name}}}}'
 #
 # The script is idempotent: re-running skips already-created issues (by title match).
 set -euo pipefail
@@ -35,9 +35,8 @@ PROJECT_NUMBER="${GH_PROJECT_NUMBER:?Set GH_PROJECT_NUMBER}"
 PROJECT_NODE_ID="${GH_PROJECT_NODE_ID:?Set GH_PROJECT_NODE_ID}"
 INITIATIVE_NUMBER="${GH_INITIATIVE:-}"
 
-STORY_LEVEL_FIELD="${GH_FIELD_STORY_LEVEL:?Set GH_FIELD_STORY_LEVEL}"
-STORY_LEVEL_EPIC="${GH_OPTION_STORY_LEVEL_EPIC:?Set GH_OPTION_STORY_LEVEL_EPIC}"
-STORY_LEVEL_STORY="${GH_OPTION_STORY_LEVEL_STORY:?Set GH_OPTION_STORY_LEVEL_STORY}"
+TYPE_EPIC="${GH_TYPE_EPIC:?Set GH_TYPE_EPIC}"
+TYPE_STORY="${GH_TYPE_STORY:?Set GH_TYPE_STORY}"
 
 PRODUCT_FIELD="${GH_FIELD_PRODUCT:-}"
 PRODUCT_VALUE="${GH_OPTION_PRODUCT:-}"
@@ -73,7 +72,7 @@ link_sub_issue() {
 
 add_to_project_and_set_fields() {
   local issue_num="$1"
-  local story_level_option="$2"  # epic or story option ID
+  local issue_type="$2"  # organisation issue type ID (epic or story)
 
   local item_id
   item_id=$(gh project item-add "$PROJECT_NUMBER" \
@@ -86,9 +85,10 @@ add_to_project_and_set_fields() {
     return 0
   fi
 
-  # Story Level
-  gh project item-edit --project-id "$PROJECT_NODE_ID" --id "$item_id" \
-    --field-id "$STORY_LEVEL_FIELD" --single-select-option-id "$story_level_option" 2>/dev/null || true
+  # Issue type
+  local node_id
+  node_id=$(gh issue view "$issue_num" --repo "$OWNER/$REPO" --json id -q .id)
+  gh api graphql -f query="mutation{updateIssueIssueType(input:{issueId:\"$node_id\",issueTypeId:\"$issue_type\"}){issue{number}}}" >/dev/null 2>&1 || true
 
   # Product/Feature (if configured)
   if [[ -n "$PRODUCT_FIELD" && -n "$PRODUCT_VALUE" ]]; then
@@ -194,11 +194,11 @@ echo ""
 echo "=== Adding to Project & Setting Fields ==="
 for num in "${EPIC_NUMBERS[@]}"; do
   echo "  📋 Epic #$num → Project"
-  add_to_project_and_set_fields "$num" "$STORY_LEVEL_EPIC"
+  add_to_project_and_set_fields "$num" "$TYPE_EPIC"
 done
 for num in "${STORY_NUMBERS[@]}"; do
   echo "  📋 Story #$num → Project"
-  add_to_project_and_set_fields "$num" "$STORY_LEVEL_STORY"
+  add_to_project_and_set_fields "$num" "$TYPE_STORY"
 done
 
 # ── Summary ───────────────────────────────────────────────────────────
