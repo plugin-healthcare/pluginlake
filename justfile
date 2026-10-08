@@ -57,7 +57,7 @@ _compose_central := "docker compose -f deploy/compose/docker-compose.central.yam
 dev-central *args='':
     {{ _compose_central }} up --build {{ args }}
 
-_smoke-compose := 'env -i HOME="$HOME" PATH="$PATH" docker compose --env-file deploy/compose/smoke.env -f deploy/compose/docker-compose.dev.yaml -f deploy/compose/docker-compose.smoke.yaml'
+_smoke-compose := 'env -i HOME="$HOME" PATH="$PATH" PLUGINLAKE_ENV_FILE=smoke.env docker compose --env-file deploy/compose/smoke.env -f deploy/compose/docker-compose.dev.yaml -f deploy/compose/docker-compose.smoke.yaml'
 
 # Run smoke test against running stack
 smoke-test:
@@ -65,7 +65,7 @@ smoke-test:
 
 # Start isolated stack, run smoke test, tear down (clean volumes)
 smoke-test-full:
-    {{ _smoke-compose }} up -d
+    {{ _smoke-compose }} up -d postgres dagster pluginlake
     uv run python scripts/smoke_test.py; rc=$?; {{ _smoke-compose }} down -v; exit $rc
 
 # Start local dev with titanic example (no Docker)

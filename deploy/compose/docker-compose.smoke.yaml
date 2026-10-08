@@ -4,16 +4,12 @@ services:
       - smoke-pgdata:/var/lib/postgresql/data
 
   dagster:
-    env_file:
-      - smoke.env
     volumes:
       - ./smoke.env:/app/.env
       - smoke-lakehouse:/app/.data/lakehouse
       - smoke-compute-logs:/app/compute_logs
 
   pluginlake:
-    env_file:
-      - smoke.env
     volumes:
       - ./smoke.env:/app/.env
 
