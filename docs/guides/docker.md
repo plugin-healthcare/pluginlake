@@ -88,6 +88,12 @@ just smoke-test-full   # Start an isolated stack, run the test, tear it down (re
 ```
 
 `smoke-test-full` reads `deploy/compose/smoke.env`, so it does not depend on your local `.env`.
+It does this by setting `PLUGINLAKE_ENV_FILE=smoke.env`, which selects the file the dev compose services load (default: `../../.env`, relative to `deploy/compose/`).
+Compose resolves `${...}` interpolation from the `--env-file` flag and not from `PLUGINLAKE_ENV_FILE`, so pass the same file to both when you use another environment file:
+
+```bash
+PLUGINLAKE_ENV_FILE=custom.env docker compose --env-file deploy/compose/custom.env -f deploy/compose/docker-compose.dev.yaml up
+```
 It publishes the same host ports as the dev stack, so stop `just dev-up` first if a port is already in use.
 
 ## Hardened base images
