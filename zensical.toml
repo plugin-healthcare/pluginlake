@@ -15,6 +15,7 @@ nav = [
         { "Deploying a Station" = "guides/deploying-a-station.md" },
         { "Dashboard" = "guides/dashboard.md" },
         { "Using as Package" = "guides/using-as-package.md" },
+        { "GitHub Flow" = "guides/github-flow.md" },
     ]},
     { "Reference" = [
         { "Reference" = "reference/index.md" },

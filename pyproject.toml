@@ -76,6 +76,7 @@ test = [
 ]
 docs = [
     "mkdocstrings[python]>=1.0.3",
+    "rumdl>=0.2.78",
     "zensical>=0.0.21",
 ]
 nb = [
@@ -232,3 +233,6 @@ invalid-method-override = "warn"
 forbid_yanked = true
 forbid_archived = true
 forbid_quarantined = true
+
+[tool.rumdl]
+disable = ["MD013"]
