@@ -33,7 +33,7 @@ The table below shows which external standard concept maps to which pluginlake c
 
 **pluginlake does:** The station maintains a YAML asset registry that defines which DuckLake tables/Dagster assets are externally visible. The `/dsp/catalog` endpoint generates the DCAT response from this registry at request time.
 
-```
+```text
 DSP Catalog Request → FastAPI → Asset Registry (YAML) → DCAT + ODRL response
 ```
 
@@ -75,12 +75,13 @@ async def get_catalog(registry: AssetRegistry = Depends(get_asset_registry)):
 
 **pluginlake does:** The hub (consumer) initiates a negotiation. The station (provider) may require human approval from a station admin. The agreed ODRL policy is stored as JSON alongside the negotiation state. All subsequent requests are checked against this agreement.
 
-```
+```text
 Hub operator → Hub FastAPI → DSP ContractRequestMessage → Station FastAPI
     → Station admin approves/tightens → DSP AgreementMessage → database
 ```
 
 **Storage requirements:**
+
 - Transactional state machine (no partial state transitions — a negotiation is either REQUESTED or OFFERED, never both)
 - JSON storage for ODRL policies (variable structure, needs querying)
 - Foreign key relationship between negotiation and transfer records
@@ -102,7 +103,7 @@ CREATE TABLE dsp.negotiation (
 
 **State machine** (provider-side, as defined by DSP 2025-1):
 
-```
+```text
 REQUESTED → OFFERED → AGREED → VERIFIED → FINALIZED → [active]
     └→ TERMINATED (from any state)
 ```
@@ -124,7 +125,7 @@ REQUESTED → OFFERED → AGREED → VERIFIED → FINALIZED → [active]
 
 **pluginlake does:** A transfer request triggers a Dagster asset materialization. A Dagster sensor monitors run completion and transitions the DSP state accordingly. On completion, a scoped token is issued for data retrieval from DuckLake.
 
-```
+```text
 Transfer request → validate agreement → trigger Dagster run
     → sensor detects completion → issue scoped token → callback to consumer
     → consumer GETs /dsp/data/{transfer_id} with token → DuckLake query result
@@ -151,7 +152,7 @@ Transfer request → validate agreement → trigger Dagster run
 
 **pluginlake does:** FastAPI middleware extracts the `Authorization` header, validates the DPoP proof against the local Nuts Node (localhost call, no network round-trip), and populates the request context with the authenticated organizational identity.
 
-```
+```text
 Hub request → Authorization: DPoP <token>
     → FastAPI middleware → POST /internal/auth/v2/dpop/validate (local Nuts Node)
     → request context: {organization_did, organization_name}
@@ -168,7 +169,7 @@ This proves *which organization* is calling. It does not say anything about *whi
 
 **pluginlake does:** The hub issues a Verifiable Credential to each researcher containing their permitted datasets, operations, and constraints (expressed as pluginlake's ODRL profile). The station verifies the VC signature, checks it references an active agreement, and extracts the claims for enforcement.
 
-```
+```text
 Researcher logs in at hub (OIDC) → hub issues PluginlakeAccessCredential
     → researcher's request to station carries: Nuts DPoP token + VC (as VP)
     → station verifies: signature, issuer trust, agreement reference, expiry
@@ -189,7 +190,7 @@ The VC is issued by the hub's DID (signing key in the hub's DID document). The s
 
 **pluginlake's rule: most restrictive wins.** The enforcement layer intersects all three:
 
-```
+```text
 Agreement:   datasets=[omop_condition], ops=[aggregate, count], purpose=research
 VC claims:   datasets=[omop_condition], ops=[aggregate], columns=[concept_id, start_date]
 Station:     sensitive_columns=[person_id], min_k=5, max_rows=50000
@@ -291,7 +292,7 @@ Constraints imposed by DSP 2025-1 that affect pluginlake's implementation:
 
 ## DSP routes on FastAPI
 
-```
+```text
 # Internal routes (unchanged)
 GET  /api/catalog/schemas          → DuckLake schema listing
 GET  /api/catalog/tables           → DuckLake table listing
@@ -325,6 +326,7 @@ GET  /dsp/data/{transfer_id}       → Pull result data (scoped token required)
 **Goal:** One station receives DSP requests from one hub, authenticated via Nuts. Contract negotiation works end-to-end.
 
 **Delivers:**
+
 - `src/pluginlake/dsp/`: DSP provider routes (catalog, negotiation, transfer)
 - Nuts middleware for org identity verification
 - Negotiation state machine (`dsp` schema)
@@ -339,6 +341,7 @@ GET  /dsp/data/{transfer_id}       → Pull result data (scoped token required)
 **Goal:** Per-user authorization at the station.
 
 **Delivers:**
+
 - `src/pluginlake/authz/`: ODRL evaluator, VC verification, enforcement
 - PluginlakeAccessCredential schema (ADR-009)
 - Hub issues VCs, station verifies per-request
@@ -351,6 +354,7 @@ GET  /dsp/data/{transfer_id}       → Pull result data (scoped token required)
 **Goal:** Production-ready multi-org network.
 
 **Delivers:**
+
 - Hub UI (Streamlit): credential issuance, agreement monitoring
 - Station UI (Streamlit): access control dashboard, approval workflow
 - RBAC entity model
@@ -358,22 +362,21 @@ GET  /dsp/data/{transfer_id}       → Pull result data (scoped token required)
 - Audit trail + decision logging
 - Credential revocation (StatusList2021)
 
-
 ---
 
-# Part 2: Options analysis, UX workflows, and deep-dive reference
+## Part 2: Options analysis, UX workflows, and deep-dive reference
 
 The following sections preserve the detailed options analysis, dashboard UX workflows, RBAC entity model, governance models, and international standards appendix from the original architecture evaluation.
 
 ---
 
-## Options analysis: authentication and authorization architecture
+### Options analysis: authentication and authorization architecture
 
 > **Editorial note:** This section documents the five options evaluated during the architecture design process. The initial recommendation was Option A (Nuts + OPA). Through iterative design, the architecture evolved to a **VC-native ODRL approach** (a refined variant of Option D) that eliminates OPA entirely. The adopted architecture is described in the "Enforcement" section below. This analysis is preserved to document why each alternative was considered and rejected.
 
 Five options were evaluated. All assume DSP for the protocol layer. They differ in how trust boundaries 2 and 3 are handled.
 
-### Option A: Nuts + OPA with pluginlake user context token (initially recommended)
+#### Option A: Nuts + OPA with pluginlake user context token (initially recommended)
 
 ```mermaid
 sequenceDiagram
@@ -442,6 +445,7 @@ sequenceDiagram
 | What is the purpose of this request? | OPA | Nuts |
 
 **Benefits:**
+
 - Clean separation: zero functional overlap between Nuts and OPA
 - Per-user, per-dataset, per-operation audit trail at the station (satisfies EHDS and DPO requirements)
 - Compute constraints (column filters, row filters, aggregation-only, privacy checks) are first-class
@@ -451,6 +455,7 @@ sequenceDiagram
 - Interoperable with Dutch healthcare ecosystem via Nuts
 
 **Drawbacks:**
+
 - Custom user context token format must be standardized (candidate for ADR-009)
 - Hub signing key management is an operational concern
 - OPA sidecar adds a deployment component per station and per hub
@@ -462,7 +467,7 @@ sequenceDiagram
 
 ---
 
-### Option B: OPA only, no Nuts (mTLS + internal PKI)
+#### Option B: OPA only, no Nuts (mTLS + internal PKI)
 
 ```mermaid
 sequenceDiagram
@@ -490,6 +495,7 @@ sequenceDiagram
 **How org identity works without Nuts:** mTLS with a shared PKI. Each pluginlake instance has a client certificate signed by a pluginlake CA (managed by DHD). The station validates the certificate chain to verify the hub is a known participant. Network membership is managed by certificate issuance/revocation.
 
 **Benefits:**
+
 - Simpler infrastructure: no Nuts node sidecar per station
 - No dependency on Nuts network availability
 - No Bolt definition or Nuts community governance required
@@ -497,6 +503,7 @@ sequenceDiagram
 - All fine-grained enforcement in OPA -- single policy system
 
 **Drawbacks:**
+
 - Not interoperable with the broader Dutch healthcare ecosystem (Nuts is the direction for NL health dataspaces)
 - PKI certificate management is a significant operational burden (issuance, rotation, revocation, HSMs)
 - Network membership is centralized in the CA -- DHD becomes a single point of authority
@@ -508,7 +515,7 @@ sequenceDiagram
 
 ---
 
-### Option C: Nuts only, no OPA
+#### Option C: Nuts only, no OPA
 
 ```mermaid
 sequenceDiagram
@@ -528,11 +535,13 @@ sequenceDiagram
 ```
 
 **Benefits:**
+
 - Simplest architecture: one auth system
 - Fully decentralized, no custom token format
 - Interoperable with NL health ecosystem
 
 **Drawbacks:**
+
 - No per-user visibility at the station. DPO cannot audit which researcher accessed data.
 - No per-dataset access control beyond Nuts scope
 - No compute constraints -- Nuts cannot express "aggregate only, no extraction"
@@ -543,7 +552,7 @@ sequenceDiagram
 
 ---
 
-### Option D: Nuts + ODRL policy evaluation (DSP-native)
+#### Option D: Nuts + ODRL policy evaluation (DSP-native)
 
 ```mermaid
 sequenceDiagram
@@ -567,11 +576,13 @@ sequenceDiagram
 ```
 
 **Benefits:**
+
 - Fully standards-compliant (DSP + ODRL)
 - No custom token format
 - Interoperable with any DSP connector supporting ODRL
 
 **Drawbacks:**
+
 - ODRL cannot natively express compute constraints (column allowlists, row filters, max cardinality, privacy checks). Custom ODRL profiles needed, reducing interoperability.
 - No existing Python ODRL evaluation library for the full spec
 - Every permission change requires renegotiating a DSP contract
@@ -582,7 +593,7 @@ sequenceDiagram
 
 ---
 
-### Option E: No Nuts, no OPA (API keys + application-level enforcement)
+#### Option E: No Nuts, no OPA (API keys + application-level enforcement)
 
 ```mermaid
 sequenceDiagram
@@ -601,11 +612,13 @@ sequenceDiagram
 ```
 
 **Benefits:**
+
 - Simplest possible implementation
 - No external dependencies
 - Fast to prototype
 
 **Drawbacks:**
+
 - No organizational identity verification
 - No interoperability with any external dataspace
 - No decentralized trust -- fully centralized API key management
@@ -617,7 +630,7 @@ sequenceDiagram
 
 ---
 
-### Options comparison
+#### Options comparison
 
 | Criterion | A: Nuts+OPA | B: OPA only | C: Nuts only | D: Nuts+ODRL (adopted) | E: API keys |
 |---|---|---|---|---|---|
@@ -633,11 +646,11 @@ sequenceDiagram
 
 ---
 
-## Contract negotiation scenarios
+### Contract negotiation scenarios
 
 Once a DSP agreement is FINALIZED, it covers all subsequent requests within its scope. Individual queries and compute requests do NOT require re-negotiation — they reference the existing agreement and present a VC proving authorization within that agreement's terms.
 
-### Scenario 1: Hub-initiated, bilateral approval (default)
+#### Scenario 1: Hub-initiated, bilateral approval (default)
 
 The processing hub initiates the contract and sends it to the data station. The station must explicitly approve before the agreement is active. This is the standard DSP flow.
 
@@ -667,13 +680,14 @@ sequenceDiagram
 ```
 
 **Key properties:**
+
 - Hub cannot access anything until station explicitly approves
 - Station stores the agreement — knows exactly what it agreed to
 - Every subsequent request references this agreement
 - Station can terminate agreement at any time (immediate effect)
 - Hub can request access to additional datasets → new negotiation required
 
-### Scenario 2: Hub-initiated with station counter-offer
+#### Scenario 2: Hub-initiated with station counter-offer
 
 The station may not accept the hub's proposed terms as-is. It can counter-offer with tighter constraints. The hub must then accept the modified terms.
 
@@ -697,12 +711,13 @@ sequenceDiagram
 ```
 
 **Key properties:**
+
 - Station has full power to modify terms before agreeing
 - Hub sees exactly what was approved (no surprises at request time)
 - The finalized agreement is the station's version, not the hub's proposal
 - Constraints in the agreement are the MAXIMUM the hub can request — station can still apply additional restrictions at query time
 
-### What the agreement covers vs what happens per-request
+#### What the agreement covers vs what happens per-request
 
 | Concern | Resolved during negotiation (one-time) | Resolved per-request (every query) |
 |---|---|---|
@@ -718,9 +733,9 @@ sequenceDiagram
 
 The agreement sets the outer bounds. Per-request enforcement narrows further based on the specific VC claims + station-local policy.
 
-### Agreement lifecycle
+#### Agreement lifecycle
 
-```
+```text
 REQUESTED ──→ OFFERED ──→ AGREED ──→ VERIFIED ──→ FINALIZED ──→ [active]
     │              │           │                        │              │
     └──→ TERMINATED (station rejects)                   │          TERMINATED
@@ -733,11 +748,11 @@ REQUESTED ──→ OFFERED ──→ AGREED ──→ VERIFIED ──→ FINALI
 
 ---
 
-## Practical workflow: dashboard UX for hub and station operators
+### Practical workflow: dashboard UX for hub and station operators
 
 The architecture above translates into concrete management flows for three user types: station operators (hospital IT/data stewards), hub operators (network/collab administrators), and researchers.
 
-### Station operator workflow
+#### Station operator workflow
 
 A station operator manages their data station through a station dashboard (part of the pluginlake UI).
 
@@ -800,7 +815,7 @@ The station dashboard provides a policy editor where the data holder can configu
 
 These settings are stored in the station's asset registry (`station_assets.yaml`) and operation registry (`station_operations.yaml`). Changes take effect on the next request (no reload delay).
 
-### Hub operator workflow
+#### Hub operator workflow
 
 A hub operator manages the processing hub, its connected stations, and its users.
 
@@ -845,7 +860,7 @@ The hub dashboard shows:
 - Decision logs: which requests were allowed/denied and why
 - Dagster run status for active transfers
 
-### Researcher workflow
+#### Researcher workflow
 
 A researcher interacts with the processing hub through a research interface (e.g. Streamlit app, Jupyter gateway, or dedicated UI).
 
@@ -873,7 +888,7 @@ sequenceDiagram
 
 The researcher never sees Nuts tokens, VC verification, or DSP negotiations. They see a catalog of available data (pre-filtered by their permissions) and submit queries. The authorization is invisible.
 
-### How approval flows connect the components
+#### How approval flows connect the components
 
 ```mermaid
 graph TD
@@ -908,9 +923,9 @@ graph TD
     C3 --> C4
 ```
 
-## Governance models: who approves access
+### Governance models: who approves access
 
-### The problem: approval authority varies by network
+#### The problem: approval authority varies by network
 
 The architecture must not hardcode who approves access. In practice, three governance models exist and a single pluginlake deployment may encounter all three:
 
@@ -920,7 +935,7 @@ The architecture must not hardcode who approves access. In practice, three gover
 
 **Model 3: Hybrid.** The collaboration sets baseline access terms, but individual station operators can add restrictions (never share certain columns, require higher k-anonymity). The collaboration cannot override station-local constraints -- data holder sovereignty is preserved.
 
-### How this maps to DSP + VC enforcement
+#### How this maps to DSP + VC enforcement
 
 The DSP Agreement is the formal artifact that captures the approved access terms regardless of who approved them. The approval workflow differs, but the runtime enforcement is identical:
 
@@ -946,7 +961,7 @@ graph TD
 
 Once a DSP Agreement is FINALIZED — regardless of who finalized it — the VC-based enforcement works identically. The station verifies the VC, cross-references the agreement, and applies its own constraints. It does not need to know whether the agreement was approved by a local operator or pushed by a collaboration coordinator.
 
-### The collaboration coordinator role
+#### The collaboration coordinator role
 
 In Model 2 and Model 3, a new role exists: the collaboration coordinator. This is an operator with network-wide visibility who can:
 
@@ -957,11 +972,11 @@ In Model 2 and Model 3, a new role exists: the collaboration coordinator. This i
 
 The collaboration coordinator operates through the hub dashboard (or a dedicated governance UI) and pushes pre-approved agreements to stations. Stations in Model 2 auto-accept these agreements (the station's Nuts Bolt policy includes the collaboration's credential as a trusted issuer). Stations in Model 3 receive the agreement as a proposal that the local operator can only tighten, not relax.
 
-### Translating approval into transaction-level verification
+#### Translating approval into transaction-level verification
 
 The formal contract approval process (DSP negotiation → FINALIZED agreement) translates directly into transaction-level verification of fine-grained permissions:
 
-```
+```text
 Approval (one-time, any governance model)
   → DSP Agreement stored in both hub and station Postgres
   → Agreement contains: datasets, operations, purpose, ODRL policy terms
@@ -978,27 +993,28 @@ Transaction (per-request, runtime)
 
 Every transaction is traceable back to the formal agreement that authorized it. The agreement_id in the VC is the link between the governance approval and the runtime enforcement. This satisfies the EHDS requirement that every secondary use of health data is traceable to a specific permit.
 
-### Station-local overrides are always authoritative
+#### Station-local overrides are always authoritative
 
 Regardless of governance model, the data holder retains sovereignty. Station-local restrictions (in `station_assets.yaml` and `station_operations.yaml`) can deny access that the collaboration or agreement would otherwise allow. This is enforced architecturally: the ODRL evaluator intersects VC claims with station-local config, and the most restrictive combination wins. The collaboration coordinator cannot push configuration that overrides local restrictions.
 
 This means:
+
 - A collaboration can grant access to `omop_condition` across all stations
 - But if Hospital A's asset registry marks `person_id` as a sensitive column, that column is never returned from Station A regardless of what the agreement says
 - The enforcement layer applies this at query time
 - The hub and collaboration coordinator see the denial in the decision log but cannot override it
 
-## Role-based access control for hub and station operators
+### Role-based access control for hub and station operators
 
-### The problem
+#### The problem
 
 DSP contract negotiations and agreement approvals are high-stakes operations -- they define what data leaves a hospital and under what terms. These operations must be restricted to operators with explicit authority. A researcher must never be able to initiate or approve a DSP agreement. A junior hub operator must not be able to modify network-wide collaboration policies.
 
-### Proposed roles
+#### Proposed roles
 
 Two separate RBAC hierarchies exist: one for the processing hub, one for the data station. They are managed independently -- a person may hold roles on both, but the roles do not inherit across systems.
 
-#### Processing hub roles
+##### Processing hub roles
 
 | Role | Can do | Cannot do |
 |---|---|---|
@@ -1006,14 +1022,14 @@ Two separate RBAC hierarchies exist: one for the processing hub, one for the dat
 | **Hub operator** | Add/remove researchers. Map users to active agreements. Assign user roles and purpose constraints. View decision logs. Monitor transfer status. | Initiate or approve DSP agreements. Modify collaboration-wide policies. |
 | **Researcher** | Browse permitted catalog. Submit queries/analytics within their permitted scope. View own results. | See other users' results. Modify permissions. Initiate agreements. See full decision logs. |
 
-#### Data station roles
+##### Data station roles
 
 | Role | Can do | Cannot do |
 |---|---|---|
 | **Station admin** | Accept/reject incoming DSP agreement requests. Configure station-level access policy (column allowlists, row filters, privacy thresholds via asset/operation registry). Add station-local overrides. Register/deregister station on discovery service. Manage station operator accounts. | Override collaboration-level agreements to be more permissive (can only tighten). |
 | **Station operator** | View incoming agreement requests (read-only). Monitor active transfers and decision logs. View station health and Dagster run status. | Approve/reject agreements. Modify station policy. |
 
-### Agreement approval workflow with role enforcement
+#### Agreement approval workflow with role enforcement
 
 ```mermaid
 sequenceDiagram
@@ -1037,7 +1053,7 @@ sequenceDiagram
     Note over HUB: Hub operator can then manage<br/>day-to-day user assignments
 ```
 
-### Role verification at the API level
+#### Role verification at the API level
 
 Every DSP-related endpoint on the FastAPI gateway checks the caller's role before proceeding:
 
@@ -1069,7 +1085,7 @@ async def assign_user_agreement(
     ...
 ```
 
-### Audit trail for administrative actions
+#### Audit trail for administrative actions
 
 All role-gated actions are logged separately from per-transaction decision logs:
 
@@ -1080,11 +1096,11 @@ All role-gated actions are logged separately from per-transaction decision logs:
 
 This administrative audit trail is distinct from the per-transaction enforcement decision log. Together they provide full traceability from governance decision to data access.
 
-### Identity and RBAC data model
+#### Identity and RBAC data model
 
 The RBAC model is anchored on organizations, not on individual pluginlake instances. A user belongs to an organization and can be granted roles on any instance (hub or station) that the organization operates. Nuts DIDs tie instances to organizations, and the same organizational identity in Nuts enables cross-instance role assignment within that org.
 
-#### Entity model
+##### Entity model
 
 ```mermaid
 erDiagram
@@ -1160,7 +1176,7 @@ erDiagram
     }
 ```
 
-#### Role definitions and scope
+##### Role definitions and scope
 
 Roles are scoped at three levels: organization-wide, per-hub, or per-station. A role assignment with `instance_id = null` applies to all instances operated by that organization.
 
@@ -1173,7 +1189,7 @@ Roles are scoped at three levels: organization-wide, per-hub, or per-station. A 
 | `station_operator` | station | Monitor station health, transfers, decision logs. Read-only on agreements and policy. |
 | `org_admin` | organization | Manage users and role assignments across all instances in the org. Cannot override station-level or hub-level policy decisions. |
 
-#### Cross-instance administration via organization
+##### Cross-instance administration via organization
 
 A user with `org_admin` role can manage roles on any instance their organization operates. This is how a single hospital IT admin manages both their data station and their processing hub without needing separate accounts:
 
@@ -1191,7 +1207,7 @@ sequenceDiagram
     Note over OA: External collaborator Z belongs to<br/>a different org but is granted a role<br/>on Hub A specifically (instance-scoped)
 ```
 
-#### External collaborators
+##### External collaborators
 
 A researcher from Organization B can be granted a role on Hub A (operated by Organization A) without being a member of Organization A. This is handled by instance-scoped role assignment:
 
@@ -1202,11 +1218,11 @@ A researcher from Organization B can be granted a role on Hub A (operated by Org
 
 This supports the common scenario where a research consortium has members from multiple hospitals, all accessing data through a shared processing hub.
 
-#### How Nuts organizational identity connects to RBAC
+##### How Nuts organizational identity connects to RBAC
 
 The `organization.nuts_org_credential_id` links the RBAC organization to its Nuts network identity. When a Nuts token arrives at a station, the station resolves the hub's DID to an organization, then looks up role assignments for users in that organization context:
 
-```
+```text
 Incoming request:
   Nuts VP → hub DID: did:nuts:hubA
   VC (PluginlakeAccessCredential) → user_id: researcher-Y, agreement_id: abc123
@@ -1221,7 +1237,7 @@ Station resolves:
 
 The station does not need to query Hub A's IdP. It trusts the hub-signed VC for user identity (verified by VC signature against hub's DID document key) and checks its own role assignment table for authorization. Role assignments for external collaborators on a hub are replicated to connected stations as part of the DSP agreement metadata.
 
-#### Collaboration governance in the RBAC model
+##### Collaboration governance in the RBAC model
 
 A collaboration (e.g. a multi-hospital research consortium) is modeled as a separate entity with member organizations. The collaboration may operate its own hub instance (with its own Nuts DID) or designate one member's hub as the collaboration hub.
 
@@ -1247,12 +1263,11 @@ graph TD
     MEM3 --> SC
 ```
 
-
-## Enforcement: translating contracts to compute and data
+### Enforcement: translating contracts to compute and data
 
 > This section describes the enforcement architecture at a high level. The detailed specification of query safety, filter validation, algorithm approval, and container sandboxing is deferred to **ADR-009: Contract-to-compute mapping and query safety**.
 
-### The translation problem
+#### The translation problem
 
 An ODRL permission says "you may aggregate omop_condition for scientific research." The station must translate this abstract statement into a concrete DuckLake query or Dagster job execution with the correct constraints applied.
 
@@ -1272,7 +1287,7 @@ graph TD
     PRIVACY -->|fail| SUPPRESS[Suppress result, log reason]
 ```
 
-### Station asset registry
+#### Station asset registry
 
 Each station maintains a local registry that maps ODRL target URNs to its concrete local assets. This is station-specific because different hospitals may use different schemas, table names, or asset configurations for the same logical dataset.
 
@@ -1313,7 +1328,7 @@ assets:
     external: false  # never exposed in DSP catalog
 ```
 
-### Station operation registry
+#### Station operation registry
 
 Operations define what compute patterns are available. Each operation maps to a concrete execution strategy.
 
@@ -1354,11 +1369,11 @@ operations:
     asset_key: ["analytics", "cohort_count"]
 ```
 
-### Constraint enforcement at query time
+#### Constraint enforcement at query time
 
 When a request arrives, constraints from three sources are merged (most restrictive wins):
 
-```
+```text
 Agreement constraints (from DSP negotiation):
   datasets: [omop_condition]
   operations: [aggregate, count]
@@ -1444,7 +1459,7 @@ def enforce_request(
     return EnforcedQuery(sql=query, parameters={}, privacy_checks=privacy_checks, ...)
 ```
 
-### Post-execution privacy validation
+#### Post-execution privacy validation
 
 After the query executes, results are validated before returning:
 
@@ -1471,11 +1486,11 @@ class KAnonymityCheck(PrivacyCheck):
         return df
 ```
 
-### Docker containers for custom compute
+#### Docker containers for custom compute
 
 For operations that require custom compute (federated learning, complex analytics), the credential grants access to specific Dagster jobs that run in isolated Docker containers:
 
-```
+```text
 VC says: action = "pluginlake:federated_learning"
               target = "urn:pluginlake:dataset:omop_condition"
 
@@ -1499,7 +1514,7 @@ Station executes:
 
 The Docker container does not have direct DuckLake access — it receives a pre-filtered dataset as input. This ensures the container cannot read data beyond what the credential grants.
 
-### How the DSP catalog maps to the asset registry
+#### How the DSP catalog maps to the asset registry
 
 The DSP catalog endpoint (`GET /dsp/catalog`) is automatically generated from the station's asset registry. Only assets with `external: true` appear in the catalog:
 
@@ -1521,7 +1536,7 @@ async def get_catalog(registry: AssetRegistry = Depends(get_asset_registry)):
 
 This ensures the catalog always reflects what the station is actually willing to share. If a station admin sets `external: false` on a dataset, it disappears from the catalog immediately.
 
-### Tooling decisions
+#### Tooling decisions
 
 | Component | Tool | Rationale |
 |---|---|---|
@@ -1535,7 +1550,7 @@ This ensures the catalog always reflects what the station is actually willing to
 
 ---
 
-## Nuts constraints and design considerations
+### Nuts constraints and design considerations
 
 For detailed Nuts integration constraints (one node per instance, Discovery Service, DPoP validation, FHIR credential model, `localParameters` limitations, scope granularity), see [ADR-006: Nuts Node Integration](../decisions/adr-006-nuts-node-decentralized-auth.md#nuts-constraints-and-design-considerations).
 
@@ -1543,35 +1558,36 @@ For detailed Nuts integration constraints (one node per instance, Discovery Serv
 
 ---
 
-## DSP constraints (Eclipse Dataspace Protocol 2025-1)
+### DSP constraints (Eclipse Dataspace Protocol 2025-1)
 
-### JSON-LD is mandatory
+#### JSON-LD is mandatory
 
 All DSP messages use JSON-LD. External connectors (especially EDC-based) may send compacted or expanded representations. Pydantic handles compacted form natively; add `pyld` for expansion/normalization if needed for interop with external connectors.
 
-### Provider must push state callbacks
+#### Provider must push state callbacks
 
 Even with pull data transfer, the Transfer Process requires outbound HTTP callbacks from provider to consumer on state changes. Dagster sensors handle this, but sensor reliability determines callback reliability.
 
-### No negotiation timeout defined
+#### No negotiation timeout defined
 
 DSP specifies no timeout for negotiations. Pluginlake must define its own timeout policy.
 
-### Dagster materialization is not idempotent
+#### Dagster materialization is not idempotent
 
 Consumer retries can trigger duplicate runs. The transfer state machine must check for in-progress runs before triggering new ones.
 
 ---
 
-## Phased delivery
+### Phased delivery
 
 The full architecture (DSP + Nuts + ODRL profile + VC-based credentials + enforcement registry + RBAC) is substantial. Delivery is phased to validate each layer before building the next.
 
-### Phase 1: Single-station DSP provider with Nuts identity
+#### Phase 1: Single-station DSP provider with Nuts identity
 
 **Goal:** One data station can receive DSP requests from one processing hub, authenticated via Nuts. Basic contract negotiation works end-to-end. Hub-side DSP client is NOT in scope (tested with manual/scripted requests).
 
 **Delivers:**
+
 - `src/pluginlake/dsp/` module: DSP provider routes on FastAPI (catalog, negotiation, transfer)
 - Nuts middleware for organizational identity verification (auto-generated client)
 - Contract negotiation state machine (Postgres `dsp` schema)
@@ -1583,11 +1599,12 @@ The full architecture (DSP + Nuts + ODRL profile + VC-based credentials + enforc
 
 **Does not include:** hub-side DSP client, per-user credentials, multi-hub, RBAC dashboard, ODRL evaluation, collaboration governance.
 
-### Phase 2: VC-based credentials and ODRL profile evaluation
+#### Phase 2: VC-based credentials and ODRL profile evaluation
 
 **Goal:** Per-user authorization at the station. Hub issues credentials, station verifies and enforces.
 
 **Delivers:**
+
 - `src/pluginlake/authz/` module: ODRL profile evaluator, VC verification, enforcement layer
 - PluginlakeAccessCredential schema definition (ADR-009)
 - Hub issues VCs to researchers (signed by hub DID)
@@ -1598,11 +1615,12 @@ The full architecture (DSP + Nuts + ODRL profile + VC-based credentials + enforc
 - Hub signing key distribution (via Nuts DID document)
 - Multi-hub topology tested
 
-### Phase 3: UI, governance, and collaboration
+#### Phase 3: UI, governance, and collaboration
 
 **Goal:** Production-ready multi-organization network with operator dashboards and collaboration support.
 
 **Delivers:**
+
 - Hub UI (Streamlit `central`): credential issuance, user management, agreement monitoring
 - Station UI (Streamlit `datastation`): access control dashboard, agreement approval, restrictions config
 - RBAC entity model (roles, assignments, organizations, collaborations)
@@ -1613,7 +1631,7 @@ The full architecture (DSP + Nuts + ODRL profile + VC-based credentials + enforc
 
 ---
 
-## Consequences
+### Consequences
 
 - pluginlake gains a DSP-compliant external surface aligned with the Health-RI data station specification and EHDS requirements
 - The processing hub specification (Health-RI §4.4, currently undefined) will be informed by this ADR's credential model and enforcement architecture
@@ -1628,7 +1646,7 @@ The full architecture (DSP + Nuts + ODRL profile + VC-based credentials + enforc
 
 ---
 
-## Design risks by severity
+### Design risks by severity
 
 | Risk | Severity | Blocker? |
 |---|---|---|
@@ -1647,16 +1665,16 @@ The full architecture (DSP + Nuts + ODRL profile + VC-based credentials + enforc
 
 ---
 
-## Open questions
+### Open questions
 
-### Must resolve before implementation
+#### Must resolve before implementation
 
 1. **Pluginlake ODRL profile specification** -- define the exact actions (`pluginlake:aggregate`, `pluginlake:query`, `pluginlake:count`, `pluginlake:compute`), constraint types (`purpose`, `dateTime`, `maxCardinality`, `columns`), and asset URN scheme (`urn:pluginlake:dataset:{name}`).
 2. **PluginlakeAccessCredential schema** -- the VC type, required fields, issuer rules, how ODRL permissions are embedded. Candidate for ADR-009.
 3. **Hub signing key distribution** -- how stations learn to trust hub signing keys. Likely resolved by: hub's DID document contains the signing key, station resolves DID via Nuts network.
 4. **Collaboration hub credential issuance** -- governance decision per collaboration.
 
-### Deferred to ADR-009: Contract-to-compute mapping and query safety
+#### Deferred to ADR-009: Contract-to-compute mapping and query safety
 
 The following questions are in scope for ADR-009 (not resolved here):
 
@@ -1667,7 +1685,7 @@ The following questions are in scope for ADR-009 (not resolved here):
 9. **Collaboration governance and trust boundary separation** -- how collaboration auto-approval works without blurring Nuts (network membership) and pluginlake (fine-grained authorization). Likely: separate governance credential/config checked by pluginlake, not by the Nuts Bolt.
 10. **Techniques to limit destructive or data-exfiltrating operations** -- sandboxing, network isolation, output size limits, differential privacy budgets, and how to detect/prevent side-channel exfiltration from approved containers.
 
-### Can resolve during implementation
+#### Can resolve during implementation
 
 11. **IdP topology for hubs** -- Keycloak vs federated hospital IdPs (SURFconext, Microsoft Entra ID). Can differ per hub initially.
 12. **ODRL profile extensions** -- additional actions and constraints can be added as needs emerge. Profile is versioned.
@@ -1677,46 +1695,46 @@ The following questions are in scope for ADR-009 (not resolved here):
 16. **Processing hub specification alignment** -- contribute pluginlake's model to Health-RI §4.4 as the specification matures.
 17. **Processing hub DSP client implementation (v2)** -- hub-side DSP consumer/client, including catalog browsing, negotiation initiation, transfer request, and result retrieval.
 
-## Appendix A: International standards and ontologies for data contracts
+### Appendix A: International standards and ontologies for data contracts
 
 > **Editorial note:** This appendix catalogues the international standards relevant to pluginlake's authorization and contract architecture. It is reference material to inform vocabulary and schema design decisions.
 
 When designing an enterprise-grade data space — especially in a highly regulated landscape like the European Health Data Space (EHDS) — you should avoid inventing custom schemas. Several mature international standards and ontologies govern data contracts and policies:
 
-### W3C ODRL 2.2 (Open Digital Rights Language)
+#### W3C ODRL 2.2 (Open Digital Rights Language)
 
 *The standard for usage control.*
 
-* **What it is:** The premier W3C standard ontology for expressing policies, permissions, prohibitions, and obligations.
-* **Why it matters here:** The **Eclipse Dataspace Protocol (DSP) natively utilizes ODRL** to model contract negotiations, contract offers, and contract agreements. In a dataspace, an ODRL Contract Agreement is the definitive technical "Data Contract." It defines exactly what a consumer is allowed to do with a dataset (e.g., `odrl:Permission` to read, under the `odrl:Constraint` of a valid permit). pluginlake uses a constrained ODRL profile (Level 2) for its PluginlakeAccessCredential.
+- **What it is:** The premier W3C standard ontology for expressing policies, permissions, prohibitions, and obligations.
+- **Why it matters here:** The **Eclipse Dataspace Protocol (DSP) natively utilizes ODRL** to model contract negotiations, contract offers, and contract agreements. In a dataspace, an ODRL Contract Agreement is the definitive technical "Data Contract." It defines exactly what a consumer is allowed to do with a dataset (e.g., `odrl:Permission` to read, under the `odrl:Constraint` of a valid permit). pluginlake uses a constrained ODRL profile (Level 2) for its PluginlakeAccessCredential.
 
-### W3C DPV (Data Privacy Vocabulary)
+#### W3C DPV (Data Privacy Vocabulary)
 
 *The standard for legal bases and purposes.*
 
-* **What it is:** A highly active, community-driven W3C ontology explicitly designed to provide machine-readable metadata about the processing of personal data, purposes, legal bases (like GDPR or DGA), and technical/organisational measures.
-* **Why it matters here:** DPV provides a native guide for integration with ODRL (`GUIDE-ODRL`). For the EHDS, DPV allows you to taxonomically declare the *exact legal purpose of data use* (e.g., `dpv:ScientificResearch` or `dpv:PublicHealthOversight`) within both the Nuts credential and the ODRL policy, ensuring semantic alignment across different European health authorities.
+- **What it is:** A highly active, community-driven W3C ontology explicitly designed to provide machine-readable metadata about the processing of personal data, purposes, legal bases (like GDPR or DGA), and technical/organisational measures.
+- **Why it matters here:** DPV provides a native guide for integration with ODRL (`GUIDE-ODRL`). For the EHDS, DPV allows you to taxonomically declare the *exact legal purpose of data use* (e.g., `dpv:ScientificResearch` or `dpv:PublicHealthOversight`) within both the Nuts credential and the ODRL policy, ensuring semantic alignment across different European health authorities.
 
-### OASIS XACML (eXtensible Access Control Markup Language)
+#### OASIS XACML (eXtensible Access Control Markup Language)
 
 *The standard for access architecture.*
 
-* **What it is:** An international standard that defines both an XML-based policy language and a strict architectural paradigm for Attribute-Based Access Control (ABAC).
-* **Why it matters here:** While XACML's XML language has been superseded in modern stacks by JSON and domain-specific languages, its **architectural concepts remain relevant**: the PEP (Policy Enforcement Point — the HTTPS gateway), the PDP (Policy Decision Point — the ODRL evaluator), and the PIP (Policy Information Point — the asset/operation registry). pluginlake's enforcement layer follows this structural pattern without XACML's verbosity.
+- **What it is:** An international standard that defines both an XML-based policy language and a strict architectural paradigm for Attribute-Based Access Control (ABAC).
+- **Why it matters here:** While XACML's XML language has been superseded in modern stacks by JSON and domain-specific languages, its **architectural concepts remain relevant**: the PEP (Policy Enforcement Point — the HTTPS gateway), the PDP (Policy Decision Point — the ODRL evaluator), and the PIP (Policy Information Point — the asset/operation registry). pluginlake's enforcement layer follows this structural pattern without XACML's verbosity.
 
-### The IDSA Information Model (International Data Spaces)
+#### The IDSA Information Model (International Data Spaces)
 
-* **What it is:** An RDFS/OWL ontology developed by the International Data Spaces Association. It builds a comprehensive semantic layer over data assets, participants, connectors, and usage contracts.
-* **Why it matters here:** It blends ODRL with specialized data space concepts, creating standard definitions for "Contract Agreements" that legally bind data transactions between multi-party connectors.
+- **What it is:** An RDFS/OWL ontology developed by the International Data Spaces Association. It builds a comprehensive semantic layer over data assets, participants, connectors, and usage contracts.
+- **Why it matters here:** It blends ODRL with specialized data space concepts, creating standard definitions for "Contract Agreements" that legally bind data transactions between multi-party connectors.
 
-### ODCS (Open Data Contract Specification)
+#### ODCS (Open Data Contract Specification)
 
 *The standard for data ops and mesh.*
 
-* **What it is:** A rapidly growing open-source community standard (found at `datacontract.com`) utilized heavily in modern data engineering and data mesh patterns.
-* **Why it matters here:** It is important to distinguish this from ODRL. While ODRL handles *legal compliance, permissions, and usage rights*, ODCS handles *operational mechanics* (schema validation, data quality thresholds, freshness SLAs, and column-level formatting).
+- **What it is:** A rapidly growing open-source community standard (found at `datacontract.com`) utilized heavily in modern data engineering and data mesh patterns.
+- **Why it matters here:** It is important to distinguish this from ODRL. While ODRL handles *legal compliance, permissions, and usage rights*, ODCS handles *operational mechanics* (schema validation, data quality thresholds, freshness SLAs, and column-level formatting).
 
-### How these standards compose in pluginlake
+#### How these standards compose in pluginlake
 
 For a comprehensive EHDS-aligned design, these standards fit together as a composable stack:
 

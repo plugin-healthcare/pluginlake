@@ -84,11 +84,11 @@ Per-request calls carry two layers: the Nuts DPoP-bound access token in the `Aut
 
 ## Normative references
 
-- **Health-RI Data Station Specification** (working document, public consultation planned 2026): defines the architecture for data stations and processing hubs for secondary use of health data in the Netherlands. PLUGIN is listed as an implementation. See: https://health-ri.github.io/data-station-specification/en/
-- **Eclipse Dataspace Protocol (DSP) 2025-1**: ISO-track specification defining Catalog Protocol (DCAT + ODRL), Contract Negotiation Protocol, and Transfer Process Protocol. See: https://eclipse-dataspace-protocol-base.github.io/DataspaceProtocol/2025-1-err1/
-- **EHDS Regulation (EU) 2025/327**: entered into force 26 March 2025. Defines data holders, data users, Secure Processing Environments (SPE), and the Health Data Access Body (HDAB). See: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=celex%3A32025R0327
-- **Nuts specification (RFC003, RFC014, RFC022)**: Dutch decentralized identity and authorization for healthcare. See: https://nuts-foundation.gitbook.io/drafts/
-- **TEHDAS2**: technical specifications for Data Access Application Management System (DAAMS) for Health Data Access Bodies. See: https://tehdas.eu/
+- **Health-RI Data Station Specification** (working document, public consultation planned 2026): defines the architecture for data stations and processing hubs for secondary use of health data in the Netherlands. PLUGIN is listed as an implementation. See: <https://health-ri.github.io/data-station-specification/en/>
+- **Eclipse Dataspace Protocol (DSP) 2025-1**: ISO-track specification defining Catalog Protocol (DCAT + ODRL), Contract Negotiation Protocol, and Transfer Process Protocol. See: <https://eclipse-dataspace-protocol-base.github.io/DataspaceProtocol/2025-1-err1/>
+- **EHDS Regulation (EU) 2025/327**: entered into force 26 March 2025. Defines data holders, data users, Secure Processing Environments (SPE), and the Health Data Access Body (HDAB). See: <https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=celex%3A32025R0327>
+- **Nuts specification (RFC003, RFC014, RFC022)**: Dutch decentralized identity and authorization for healthcare. See: <https://nuts-foundation.gitbook.io/drafts/>
+- **TEHDAS2**: technical specifications for Data Access Application Management System (DAAMS) for Health Data Access Bodies. See: <https://tehdas.eu/>
 
 ---
 

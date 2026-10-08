@@ -15,7 +15,7 @@ Projects plug into a station through a single entry point — no files are copie
     ehds-demo = "ehds_demo.manifest:manifest"
     ```
 
-    The manifest names the project's DuckLake catalog, its asset namespace, and the Dagster code locations and API routers it contributes.
+   The manifest names the project's DuckLake catalog, its asset namespace, and the Dagster code locations and API routers it contributes.
 
 2. The operator lists the projects to deploy in a `pluginlake.toml` station config.
 
@@ -56,10 +56,10 @@ This builds the images, starts the stack, installs the configured projects, and 
 
 | Service | URL |
 |---------|-----|
-| Dashboard (Streamlit) | http://localhost:8501 |
-| Dagster (pipelines and assets) | http://localhost:3000 |
-| API docs (Swagger) | http://localhost:8000/docs |
-| API health | http://localhost:8000/health |
+| Dashboard (Streamlit) | <http://localhost:8501> |
+| Dagster (pipelines and assets) | <http://localhost:3000> |
+| API docs (Swagger) | <http://localhost:8000/docs> |
+| API health | <http://localhost:8000/health> |
 
 Verify that the configured projects conform to the plugin contract and are wired correctly:
 
