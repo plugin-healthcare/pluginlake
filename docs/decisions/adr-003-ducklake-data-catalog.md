@@ -64,7 +64,7 @@ A resource requires every asset to explicitly call `ducklake.write(...)`. This i
 
 Fast synchronous validation for immediate user feedback, asynchronous Dagster processing for business rules and persistence.
 
-```
+```text
 POST /ingest
   │
   ├─ Phase 1 (sync, fast feedback)
@@ -81,7 +81,7 @@ POST /ingest
 
 **Ingestion status** uses Dagster directly, the tracking ID is the Dagster run ID. No separate status table or database:
 
-```
+```text
 GET /ingest/{tracking_id}/status
   → queries Dagster GraphQL API → returns run state
 ```
@@ -90,7 +90,7 @@ This automatically extends to estimated completion times based on historical run
 
 ### Serving: direct DuckLake reads
 
-```
+```text
 GET /data/omop/condition_era?limit=100
   → FastAPI reads from DuckLake → returns data
 ```
@@ -154,7 +154,7 @@ JSONL files on disk are the most resilient layer, accessible even when everythin
 
 ## Infrastructure
 
-```
+```text
 PostgreSQL container
   ├─ dagster DB    → run state, schedules, events
   └─ ducklake DB   → catalog metadata (schemas, tables, versions)

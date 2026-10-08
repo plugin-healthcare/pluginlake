@@ -65,7 +65,7 @@ class DuckLakeSettings(BaseSettings):
 
 ## Code Style
 
-Coding rules are defined in [`.github/copilot-instructions.md`](../.github/copilot-instructions.md). These are automatically picked up by GitHub Copilot and serve as the single source of truth for coding conventions. Key rules:
+Coding rules are defined in [`.github/copilot-instructions.md`](../../.github/copilot-instructions.md). These are automatically picked up by GitHub Copilot and serve as the single source of truth for coding conventions. Key rules:
 
 - Target Python 3.13+. Do not use `from __future__ import annotations`.
 - Use native type hints (`str | None`, `list[int]`), not `typing` equivalents.
@@ -240,6 +240,7 @@ pre-commit install
 ```
 
 All pre-commit hooks are defined in the `.pre-commit-config.yaml` file and include:
+
 - Trailing whitespace removal
 - End-of-file fixer
 - YAML/TOML validation
@@ -254,6 +255,7 @@ We use GitHub Actions to automate our CI/CD pipeline. All workflows are defined 
 #### CI Workflow (`ci.yaml`)
 
 Runs on every pull request to `main`:
+
 - **Ruff check**: linting only (no auto-fixing)
 - **ty check**: static type checking
 - **Pytest**: unit tests with coverage (`--cov=pluginlake`)
@@ -267,6 +269,7 @@ Runs on every pull request to `main`:
 #### Docker Build Workflow (`docker-build.yaml.disabled`)
 
 A disabled scaffold for building and pushing the production images to Azure Container Registry. It is kept with a `.disabled` extension so GitHub does not run it, and needs auth configured (OIDC recommended for a public repo) before being enabled. When enabled it will:
+
 - Trigger on push to `main` when `src/`, `deploy/docker/`, `pyproject.toml`, or `uv.lock` change
 - Build all images (`pluginlake/pluginlake`, `pluginlake/dagster-webserver`, `pluginlake/ui-central`, `pluginlake/ui-datastation`)
 - Tag: `latest` and commit SHA
@@ -275,6 +278,7 @@ A disabled scaffold for building and pushing the production images to Azure Cont
 #### Dependabot
 
 Dependabot is configured to check daily for updates to:
+
 - Python dependencies
 - GitHub Actions versions
 - Docker base images

@@ -58,7 +58,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser. You should 
 
 Navigate to **Assets** in the left sidebar, then switch to the **Lineage** tab. You'll see three assets connected in a graph:
 
-```
+```text
               ┌──▶ titanic_survival_by_class
 titanic_raw ──┤
               └──▶ titanic_survivors

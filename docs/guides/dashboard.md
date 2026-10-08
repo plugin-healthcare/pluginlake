@@ -50,7 +50,7 @@ The dashboard uses pydantic-settings with the `DASHBOARD_` environment prefix:
 
 The dashboard follows a layered structure:
 
-```
+```text
 src/pluginlake-ui/datastation/
 ├── app.py              # Streamlit entrypoint, navigation, sidebar
 ├── client.py           # HTTP client wrapping the pluginlake API

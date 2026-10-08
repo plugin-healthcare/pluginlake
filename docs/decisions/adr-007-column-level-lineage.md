@@ -63,6 +63,7 @@ Since Dagster 1.7, assets can emit [`TableColumnLineage`](https://docs.dagster.i
 ### Option C: plugin-lineage (custom inference library)
 
 A fully custom library that infers column-to-column lineage by inspecting execution plans at runtime:
+
 - **SQL path:** a custom SQL parser (e.g. sqlglot) parses DuckDB SQL and traces column provenance through joins, filters, and projections.
 - **Polars path:** `LazyFrame.serialize(format="json")` exposes the query plan as JSON. A walker resolves column mappings from plan nodes (`Select`, `HStack`, `Join`, `Filter`, `GroupBy`).
 
@@ -113,7 +114,7 @@ Altimate AI (Option A) is not adopted: pluginlake is not a dbt project and Polar
 
 pluginlake has three distinct lineage extraction paths, reflecting the actual transformation patterns in the codebase:
 
-```
+```text
 Asset materializes
   │
   ├─ SQL path (automatic, zero-config)
@@ -207,15 +208,18 @@ Lineage is captured at three levels:
 The work falls into three tiers:
 
 **Tier 1: configuration only (SQL + Dagster lifecycle lineage)**
+
 - Load `duck_lineage` extension at DuckDB connection initialization
 - Add `openlineage-dagster` dependency and configure sensor
 - Set `OPENLINEAGE_PARENT_*` env vars so `duck_lineage` events link to Dagster runs
 - Stand up a local OpenLineage HTTP endpoint (Marquez or lighter alternative)
 
 **Tier 2: migration (Dagster best practice, independent of lineage)**
+
 - Migrate `Output()` to `MaterializeResult` across asset files (prerequisite for attaching metadata)
 
 **Tier 3: custom build (Polars/Python lineage)**
+
 - Build `@track_lineage` decorator with `Expr.meta`-based extraction
 - Annotate FHIR translators with explicit column mappings
 - Create `lineage` schema in DuckLake for persistent queryable storage
