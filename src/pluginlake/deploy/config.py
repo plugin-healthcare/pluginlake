@@ -12,6 +12,7 @@ Example ``pluginlake.toml``::
 
     [station]
     endpoint_url = "https://ds1.example.org"
+    lineage = true  # optional: Marquez as OpenLineage receiver
 
     [[projects]]
     name = "ehds-demo"
@@ -66,6 +67,10 @@ class StationSettings(BaseModel):
 
     endpoint_url: str = Field(default="http://localhost:8000", description="Public endpoint URL of the station API.")
     dashboards: bool = Field(default=True, description="Whether to start the datastation dashboard UI.")
+    lineage: bool = Field(
+        default=False,
+        description="Whether to start Marquez (API, web UI and its database) as the OpenLineage receiver.",
+    )
 
 
 class StationConfig(BaseModel):

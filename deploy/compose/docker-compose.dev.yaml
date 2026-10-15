@@ -118,3 +118,72 @@ services:
     volumes:
       - ../../src/pluginlake-ui/datastation:/app/src/pluginlake-ui/datastation
       - ../../assets:/app/assets:ro
+
+  # --- Lineage (profile `lineage`, ADR-007) ---
+  # OpenLineage endpoint inside the compose network: http://marquez:5000/api/v1/lineage
+
+  # Dedicated database, separate from the Dagster/DuckLake postgres.
+  marquez-db:
+    image: dhi.io/postgres:17-alpine3.22
+    profiles: ["lineage"]
+    environment:
+      POSTGRES_USER: ${MARQUEZ_DB_USER:-marquez}
+      POSTGRES_PASSWORD: ${MARQUEZ_DB_PASSWORD:-marquez}
+      POSTGRES_DB: ${MARQUEZ_DB:-marquez}
+    # Named volume at the image's PGDATA; it inherits the image's postgres ownership (uid 70).
+    volumes:
+      - marquez-db-data:/var/lib/postgresql/17/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MARQUEZ_DB_USER:-marquez} -d ${MARQUEZ_DB:-marquez}"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  marquez:
+    image: marquezproject/marquez:0.51.1
+    profiles: ["lineage"]
+    environment:
+      MARQUEZ_CONFIG: /opt/marquez/marquez.yml
+      MARQUEZ_PORT: "5000"
+      MARQUEZ_ADMIN_PORT: "5001"
+      POSTGRES_HOST: marquez-db
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${MARQUEZ_DB:-marquez}
+      POSTGRES_USER: ${MARQUEZ_DB_USER:-marquez}
+      POSTGRES_PASSWORD: ${MARQUEZ_DB_PASSWORD:-marquez}
+    # No published ports: only reachable for services on the compose network.
+    volumes:
+      - ../../config/marquez/marquez.yml:/opt/marquez/marquez.yml:ro
+    depends_on:
+      marquez-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:5001/healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+
+  marquez-web:
+    image: marquezproject/marquez-web:0.51.1
+    profiles: ["lineage"]
+    environment:
+      MARQUEZ_HOST: marquez
+      MARQUEZ_PORT: "5000"
+      WEB_PORT: "3000"
+    # Loopback only: Marquez has no authentication, so admins reach it via the host (e.g. SSH tunnel).
+    ports:
+      - "127.0.0.1:${MARQUEZ_WEB_PORT:-3001}:3000"
+    depends_on:
+      marquez:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+volumes:
+  marquez-db-data:

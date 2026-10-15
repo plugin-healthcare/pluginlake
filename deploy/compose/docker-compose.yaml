@@ -115,7 +115,7 @@ services:
       context: ../../
       dockerfile: deploy/docker/dashboard-datastation.Dockerfile
     ports:
-      - "8501:8501"
+      - "${DASHBOARD_HOST_PORT:-8501}:8501"
     environment:
       DASHBOARD_API_URL: http://pluginlake:8000
     depends_on:

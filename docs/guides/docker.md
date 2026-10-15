@@ -15,6 +15,9 @@ pluginlake uses separate containers for each concern:
 | **pluginlake** | `pluginlake.Dockerfile` | FastAPI service |
 | **pluginlake-ui** | `ui-datastation.Dockerfile` | Datastation Streamlit dashboard |
 | **pluginlake-central** | `ui-central.Dockerfile` | Central aggregation dashboard |
+| **marquez-db** | `dhi.io/postgres:17-alpine3.22` (pre-built) | Marquez database (profile `lineage`) |
+| **marquez** | `marquezproject/marquez:0.51.1` (pre-built) | OpenLineage receiver API (profile `lineage`) |
+| **marquez-web** | `marquezproject/marquez-web:0.51.1` (pre-built) | Lineage web UI, host loopback only (profile `lineage`) |
 
 In development, `dagster.dev.Dockerfile` replaces the webserver, daemon, and code-server with a single all-in-one container running `dagster dev`. The UI containers use corresponding `.dev.Dockerfile` variants with hot reload.
 

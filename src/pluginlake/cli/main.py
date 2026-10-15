@@ -49,13 +49,7 @@ def _build_parser() -> argparse.ArgumentParser:
     up_parser.add_argument("-d", "--detach", action="store_true", help="Run containers in the background.")
     up_parser.add_argument("--no-build", action="store_true", help="Do not rebuild images before starting.")
 
-    down_parser = subparsers.add_parser("down", help="Stop the station stack.")
-    down_parser.add_argument(
-        "--config",
-        type=Path,
-        default=_DEFAULT_CONFIG,
-        help="Path to the station config (default: ./pluginlake.toml).",
-    )
+    down_parser = subparsers.add_parser("down", help="Stop the station stack (all profiles).")
     down_parser.add_argument("-v", "--volumes", action="store_true", help="Also remove named volumes.")
 
     return parser
@@ -87,7 +81,7 @@ def main(argv: list[str] | None = None) -> int:
         return run_up(config_path=args.config, detach=args.detach, build=not args.no_build)
 
     if args.command == "down":
-        return run_down(config_path=args.config, volumes=args.volumes)
+        return run_down(volumes=args.volumes)
 
     parser.print_help()
     return 0

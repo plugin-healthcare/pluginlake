@@ -157,7 +157,7 @@ Each emission path has its own transport:
 - **`duck_lineage`** and **`openlineage-dagster`** both emit via HTTP to an OpenLineage-compatible endpoint. In network-isolated environments, this means running a local receiver (e.g. Marquez or a lightweight HTTP-to-file bridge on the same host).
 - **`openlineage-python`** (used by the `@track_lineage` decorator for Polars) supports HTTP, file (JSONL), console, and Kafka transports.
 
-For unified lineage collection, all environments should run a local OpenLineage HTTP endpoint so all three emission paths converge at the same backend. Whether Marquez or a simpler receiver is the right choice is an open question.
+For unified lineage collection, all environments should run a local OpenLineage HTTP endpoint so all three emission paths converge at the same backend. The receiver is Marquez, see [Addendum: Marquez as OpenLineage receiver](#addendum-marquez-as-openlineage-receiver).
 
 ### SQL path: `duck_lineage` extension
 
@@ -210,7 +210,7 @@ The work falls into three tiers:
 - Load `duck_lineage` extension at DuckDB connection initialization
 - Add `openlineage-dagster` dependency and configure sensor
 - Set `OPENLINEAGE_PARENT_*` env vars so `duck_lineage` events link to Dagster runs
-- Stand up a local OpenLineage HTTP endpoint (Marquez or lighter alternative)
+- Stand up a local OpenLineage HTTP endpoint (Marquez, see the addendum below)
 
 **Tier 2: migration (Dagster best practice, independent of lineage)**
 - Migrate `Output()` to `MaterializeResult` across asset files (prerequisite for attaching metadata)
@@ -253,3 +253,60 @@ The OMOP CDM has an official `linkml-omop` schema that formally types every tabl
 - **Interception complexity.** Wrapping `with_columns()`, `select()`, `join()`, `filter()` etc. is non-trivial. Edge cases (`pl.all()`, `pl.exclude()`, nested expressions) need testing.
 - **Event volume.** `duck_lineage` emits per query, not per materialization. Needs retention policy.
 - **Multi-hop lineage.** `root_names()` traces within one expression, not across upstream assets. Full pipeline lineage needs Dagster's asset dependency graph.
+
+## Addendum: Marquez as OpenLineage receiver
+
+- **Date:** 2026-10-14
+- **Issue:** #219
+
+The open question under [Transport](#transport) is settled: the station runs [Marquez](https://marquezproject.ai) as its local OpenLineage receiver.
+
+### Why Marquez
+
+- It is the reference implementation of the OpenLineage API, so `duck_lineage`, `openlineage-dagster` and `openlineage-python` can all post to it without adapters.
+- It stores events in PostgreSQL and comes with a web UI for browsing jobs, datasets and lineage graphs, which a file-based bridge would not give us.
+- It runs fully inside the station network, with no outbound connectivity (constraint 5).
+
+A lighter HTTP-to-file bridge was considered, but it would only store events; viewing them would still need a separate tool. Marquez can be replaced later by any OpenLineage-compatible backend, because emitters only depend on the endpoint URL.
+
+### Marquez vs OpenMetadata
+
+[OpenMetadata](https://open-metadata.org) was also considered. It is a full metadata platform (catalog, search, glossary, classification, data quality, ownership, RBAC) with lineage as one feature, whereas Marquez is a focused OpenLineage store.
+
+| | Marquez | OpenMetadata |
+|---|---|---|
+| Scope | Lineage only: jobs, runs, datasets, column lineage | Catalog, discovery, glossary, tags, data quality, profiling, ownership, policies and lineage |
+| OpenLineage | Reference implementation, native `/api/v1/lineage` endpoint | Own metadata model; OpenLineage is ingested through a connector |
+| Components | API, web UI, PostgreSQL (OpenSearch optional) | Server, MySQL or PostgreSQL, Elasticsearch/OpenSearch (required), ingestion runner (Airflow-based by default), UI |
+| Footprint | Small: three containers, about 1 GB RAM | Large: about 4+ vCPU and 8+ GB RAM, mostly for OpenSearch |
+| Auth | None | SSO, RBAC, bot tokens |
+| Ingestion model | Push: producers emit events | Mainly pull: scheduled connectors scan sources |
+| Project activity | Slowing; last release 0.51.1 (early 2025) | Very active, backed by Collate |
+
+Fit with the pluginlake constraints:
+
+| Constraint | Marquez | OpenMetadata |
+|---|---|---|
+| Network-isolated, small station hosts (constraint 5) | Fits: lightweight and fully local | Heavy to operate on every station (OpenSearch and an ingestion runner) |
+| DuckLake is the catalog (constraint 3, ADR-003) | Adds lineage only, no overlap with DuckLake | Introduces a second catalog next to DuckLake, fragmenting the metadata layer |
+| OpenLineage as the standard (this ADR) | Native for `duck_lineage`, `openlineage-dagster` and `@track_lineage` | Supported, but through an extra translation step |
+| Authorization via Nuts and the Dataspace Protocol (ADR-006, ADR-008) | No auth of its own; kept behind host loopback | Brings its own SSO and RBAC, a second access-control system next to Nuts/DSP |
+| DCAT dataset metadata (#191) | Not covered | Partly covered by catalog features, no DCAT output out of the box |
+
+Conclusion:
+
+- **Per station: Marquez.** The station needs a local, lightweight OpenLineage receiver, which is exactly what Marquez provides.
+- **Central or network level: OpenMetadata is a candidate later**, if cross-station discovery, a glossary, PII classification or data quality dashboards become requirements. It would then run once centrally and be fed from the stations (via DCAT or forwarded OpenLineage events), not on every node.
+- **Switching stays cheap.** Emitters only know the OpenLineage endpoint, and the OpenLineage client can send each event to several destinations, so Marquez and another receiver can run side by side during a migration.
+- **Risks to watch for Marquez:** the slowing upstream activity (keep the image pinned and review periodically) and the lack of authentication (keep the UI behind loopback, an SSH tunnel or an authenticating reverse proxy).
+
+### Configuration
+
+- Marquez is optional and runs as the `lineage` compose profile in `deploy/compose/docker-compose.dev.yaml`, with three services: `marquez-db`, `marquez` (API) and `marquez-web` (UI).
+- It is switched on with `lineage = true` under `[station]` in `pluginlake.toml`; `pluginlake up` then activates the profile. `pluginlake down` always stops all profiles.
+- Images are pinned: `marquezproject/marquez:0.51.1` and `marquezproject/marquez-web:0.51.1`.
+- Marquez uses its own PostgreSQL container (`marquez-db`) and database, separate from the Dagster and DuckLake database. Credentials are set with `MARQUEZ_DB`, `MARQUEZ_DB_USER` and `MARQUEZ_DB_PASSWORD` in `deploy/compose/.env`.
+- Data lives in the named volume `marquez-db-data`, so it survives `pluginlake down` and restarts. Only `pluginlake down -v` removes it.
+- The API config is `config/marquez/marquez.yml`: credentials come from the environment and OpenSearch-based search is disabled (it is not part of the stack).
+- The OpenLineage endpoint inside the compose network is `http://marquez:5000/api/v1/lineage`. The API is not published on the host.
+- Marquez has no authentication. The web UI is therefore published on the host loopback interface only (`127.0.0.1:3001`, override with `MARQUEZ_WEB_PORT`), so only administrators with access to the host (for example through an SSH tunnel) can reach it.

@@ -47,9 +47,9 @@ dev-up *args='':
 dev-up-headless *args='':
     {{ _compose }} up --build {{ args }}
 
-# Stop dev environment
+# Stop dev environment (all profiles)
 dev-down *args='':
-    {{ _compose }} --profile ui down {{ args }}
+    {{ _compose }} --profile ui --profile lineage down {{ args }}
 
 _compose_central := "docker compose -f deploy/compose/docker-compose.central.yaml"
 

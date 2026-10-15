@@ -73,6 +73,32 @@ Stop the station (add `-v` to also remove volumes):
 uv run pluginlake down
 ```
 
+`pluginlake down` stops every optional service (dashboards and lineage), also when they are switched off in `pluginlake.toml`.
+
+## Lineage with Marquez (optional)
+
+A station can run [Marquez](https://marquezproject.ai) as the receiver for OpenLineage events (ADR-007). Switch it on in `pluginlake.toml`:
+
+```toml
+[station]
+lineage = true
+```
+
+`pluginlake up` then also starts the `lineage` compose profile: the Marquez API, the Marquez web UI and a dedicated PostgreSQL database (separate from the Dagster database).
+
+| What | Where |
+|------|-------|
+| OpenLineage endpoint (inside the compose network) | `http://marquez:5000/api/v1/lineage` |
+| Marquez web UI (host loopback only) | http://127.0.0.1:3001 |
+
+Marquez has no authentication, so the UI is bound to `127.0.0.1` and is not reachable from other machines. Administrators on a remote station use an SSH tunnel:
+
+```bash
+ssh -L 3001:127.0.0.1:3001 user@station-host
+```
+
+Lineage data is stored in the `marquez-db-data` volume and survives `pluginlake down` and restarts; `pluginlake down -v` removes it. The database credentials and UI port can be changed in `deploy/compose/.env` (`MARQUEZ_DB`, `MARQUEZ_DB_USER`, `MARQUEZ_DB_PASSWORD`, `MARQUEZ_WEB_PORT`); see `deploy/compose/.env.example`.
+
 ## Onboarding a new project
 
 Scaffold a conformant project package, implement its assets and routers, then add it to `pluginlake.toml`:
