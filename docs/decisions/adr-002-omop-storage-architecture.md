@@ -31,7 +31,7 @@ DuckLake translates this into immutable, UUID-named Parquet files on disk. Updat
 
 ### Storage layout (managed by DuckLake)
 
-```
+```text
 data/lakehouse/
 └── <schema>/
     └── <table>/
@@ -42,7 +42,7 @@ The `data/lakehouse/` root is set via `DUCKLAKE_DATA_PATH`. There is no `data/st
 
 ### Data flow
 
-```
+```text
 CSV files (OMOP CDM format)
     ↓
 Polars loader (pluginlake.omop.loader)

@@ -76,7 +76,7 @@ Consequences of this split that we accept:
 A project is one **DuckLake catalog** (a separate `ATTACH`), not a schema.
 This preserves ADR-004 unchanged inside each project: the schema stays the medallion layer.
 
-```
+```text
 {project_catalog} . {layer_schema} . {domain}_{table}
    ehds_demo       .    curated     .  omop_condition_era
 ```
@@ -203,7 +203,7 @@ The rendered C4 view below shows how projects plug into the data station through
 
 ![How projects relate to the data station](../assets/images/project-datastation.png)
 
-```
+```text
    Capability axis (this ADR)                 Governance axis (ADR-006/008)
 
    ┌───────────────────────────┐              ┌───────────────────────────┐
@@ -219,7 +219,7 @@ The rendered C4 view below shows how projects plug into the data station through
                        many-to-many via contracts/ODRL URNs
 ```
 
-```
+```text
                        ┌──────────────────────────────────────┐
                        │            pluginlake (core)          │
    external clients    │   ┌───────────────┐   ┌───────────┐  │

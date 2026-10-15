@@ -22,7 +22,7 @@ DuckDB supports exactly three levels: `catalog.schema.table` ([docs: name qualif
 
 DuckLake fully manages its own file layout within `DATA_PATH` ([docs: paths](https://ducklake.select/docs/stable/duckdb/usage/paths)). When you create a table in a schema, DuckLake automatically creates:
 
-```
+```text
 DATA_PATH/
 └── {schema}/
     └── {table}/
@@ -112,7 +112,7 @@ Both are valid and the IO manager is able to handle both patterns consistently.
 
 The full `.data/` directory layout:
 
-```
+```text
 .data/
 ├── lakehouse/          ← DuckLake DATA_PATH (fully managed by DuckLake)
 │   ├── raw/
@@ -142,7 +142,7 @@ The full `.data/` directory layout:
 
 The IO manager is the single integration point. It enforces that the Dagster asset key, the DuckLake catalog entry, and the filesystem path are always derived from the same source:
 
-```
+```text
 Asset key: ["raw", "omop", "condition_era"]
     │
     ├─ IO manager resolves:

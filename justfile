@@ -32,6 +32,18 @@ docs-build: docs-openapi
 docs-openapi:
     uv run python scripts/export_openapi.py
 
+# Serve the docs locally (docs only, no OpenAPI export)
+serve:
+    uv run zensical serve
+
+# Lint markdown (no line-length rule: one sentence per line)
+docs-lint *args='':
+    uv run rumdl check docs README.md CONTRIBUTING.md AGENTS.md {{ args }}
+
+# Auto-fix markdown lint issues
+docs-lint-fix:
+    uv run rumdl fmt docs README.md CONTRIBUTING.md AGENTS.md
+
 pre-commit:
     uv run pre-commit run --all-files
 

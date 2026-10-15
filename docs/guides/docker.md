@@ -97,6 +97,7 @@ Compose resolves `${...}` interpolation from the `--env-file` flag and not from 
 ```bash
 PLUGINLAKE_ENV_FILE=custom.env docker compose --env-file deploy/compose/custom.env -f deploy/compose/docker-compose.dev.yaml up
 ```
+
 It publishes the same host ports as the dev stack, so stop `just dev-up` first if a port is already in use.
 
 ## Hardened base images
@@ -119,9 +120,11 @@ Hardened images are distributed through Docker Hub and require authentication to
 
 1. Create an account at [hub.docker.com](https://hub.docker.com) if you don't have one.
 2. Log in from the CLI:
+
    ```bash
    docker login dhi.io
    ```
+
 3. Browse the available hardened images at the [Docker Hub Hardened Images Catalog](https://hub.docker.com/hardened-images/catalog). Note that not all images are free — some require a Docker Pro, Team, or Business subscription.
 
 **What `dhi.io/` provides:**
@@ -293,7 +296,7 @@ The application reads the password from the file instead of an environment varia
 
 ## File layout
 
-```
+```text
 deploy/
 ├── compose/
 │   ├── .env                          # Dev values (gitignored)
