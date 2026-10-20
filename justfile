@@ -21,8 +21,8 @@ secure:
 
 ci: lint test secure
 
-docs: docs-openapi
-    uv run zensical serve
+docs port='8100': docs-openapi
+    uv run zensical serve -a localhost:{{ port }}
 
 # Build docs to site/ (for CI/deployment)
 docs-build: docs-openapi
@@ -33,8 +33,8 @@ docs-openapi:
     uv run python scripts/export_openapi.py
 
 # Serve the docs locally (docs only, no OpenAPI export)
-serve:
-    uv run zensical serve
+serve port='8100':
+    uv run zensical serve -a localhost:{{ port }}
 
 # Lint markdown (no line-length rule: one sentence per line)
 docs-lint *args='':
