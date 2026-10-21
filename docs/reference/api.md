@@ -128,7 +128,7 @@ See the [Configuration reference](config.md) for full details.
 
 ## Project structure
 
-```
+```text
 src/pluginlake/api/
 ├── __init__.py
 ├── app.py              # App factory (create_app)

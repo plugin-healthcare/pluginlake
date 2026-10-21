@@ -470,7 +470,7 @@ The hybrid keeps vantage6 for orchestration while complementing it with Nuts for
 
 In a fully decentralized model, orchestration flows station-to-station via Nuts, following the KIK-V pattern generalized to container execution:
 
-```
+```text
 Requesting Station                     Data Station
 ┌──────────────┐                      ┌──────────────┐
 │ pluginlake   │  1. Discover (Nuts)  │ pluginlake   │

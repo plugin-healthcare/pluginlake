@@ -20,7 +20,7 @@ This gives us a machine-readable API contract that can be used to generate clien
 
 ## Architecture
 
-```
+```text
 ┌─────────┐  ┌─────────┐  ┌─────────────┐
 │  Web UI │  │   CLI   │  │External svc  │
 └────┬────┘  └────┬────┘  └──────┬───────┘

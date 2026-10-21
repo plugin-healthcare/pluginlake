@@ -21,8 +21,8 @@ secure:
 
 ci: lint test secure
 
-docs: docs-openapi
-    uv run zensical serve
+docs port='8100': docs-openapi
+    uv run zensical serve -a localhost:{{ port }}
 
 # Build docs to site/ (for CI/deployment)
 docs-build: docs-openapi
@@ -31,6 +31,18 @@ docs-build: docs-openapi
 # Export OpenAPI schema to docs/openapi.json
 docs-openapi:
     uv run python scripts/export_openapi.py
+
+# Serve the docs locally (docs only, no OpenAPI export)
+serve port='8100':
+    uv run zensical serve -a localhost:{{ port }}
+
+# Lint markdown (no line-length rule: one sentence per line)
+docs-lint *args='':
+    uv run rumdl check docs README.md CONTRIBUTING.md AGENTS.md {{ args }}
+
+# Auto-fix markdown lint issues
+docs-lint-fix:
+    uv run rumdl fmt docs README.md CONTRIBUTING.md AGENTS.md
 
 pre-commit:
     uv run pre-commit run --all-files

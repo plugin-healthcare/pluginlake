@@ -47,7 +47,7 @@ Requirements:
 
 Each pluginlake instance (hub or station) runs a Nuts Node as a sidecar container:
 
-```
+```text
 ┌──────────────────────────┐
 │  pluginlake instance     │
 │  ┌────────────────────┐  │
@@ -188,7 +188,7 @@ These are two separate Dagster code locations, deployed on separate instances in
 
 The primary model. One processing hub receives bilateral agreements (via DSP, see ADR-008) from participating hospitals. The hub aggregates results and applies SDC.
 
-```
+```text
 Hosp. A ──agreement──► Hub (IKNL oncology) ◄──agreement── Hosp. B
                               ▲
                               │

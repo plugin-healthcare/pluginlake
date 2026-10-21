@@ -46,11 +46,13 @@ We use GitHub Flow with a single long-lived branch:
 1. Create a branch from `main`.
 2. Make your changes in small, focused commits.
 3. Run linting and tests before pushing:
+
    ```bash
    uv run ruff check .
    uv run ty check .
    uv run pytest
    ```
+
 4. Open a pull request against `main`.
 
 ## Pull request expectations
