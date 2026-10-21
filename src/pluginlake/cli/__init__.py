@@ -1,10 +1,12 @@
 """The ``pluginlake`` command-line interface.
 
-Two responsibilities in this (focused) iteration, both owned by core so that
-conforming is easier than not (ADR-009):
+Commands owned by core so that conforming is easier than not (ADR-009):
 
-- ``pluginlake init <name>`` scaffolds a conformant project package.
-- ``pluginlake verify [path]`` runs the conformance suite.
+- ``pluginlake project new <name>`` scaffolds a conformant project package.
+- ``pluginlake verify`` runs the conformance suite.
+- ``pluginlake up`` and ``pluginlake down`` deploy and stop the station stack.
+
+The CLI needs the ``pluginlake[cli]`` extra (Typer and Rich).
 """
 
 from pluginlake.cli.main import main

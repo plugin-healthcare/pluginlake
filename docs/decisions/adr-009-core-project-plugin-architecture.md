@@ -184,7 +184,7 @@ Standardization is therefore enforced by a versioned contract plus mechanical va
   3. Install/load at a node: core validates the manifest against the running platform version, checks namespace uniqueness, schema and URN conformance, that config loads, and that declared page and route placement stays within the project namespace and plane and passes the PEP. Reject on mismatch, at deploy time, not at request time.
   4. Runtime (PEP): even a loaded project cannot bypass authn/authz or write outside its catalog. The perimeter, catalog isolation, and ODRL contain it.
 - **Verify at every boundary (trust no node).** A sovereign node could run a modified core that skips its own gates, so federation safety does not rely on a node self-enforcing what it ships. Each node re-verifies the contract, capability, and pinned version on what it receives, at enrollment and per request. A version mismatch excludes the node from that federation's queries; it never silently returns wrong results.
-- **Golden-path tooling.** The CLI (`pluginlake init <name>`) and the project template scaffold a project that passes conformance by default, so conforming is easier than not.
+- **Golden-path tooling.** The CLI (`pluginlake project new <name>`) and the project template scaffold a project that passes conformance by default, so conforming is easier than not.
 - **Governed distribution.** No station installs arbitrary internet code. Projects are curated, reviewed, and signed under network governance, and a station operator chooses which vetted projects to install.
 
 ### Scope boundary and ADR numbering
@@ -274,7 +274,7 @@ Reconcile is install-and-restart today; per-project isolation, hot reload, and s
 ## Rollout phases
 
 1. **Extension points in core (non-breaking).** Add the `pluginlake.projects` entry point, the `ProjectManifest`, and catalog-per-project attach. Register the existing OMOP/FHIR components through the new mechanism while they still live in-tree, so behaviour is unchanged.
-2. **CLI, template, and conformance suite.** Provide `pluginlake init`, the project template, shared base classes (Settings, connectors), the manifest model, and `pluginlake verify`, so projects can be created, validated, and deployed on the same stack.
+2. **CLI, template, and conformance suite.** Provide `pluginlake project new`, the project template, shared base classes (Settings, connectors), the manifest model, and `pluginlake verify`, so projects can be created, validated, and deployed on the same stack.
 3. **Extract the EHDS demo.** Create `pluginlake-ehds-demo` from the template; move the domain layers, example data, and notebooks; wire them via the manifest; depend on `pluginlake`.
 4. **Slim the core.** Remove domain code from `pluginlake`; the core ships uniform endpoints only. Update deploy templates to install project packages and list code locations.
 5. **Docs, CI, tests, changelog.** Split tests, update guides, validate end-to-end with `compose up` and the demo installed.

@@ -1,4 +1,4 @@
-"""``pluginlake init`` — scaffold a conformant project package.
+"""``pluginlake project new`` — scaffold a conformant project package.
 
 Renders the bundled project template (``cli/templates/project``) into a new
 package that passes ``pluginlake verify`` out of the box, so the golden path is
@@ -6,12 +6,12 @@ also the conformant path (ADR-009).
 """
 
 import re
-import sys
 from importlib import resources
 from importlib.resources.abc import Traversable
 from pathlib import Path
 from string import Template
 
+from pluginlake.cli.console import err, out
 from pluginlake.plugins.conformance import core_version
 from pluginlake.utils.logger import get_logger
 
@@ -70,7 +70,7 @@ def _render_segment(segment: str, context: dict[str, str]) -> str:
     return rendered.removesuffix(TEMPLATE_SUFFIX)
 
 
-def run_init(name: str, dest: Path, *, force: bool = False) -> int:
+def run_project_new(name: str, dest: Path, *, force: bool = False) -> int:
     """Scaffold a new project package.
 
     Args:
@@ -82,15 +82,12 @@ def run_init(name: str, dest: Path, *, force: bool = False) -> int:
         ``0`` on success, ``1`` on error.
     """
     if not _NAME_PATTERN.match(name):
-        print(
-            f"Invalid project name '{name}'. Use lowercase letters, digits, and hyphens, starting with a letter.",
-            file=sys.stderr,
-        )
+        err(f"Invalid project name '{name}'. Use lowercase letters, digits, and hyphens, starting with a letter.")
         return 1
 
     target = dest / name
     if target.exists() and not force:
-        print(f"Target '{target}' already exists. Use --force to write into it.", file=sys.stderr)
+        err(f"Target '{target}' already exists. Use --force to write into it.")
         return 1
 
     context = _build_context(name)
@@ -103,9 +100,9 @@ def run_init(name: str, dest: Path, *, force: bool = False) -> int:
         out_path.write_text(Template(text).substitute(context), encoding="utf-8")
         logger.debug("Wrote %s", out_path)
 
-    print(f"Created project '{name}' at {target}")
-    print("\nNext steps:")
-    print(f"  cd {target}")
-    print("  uv sync")
-    print("  uv run pluginlake verify")
+    out(f"Created project '{name}' at {target}")
+    out("\nNext steps:")
+    out(f"  cd {target}")
+    out("  uv sync")
+    out("  uv run pluginlake verify")
     return 0

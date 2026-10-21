@@ -46,6 +46,9 @@ Exactly one of `path` or `source` must be set per project. See `src/pluginlake/d
 
 ## Bring the station up
 
+The CLI is an optional extra, so install it with `pip install "pluginlake[cli]"` (in a checkout: `uv sync --extra cli`).
+Docker with the Compose plugin is required for `up` and `down`.
+
 From a core checkout, with the projects available at the paths in `pluginlake.toml`:
 
 ```bash
@@ -78,7 +81,7 @@ uv run pluginlake down
 Scaffold a conformant project package, implement its assets and routers, then add it to `pluginlake.toml`:
 
 ```bash
-uv run pluginlake init my-project
+uv run pluginlake project new my-project
 ```
 
 Add a `[[projects]]` entry pointing at the new checkout (or its pinned source) and run `pluginlake up` again. The `pluginlake-ehds-demo` repository is a complete worked example of a project package.
