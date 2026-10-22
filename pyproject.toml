@@ -119,6 +119,7 @@ ignore = [
     "TRY003",  # Avoid specifying long messages outside the exception class
     "SIM102",  # Use a single if statement instead of nested if statements
     "SIM108",  # Use ternary operator
+    "CPY001",  # Missing copyright notice — license is declared once at the repo root
 ]
 fixable = ["ALL"]
 unfixable = []
@@ -166,6 +167,7 @@ strict = true
     "N803",    # Argument name should be lowercase (marimo passes module refs)
     "N806",    # Variable should be lowercase (constants in notebook cells)
     "PLR0913", # Too many arguments (marimo cell dependency injection)
+    "PLR0917", # Too many positional arguments (marimo cell dependency injection)
     "ARG001",  # Unused function argument (marimo dependency ordering)
 ]
 "notebooks/**/*.py" = [

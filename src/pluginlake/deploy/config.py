@@ -60,7 +60,7 @@ class ProjectSpec(BaseModel):
         """Return the ``uv pip install`` argument for this project (as seen in-container)."""
         if self.path is not None:
             return f"-e {CONTAINER_PROJECTS_DIR}/{self.path.name}"
-        return self.source  # type: ignore[return-value]
+        return self.source  # ty: ignore[invalid-return-type]
 
 
 class StationSettings(BaseModel):
