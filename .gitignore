@@ -234,4 +234,6 @@ __marimo__/
 .tmp_dagster_home_*
 
 # Local agent/session working docs (handoffs, plans) — not repo content
-.agent/
+.agents/plan/
+.agents/memory/
+.agents/review/
