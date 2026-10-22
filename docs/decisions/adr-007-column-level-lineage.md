@@ -308,7 +308,7 @@ Conclusion:
 
 - Marquez is optional and runs as the `lineage` compose profile in `deploy/compose/docker-compose.dev.yaml`, with three services: `marquez-db`, `marquez` (API) and `marquez-web` (UI).
 - It is switched on with `lineage = true` under `[station]` in `pluginlake.toml`; `pluginlake up` then activates the profile. `pluginlake down` always stops all profiles.
-- Images are pinned by version and digest: `marquezproject/marquez:0.51.1@sha256:0721c9…` and `marquezproject/marquez-web:0.51.1@sha256:731211…`.
+- Images are pinned by version: `marquezproject/marquez:0.51.1` and `marquezproject/marquez-web:0.51.1`.
 - Marquez uses its own PostgreSQL container (`marquez-db`) and database, separate from the Dagster and DuckLake database. Credentials are set with `MARQUEZ_DB`, `MARQUEZ_DB_USER` and `MARQUEZ_DB_PASSWORD` in `deploy/compose/.env`.
 - Data lives in the named volume `marquez-db-data`, so it survives `pluginlake down` and restarts. Only `pluginlake down -v` removes it.
 - The API config is `config/marquez/marquez.yml`: credentials come from the environment, OpenSearch-based search is explicitly disabled (it is not part of the stack), and the `PII` and `SENSITIVE` tags are predefined.

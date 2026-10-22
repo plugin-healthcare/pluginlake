@@ -1,5 +1,6 @@
 """Tests for ``pluginlake up`` / ``pluginlake down`` and the lineage compose profile."""
 
+import re
 from pathlib import Path
 
 import pytest
@@ -97,8 +98,7 @@ def test_marquez_images_are_pinned(dev_compose: dict):
         image = dev_compose["services"][name]["image"]
         repo, _, tag = image.partition(":")
         assert repo == f"marquezproject/{name}"
-        assert not tag.startswith("latest")
-        assert "@sha256:" in image
+        assert re.fullmatch(r"\d+\.\d+\.\d+", tag)
 
 
 def test_marquez_uses_dedicated_persistent_database(dev_compose: dict):
