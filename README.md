@@ -66,6 +66,25 @@ This starts:
 
 Source code is volume-mounted for hot reload. Stop with `just dev-down`.
 
+### Lineage (Marquez)
+
+Optionally, a station runs [Marquez](https://marquezproject.ai) as its OpenLineage receiver (ADR-007). Enable it in `pluginlake.toml`:
+
+```toml
+[station]
+lineage = true
+lineage_namespace = "ds-local-001"
+```
+
+Start the stack with `uv run pluginlake up -d` (`just dev-up` does not start the `lineage` profile). Materialize assets in Dagster ([http://localhost:3000](http://localhost:3000)); after each successful run the `openlineage_sensor` sends events to Marquez.
+
+| What                       | Where                                                      |
+| -------------------------- | ---------------------------------------------------------- |
+| Marquez web UI             | [http://127.0.0.1:3001](http://127.0.0.1:3001) (loopback only) |
+| Marquez API (via UI proxy) | `http://127.0.0.1:3001/api/v1/namespaces`                  |
+
+In the UI, select your namespace to browse jobs and datasets (named after DuckLake tables, e.g. `ducklake.omop.person`). See [docs/guides/deploying-a-station.md](docs/guides/deploying-a-station.md#lineage-with-marquez-optional) for details.
+
 ### Quality checks
 
 ```bash

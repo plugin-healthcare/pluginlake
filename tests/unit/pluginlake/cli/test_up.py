@@ -6,7 +6,7 @@ import pytest
 import yaml
 
 from pluginlake.cli import up
-from pluginlake.deploy.config import StationSettings
+from pluginlake.deploy.config import StationConfig, StationSettings
 
 _COMPOSE_DIR = up._find_compose_dir()
 _LINEAGE_SERVICES = ("marquez-db", "marquez", "marquez-web")
@@ -74,6 +74,19 @@ def test_run_down_stops_all_profiles(captured_cmd: list[list[str]]):
     assert captured_cmd[0][-2:] == ["down", "-v"]
 
 
+def test_override_sets_openlineage_env_on_dagster_when_enabled(tmp_path: Path):
+    config = StationConfig(station=StationSettings(lineage=True, lineage_namespace="ds-test-001"))
+    env = up._build_override(config, tmp_path / "pluginlake.toml")["services"]["dagster"]["environment"]
+    assert env["OPENLINEAGE_URL"] == "http://marquez:5000"
+    assert env["OPENLINEAGE_NAMESPACE"] == "ds-test-001"
+
+
+def test_override_omits_openlineage_env_when_disabled(tmp_path: Path):
+    override = up._build_override(StationConfig(), tmp_path / "pluginlake.toml")
+    for service in override["services"].values():
+        assert "OPENLINEAGE_URL" not in service["environment"]
+
+
 def test_lineage_services_only_in_lineage_profile(dev_compose: dict):
     for name in _LINEAGE_SERVICES:
         assert dev_compose["services"][name]["profiles"] == ["lineage"]
@@ -84,8 +97,8 @@ def test_marquez_images_are_pinned(dev_compose: dict):
         image = dev_compose["services"][name]["image"]
         repo, _, tag = image.partition(":")
         assert repo == f"marquezproject/{name}"
-        assert tag
-        assert tag != "latest"
+        assert not tag.startswith("latest")
+        assert "@sha256:" in image
 
 
 def test_marquez_uses_dedicated_persistent_database(dev_compose: dict):

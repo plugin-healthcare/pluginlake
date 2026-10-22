@@ -28,5 +28,12 @@ logging:
   appenders:
     - type: console
 
+# Explicit, so a Marquez upgrade with a new default cannot switch it on.
 search:
   enabled: false
+
+tags:
+  - name: PII
+    description: Personally identifiable information
+  - name: SENSITIVE
+    description: Contains sensitive information

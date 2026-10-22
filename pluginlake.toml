@@ -9,7 +9,9 @@
 endpoint_url = "http://localhost:8000"
 # Marquez as OpenLineage receiver (compose profile `lineage`, ADR-007).
 # Web UI on http://127.0.0.1:3001 (host loopback only).
-lineage = false
+lineage = true
+# OpenLineage namespace for this node's jobs in Marquez; unique per node.
+lineage_namespace = "ds-local-001"
 
 [[projects]]
 name = "ehds-demo"

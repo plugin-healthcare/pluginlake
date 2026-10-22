@@ -23,6 +23,8 @@ dependencies = [
     "pydantic-settings>=2.14.2",
     "python-multipart>=0.0.31",
     "packaging>=24.0",
+    "openlineage-python>=1.53.0",
+    "requests>=2.32.0",
 ]
 
 [project.scripts]

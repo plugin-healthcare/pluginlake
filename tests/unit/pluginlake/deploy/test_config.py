@@ -68,5 +68,12 @@ def test_load_missing_config_raises(tmp_path: Path):
 
 def test_load_station_config_lineage_enabled(tmp_path: Path):
     toml = tmp_path / "pluginlake.toml"
-    toml.write_text("[station]\nlineage = true\n", encoding="utf-8")
-    assert load_station_config(toml).station.lineage is True
+    toml.write_text('[station]\nlineage = true\nlineage_namespace = "ds-test-001"\n', encoding="utf-8")
+    station = load_station_config(toml).station
+    assert station.lineage is True
+    assert station.lineage_namespace == "ds-test-001"
+
+
+def test_lineage_namespace_must_not_be_empty():
+    with pytest.raises(ValueError, match="lineage_namespace"):
+        StationConfig.model_validate({"station": {"lineage_namespace": ""}})

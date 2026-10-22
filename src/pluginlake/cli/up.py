@@ -23,6 +23,8 @@ _MOUNTED_SERVICES = ("dagster", "pluginlake")
 _UI_PROFILE = "ui"
 _LINEAGE_PROFILE = "lineage"
 _ALL_PROFILES = (_UI_PROFILE, _LINEAGE_PROFILE)
+# Marquez API inside the compose network; the bridge appends /api/v1/lineage.
+_MARQUEZ_URL = "http://marquez:5000"
 
 
 def _find_compose_dir() -> Path | None:
@@ -48,6 +50,9 @@ def _build_override(config: StationConfig, config_path: Path) -> dict:
         if volumes:
             entry["volumes"] = volumes
         services[service] = entry
+    if config.station.lineage:
+        services["dagster"]["environment"]["OPENLINEAGE_URL"] = _MARQUEZ_URL
+        services["dagster"]["environment"]["OPENLINEAGE_NAMESPACE"] = config.station.lineage_namespace
     return {"services": services}
 
 

@@ -260,14 +260,14 @@ The OMOP CDM has an official `linkml-omop` schema that formally types every tabl
 
 ## Addendum: Marquez as OpenLineage receiver
 
-- **Date:** 2026-10-14
-- **Issue:** #219
+- **Date:** 2026-10-14, updated 2026-10-15
+- **Issue:** #219, #220
 
 The open question under [Transport](#transport) is settled: the station runs [Marquez](https://marquezproject.ai) as its local OpenLineage receiver.
 
 ### Why Marquez
 
-- It is the reference implementation of the OpenLineage API, so `duck_lineage`, `openlineage-dagster` and `openlineage-python` can all post to it without adapters.
+- It is the reference implementation of the OpenLineage API, so `duck_lineage`, the Dagster bridge and `openlineage-python` can all post to it without adapters.
 - It stores events in PostgreSQL and comes with a web UI for browsing jobs, datasets and lineage graphs, which a file-based bridge would not give us.
 - It runs fully inside the station network, with no outbound connectivity (constraint 5).
 
@@ -308,9 +308,29 @@ Conclusion:
 
 - Marquez is optional and runs as the `lineage` compose profile in `deploy/compose/docker-compose.dev.yaml`, with three services: `marquez-db`, `marquez` (API) and `marquez-web` (UI).
 - It is switched on with `lineage = true` under `[station]` in `pluginlake.toml`; `pluginlake up` then activates the profile. `pluginlake down` always stops all profiles.
-- Images are pinned: `marquezproject/marquez:0.51.1` and `marquezproject/marquez-web:0.51.1`.
+- Images are pinned by version and digest: `marquezproject/marquez:0.51.1@sha256:0721c9…` and `marquezproject/marquez-web:0.51.1@sha256:731211…`.
 - Marquez uses its own PostgreSQL container (`marquez-db`) and database, separate from the Dagster and DuckLake database. Credentials are set with `MARQUEZ_DB`, `MARQUEZ_DB_USER` and `MARQUEZ_DB_PASSWORD` in `deploy/compose/.env`.
 - Data lives in the named volume `marquez-db-data`, so it survives `pluginlake down` and restarts. Only `pluginlake down -v` removes it.
-- The API config is `config/marquez/marquez.yml`: credentials come from the environment and OpenSearch-based search is disabled (it is not part of the stack).
+- The API config is `config/marquez/marquez.yml`: credentials come from the environment, OpenSearch-based search is explicitly disabled (it is not part of the stack), and the `PII` and `SENSITIVE` tags are predefined.
 - The OpenLineage endpoint inside the compose network is `http://marquez:5000/api/v1/lineage`. The API is not published on the host.
 - Marquez has no authentication. The web UI is therefore published on the host loopback interface only (`127.0.0.1:3001`, override with `MARQUEZ_WEB_PORT`), so only administrators with access to the host (for example through an SSH tunnel) can reach it.
+
+### Dagster lifecycle lineage: a core bridge instead of `openlineage-dagster`
+
+`openlineage-dagster` cannot be used: its latest release (1.38.0) pins `dagster<=1.6.9` while pluginlake runs Dagster 1.13, and the package is unmaintained ("New integration maintainers are needed!"). The Dagster tier is therefore implemented as a small core bridge built on `openlineage-python`, following the approach of [srdp](https://github.com/srdp-hub/srdp) (`srdp.lineage.openlineage_bridge`, srdp ADR-0003). It keeps the standard OpenLineage configuration (`OPENLINEAGE_URL`, `OPENLINEAGE_NAMESPACE`):
+
+- `openlineage_sensor` (`pluginlake.definitions.lineage`) is a run-status sensor on `SUCCESS`, evaluated by the Dagster daemon. Core merges it into the `pluginlake.definitions` code location, so projects get lineage without registering anything.
+- The bridge (`pluginlake.core.lineage.openlineage_bridge`) turns every asset materialized in the run into one OpenLineage `COMPLETE` `RunEvent`: the asset is the job, its upstream assets from the Dagster asset graph are the inputs, and its DuckLake table is the output.
+- It only reads what the materialization already carries: `dagster/column_schema` (schema facet), `dagster/row_count` (output statistics facet), `dagster/column_lineage` (column lineage facet) and the asset `kinds` (job type facet). `DuckLakeIOManager` now attaches row count and schema automatically; column lineage comes from `TableColumnLineage` metadata, which the planned `@track_lineage` decorator will fill.
+- No data values: other metadata (previews, sample rows, run config) is never copied, so events contain job and dataset metadata only, no patient data.
+- Naming: jobs use the node namespace (`OPENLINEAGE_NAMESPACE`, from `lineage_namespace` in `pluginlake.toml`) and the asset key (`omop/person`). Datasets use namespace `ducklake` and the DuckLake table reference (`ducklake.omop.person`), produced by the same `asset_key_to_table_ref` helper that `DuckLakeIOManager` uses to name tables, so dataset names in Marquez match the catalog (`/api/v1/catalog/tables`).
+- Emission is best-effort and happens after the run has finished, so it never fails a run. When Marquez is unreachable the sensor logs one warning and skips the remaining events of that run (they are not replayed); a rejected event is logged as a warning and skipped. Each event gets at most one retry (`PLUGINLAKE_LINEAGE_RETRIES`).
+- Configuration lives in `pluginlake.core.lineage.config`: `OPENLINEAGE_URL` (off while unset), `OPENLINEAGE_NAMESPACE`, and `PLUGINLAKE_LINEAGE_*` for the rest. With `lineage = true`, `pluginlake up` sets `OPENLINEAGE_URL=http://marquez:5000` and `OPENLINEAGE_NAMESPACE` on the Dagster service.
+
+Where pluginlake deliberately differs from srdp:
+
+| Topic | srdp | pluginlake | Reason |
+|---|---|---|---|
+| Marquez database | Separate database and role on the shared PostgreSQL, created by a setup job | Separate `marquez-db` container in the `lineage` profile | Keeps the optional service fully self-contained; no change to the core database when lineage is off |
+| UI access | Behind Traefik with Zitadel SSO (oauth2-proxy) | Host loopback only | The station has no SSO proxy yet; access control follows Nuts/DSP (ADR-006, ADR-008) |
+| Sensor registration | Each project registers the sensor in its own `definitions.py` | Core adds it once to the merged code location | Projects plug in through the manifest (ADR-009) and should get lineage for free |

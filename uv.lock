@@ -961,8 +961,8 @@ name = "httpcore2"
 version = "2.13.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "h11" },
-    { name = "truststore" },
+    { name = "h11", marker = "sys_platform != 'emscripten'" },
+    { name = "truststore", marker = "sys_platform != 'emscripten'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/cb/f3/1db7aa2bc2524062192bb0e0323969492d1883152a232fe36eea65f4e35c/httpcore2-2.13.1.tar.gz", hash = "sha256:e0aa977abe17e69a3b820a24542a6fa88702676d83880b8d194dcd18408e5103", size = 68071, upload-time = "2026-09-23T07:47:22.372Z" }
 wheels = [
@@ -1688,6 +1688,22 @@ wheels = [
 ]
 
 [[package]]
+name = "openlineage-python"
+version = "1.54.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "attrs" },
+    { name = "httpx2" },
+    { name = "packaging" },
+    { name = "python-dateutil" },
+    { name = "pyyaml" },
+    { name = "requests" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/70/d2/6637b6a4bcce2a3d46be255279776e29fb2a0816864d2b724baf67122736/openlineage_python-1.54.0-py3-none-any.whl", hash = "sha256:d8df45da51e82131c0f804842c82df4dfbc5dbcf4d70cac7fdb0819c23236f29", size = 128273, upload-time = "2026-10-12T19:46:40.978Z" },
+]
+
+[[package]]
 name = "orjson"
 version = "3.11.7"
 source = { registry = "https://pypi.org/simple" }
@@ -1903,6 +1919,7 @@ dependencies = [
     { name = "duckdb" },
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "openlineage-python" },
     { name = "packaging" },
     { name = "polars" },
     { name = "psycopg2-binary" },
@@ -1910,6 +1927,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "python-multipart" },
+    { name = "requests" },
 ]
 
 [package.optional-dependencies]
@@ -1977,6 +1995,7 @@ requires-dist = [
     { name = "duckdb", specifier = ">=1.4.4" },
     { name = "fastapi", specifier = ">=0.139.0" },
     { name = "httpx", specifier = ">=0.28.0" },
+    { name = "openlineage-python", specifier = ">=1.53.0" },
     { name = "packaging", specifier = ">=24.0" },
     { name = "polars", specifier = ">=1.42.1" },
     { name = "psycopg2-binary", specifier = ">=2.9.11" },
@@ -1984,6 +2003,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.12.5" },
     { name = "pydantic-settings", specifier = ">=2.14.2" },
     { name = "python-multipart", specifier = ">=0.0.31" },
+    { name = "requests", specifier = ">=2.32.0" },
 ]
 provides-extras = ["infra", "azure"]
 
