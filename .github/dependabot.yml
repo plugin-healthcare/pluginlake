@@ -8,15 +8,32 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
+    open-pull-requests-limit: 10
+    # Majors stay as individual PRs; minor/patch bumps are batched into one PR.
+    groups:
+      python-minor-patch:
+        update-types: ["minor", "patch"]
 
   # GitHub Actions workflow versions
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "daily"
+    open-pull-requests-limit: 10
+    groups:
+      github-actions:
+        patterns: ["*"]
 
   # Docker base images
   - package-ecosystem: "docker"
     directory: "/deploy/docker"
     schedule:
       interval: "daily"
+    open-pull-requests-limit: 10
+
+  # Service images in compose files (postgres, marquez)
+  - package-ecosystem: "docker-compose"
+    directory: "/deploy/compose"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 10

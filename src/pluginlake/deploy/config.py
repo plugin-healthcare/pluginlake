@@ -12,6 +12,8 @@ Example ``pluginlake.toml``::
 
     [station]
     endpoint_url = "https://ds1.example.org"
+    lineage = true  # optional: Marquez as OpenLineage receiver
+    lineage_namespace = "ds1"  # OpenLineage namespace for this node
 
     [[projects]]
     name = "ehds-demo"
@@ -58,7 +60,7 @@ class ProjectSpec(BaseModel):
         """Return the ``uv pip install`` argument for this project (as seen in-container)."""
         if self.path is not None:
             return f"-e {CONTAINER_PROJECTS_DIR}/{self.path.name}"
-        return self.source  # type: ignore[return-value]
+        return self.source  # ty: ignore[invalid-return-type]
 
 
 class StationSettings(BaseModel):
@@ -66,6 +68,15 @@ class StationSettings(BaseModel):
 
     endpoint_url: str = Field(default="http://localhost:8000", description="Public endpoint URL of the station API.")
     dashboards: bool = Field(default=True, description="Whether to start the datastation dashboard UI.")
+    lineage: bool = Field(
+        default=False,
+        description="Whether to start Marquez (API, web UI and its database) as the OpenLineage receiver.",
+    )
+    lineage_namespace: str = Field(
+        default="pluginlake",
+        min_length=1,
+        description="OpenLineage namespace for this node's Dagster jobs; set a unique value per node.",
+    )
 
 
 class StationConfig(BaseModel):

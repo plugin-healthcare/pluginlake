@@ -237,3 +237,4 @@ __marimo__/
 .agents/plan/
 .agents/memory/
 .agents/review/
+.agent/

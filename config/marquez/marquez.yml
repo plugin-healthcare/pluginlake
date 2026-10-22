@@ -1,0 +1,39 @@
+# Marquez API configuration for the `lineage` compose profile (ADR-007).
+# Mounted into the marquez container and selected via MARQUEZ_CONFIG.
+# Differs from the image's marquez.dev.yml: database credentials come from the
+# environment, and OpenSearch is disabled (not part of the stack).
+
+server:
+  applicationConnectors:
+    - type: http
+      port: ${MARQUEZ_PORT:-5000}
+      httpCompliance: RFC7230_LEGACY
+  adminConnectors:
+    - type: http
+      port: ${MARQUEZ_ADMIN_PORT:-5001}
+
+db:
+  driverClass: org.postgresql.Driver
+  url: jdbc:postgresql://${POSTGRES_HOST:-marquez-db}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-marquez}
+  user: ${POSTGRES_USER:-marquez}
+  password: ${POSTGRES_PASSWORD:-marquez}
+
+migrateOnStartup: true
+
+graphql:
+  enabled: true
+
+logging:
+  level: ${MARQUEZ_LOG_LEVEL:-INFO}
+  appenders:
+    - type: console
+
+# Explicit, so a Marquez upgrade with a new default cannot switch it on.
+search:
+  enabled: false
+
+tags:
+  - name: PII
+    description: Personally identifiable information
+  - name: SENSITIVE
+    description: Contains sensitive information

@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: dhi.io/postgres:17-alpine3.22
+    image: dhi.io/postgres:17-alpine3.24
     env_file: .env.production
     ports:
       - "5432:5432"
@@ -115,7 +115,7 @@ services:
       context: ../../
       dockerfile: deploy/docker/dashboard-datastation.Dockerfile
     ports:
-      - "8501:8501"
+      - "${DASHBOARD_HOST_PORT:-8501}:8501"
     environment:
       DASHBOARD_API_URL: http://pluginlake:8000
     depends_on:

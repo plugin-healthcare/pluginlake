@@ -56,6 +56,7 @@ def test_load_station_config(tmp_path: Path):
     config = load_station_config(toml)
     assert config.station.endpoint_url == "http://x"
     assert config.station.dashboards is True
+    assert config.station.lineage is False
     assert config.projects[0].name == "ehds-demo"
     assert config.projects_env() == "-e /opt/projects/pluginlake-ehds-demo"
 
@@ -63,3 +64,16 @@ def test_load_station_config(tmp_path: Path):
 def test_load_missing_config_raises(tmp_path: Path):
     with pytest.raises(FileNotFoundError):
         load_station_config(tmp_path / "nope.toml")
+
+
+def test_load_station_config_lineage_enabled(tmp_path: Path):
+    toml = tmp_path / "pluginlake.toml"
+    toml.write_text('[station]\nlineage = true\nlineage_namespace = "ds-test-001"\n', encoding="utf-8")
+    station = load_station_config(toml).station
+    assert station.lineage is True
+    assert station.lineage_namespace == "ds-test-001"
+
+
+def test_lineage_namespace_must_not_be_empty():
+    with pytest.raises(ValueError, match="lineage_namespace"):
+        StationConfig.model_validate({"station": {"lineage_namespace": ""}})
