@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: dhi.io/postgres:17-alpine3.22
+    image: dhi.io/postgres:17-alpine3.24
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -124,7 +124,7 @@ services:
 
   # Dedicated database, separate from the Dagster/DuckLake postgres.
   marquez-db:
-    image: dhi.io/postgres:17-alpine3.22
+    image: dhi.io/postgres:17-alpine3.24
     profiles: ["lineage"]
     environment:
       POSTGRES_USER: ${MARQUEZ_DB_USER:-marquez}
@@ -141,7 +141,7 @@ services:
       start_period: 5s
 
   marquez:
-    image: marquezproject/marquez:0.51.1@sha256:0721c976cff17d8b14f7949d85d6dac9c7ea37cb9fe857caa19833730fcb1a50
+    image: marquezproject/marquez:0.51.1
     profiles: ["lineage"]
     environment:
       MARQUEZ_CONFIG: /opt/marquez/marquez.yml
@@ -166,7 +166,7 @@ services:
       start_period: 20s
 
   marquez-web:
-    image: marquezproject/marquez-web:0.51.1@sha256:7312112ca0e611b0a37b00d3da6a677485ae4a97622b23d3ae24d849a927868b
+    image: marquezproject/marquez-web:0.51.1
     profiles: ["lineage"]
     environment:
       MARQUEZ_HOST: marquez

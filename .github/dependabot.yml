@@ -30,3 +30,10 @@ updates:
     schedule:
       interval: "daily"
     open-pull-requests-limit: 10
+
+  # Service images in compose files (postgres, marquez)
+  - package-ecosystem: "docker-compose"
+    directory: "/deploy/compose"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 10

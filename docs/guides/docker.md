@@ -8,14 +8,14 @@ pluginlake uses separate containers for each concern:
 
 | Container | Dockerfile | Purpose |
 |-----------|-----------|---------|
-| **postgres** | `dhi.io/postgres:17-alpine3.22` (pre-built) | Dagster metadata + DuckLake catalog |
+| **postgres** | `dhi.io/postgres:17-alpine3.24` (pre-built) | Dagster metadata + DuckLake catalog |
 | **dagster-webserver** | `dagster-webserver.Dockerfile` | Dagster web UI |
 | **dagster-daemon** | `dagster-webserver.Dockerfile` | Schedules, sensors, run queue |
 | **dagster-code-server** | `pluginlake.Dockerfile` | Asset definitions served via gRPC |
 | **pluginlake** | `pluginlake.Dockerfile` | FastAPI service |
 | **pluginlake-ui** | `ui-datastation.Dockerfile` | Datastation Streamlit dashboard |
 | **pluginlake-central** | `ui-central.Dockerfile` | Central aggregation dashboard |
-| **marquez-db** | `dhi.io/postgres:17-alpine3.22` (pre-built) | Marquez database (profile `lineage`) |
+| **marquez-db** | `dhi.io/postgres:17-alpine3.24` (pre-built) | Marquez database (profile `lineage`) |
 | **marquez** | `marquezproject/marquez:0.51.1` (pre-built) | OpenLineage receiver API (profile `lineage`) |
 | **marquez-web** | `marquezproject/marquez-web:0.51.1` (pre-built) | Lineage web UI, host loopback only (profile `lineage`) |
 
@@ -107,7 +107,7 @@ All Dockerfiles use hardened images from `dhi.io/` instead of the default Docker
 ```dockerfile
 FROM dhi.io/python:3.13-debian13-dev AS builder    # Build stage
 FROM dhi.io/python:3.13-debian13                    # Runtime stage
-FROM dhi.io/postgres:17-alpine3.22                  # Database
+FROM dhi.io/postgres:17-alpine3.24                  # Database
 ```
 
 **Why hardened images?**

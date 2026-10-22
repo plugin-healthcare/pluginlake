@@ -107,7 +107,7 @@ This runs the full container architecture:
 
 | Container           | Image                           | Purpose                                       |
 | ------------------- | ------------------------------- | --------------------------------------------- |
-| postgres            | `dhi.io/postgres:17-alpine3.22` | Dagster metadata storage                      |
+| postgres            | `dhi.io/postgres:17-alpine3.24` | Dagster metadata storage                      |
 | dagster-webserver   | `dagster-webserver.Dockerfile`  | Web UI (port 3000)                            |
 | dagster-daemon      | `dagster-webserver.Dockerfile`  | Schedules, sensors, run queue                 |
 | dagster-code-server | `pluginlake.Dockerfile`         | Serves asset definitions via gRPC (port 4000) |
