@@ -1,12 +1,12 @@
-"""Tests for ``pluginlake init`` scaffolding."""
+"""Tests for ``pluginlake project new`` scaffolding."""
 
 import tomllib
 
-from pluginlake.cli.init import run_init
+from pluginlake.cli.project import run_project_new
 
 
-def test_init_scaffolds_expected_tree(tmp_path):
-    rc = run_init(name="my-demo", dest=tmp_path)
+def test_project_new_scaffolds_expected_tree(tmp_path):
+    rc = run_project_new(name="my-demo", dest=tmp_path)
     assert rc == 0
 
     project = tmp_path / "my-demo"
@@ -26,8 +26,8 @@ def test_init_scaffolds_expected_tree(tmp_path):
         assert (project / rel).is_file(), f"missing {rel}"
 
 
-def test_init_renders_substitutions(tmp_path):
-    run_init(name="my-demo", dest=tmp_path)
+def test_project_new_renders_substitutions(tmp_path):
+    run_project_new(name="my-demo", dest=tmp_path)
     project = tmp_path / "my-demo"
 
     manifest_src = (project / "src/my_demo/manifest.py").read_text()
@@ -40,25 +40,25 @@ def test_init_renders_substitutions(tmp_path):
     assert "my-demo" in pyproject["project"]["entry-points"]["pluginlake.projects"]
 
 
-def test_init_leaves_no_unrendered_placeholders(tmp_path):
-    run_init(name="my-demo", dest=tmp_path)
+def test_project_new_leaves_no_unrendered_placeholders(tmp_path):
+    run_project_new(name="my-demo", dest=tmp_path)
     for path in (tmp_path / "my-demo").rglob("*"):
         if path.is_file():
             assert "$package_name" not in path.read_text()
             assert "$project_id" not in path.read_text()
 
 
-def test_init_rejects_invalid_name(tmp_path):
-    assert run_init(name="My_Demo", dest=tmp_path) == 1
+def test_project_new_rejects_invalid_name(tmp_path):
+    assert run_project_new(name="My_Demo", dest=tmp_path) == 1
     assert not (tmp_path / "My_Demo").exists()
 
 
-def test_init_refuses_existing_target_without_force(tmp_path):
+def test_project_new_refuses_existing_target_without_force(tmp_path):
     (tmp_path / "my-demo").mkdir()
-    assert run_init(name="my-demo", dest=tmp_path) == 1
+    assert run_project_new(name="my-demo", dest=tmp_path) == 1
 
 
-def test_init_writes_into_existing_target_with_force(tmp_path):
+def test_project_new_writes_into_existing_target_with_force(tmp_path):
     (tmp_path / "my-demo").mkdir()
-    assert run_init(name="my-demo", dest=tmp_path, force=True) == 0
+    assert run_project_new(name="my-demo", dest=tmp_path, force=True) == 0
     assert (tmp_path / "my-demo/pyproject.toml").is_file()

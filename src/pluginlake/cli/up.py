@@ -10,10 +10,10 @@ locations and routers automatically (ADR-009).
 import contextlib
 import json
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
+from pluginlake.cli.console import err, out
 from pluginlake.deploy.config import CONTAINER_PROJECTS_DIR, StationConfig, load_station_config
 from pluginlake.utils.logger import get_logger
 
@@ -82,24 +82,22 @@ def run_up(config_path: Path, *, detach: bool = False, build: bool = True) -> in
     """
     compose_dir = _find_compose_dir()
     if compose_dir is None:
-        print(
+        err(
             "Could not locate the bundled deploy/compose stack. Run 'pluginlake up' from a "
-            "pluginlake source checkout (packaged deploy assets are not yet supported).",
-            file=sys.stderr,
+            "pluginlake source checkout (packaged deploy assets are not yet supported)."
         )
         return 1
 
     try:
         config = load_station_config(config_path)
     except (FileNotFoundError, ValueError) as exc:
-        print(f"Invalid station config: {exc}", file=sys.stderr)
+        err(f"Invalid station config: {exc}")
         return 1
 
     if not (compose_dir / ".env").exists():
-        print(
+        err(
             f"Warning: no {compose_dir / '.env'} found; copy {compose_dir / '.env.example'} first "
-            "(postgres credentials etc.).",
-            file=sys.stderr,
+            "(postgres credentials etc.)."
         )
 
     override = _build_override(config, config_path)
@@ -109,7 +107,7 @@ def run_up(config_path: Path, *, detach: bool = False, build: bool = True) -> in
         json.dump(override, handle)
         override_path = Path(handle.name)
 
-    print(f"Deploying station with projects: {config.projects_env() or '(none)'}")
+    out(f"Deploying station with projects: {config.projects_env() or '(none)'}")
     cmd = _compose_command(compose_dir, override_path, dashboards=config.station.dashboards)
     cmd.append("up")
     if build:
@@ -131,7 +129,7 @@ def run_down(config_path: Path, *, volumes: bool = False) -> int:
     """
     compose_dir = _find_compose_dir()
     if compose_dir is None:
-        print("Could not locate the bundled deploy/compose stack.", file=sys.stderr)
+        err("Could not locate the bundled deploy/compose stack.")
         return 1
 
     dashboards = True

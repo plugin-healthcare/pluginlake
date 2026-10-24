@@ -1917,6 +1917,10 @@ azure = [
     { name = "azure-identity" },
     { name = "azure-storage-blob" },
 ]
+cli = [
+    { name = "rich" },
+    { name = "typer" },
+]
 infra = [
     { name = "dagster-graphql" },
     { name = "dagster-postgres" },
@@ -1984,8 +1988,10 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.12.5" },
     { name = "pydantic-settings", specifier = ">=2.14.2" },
     { name = "python-multipart", specifier = ">=0.0.31" },
+    { name = "rich", marker = "extra == 'cli'", specifier = ">=14.3.2" },
+    { name = "typer", marker = "extra == 'cli'", specifier = ">=0.23.1" },
 ]
-provides-extras = ["infra", "azure"]
+provides-extras = ["cli", "infra", "azure"]
 
 [package.metadata.requires-dev]
 dashboard = [

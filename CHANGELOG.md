@@ -5,6 +5,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- The `pluginlake` CLI is now built with Typer and Rich and needs the optional extra `pluginlake[cli]`. Without it the command prints the install instruction and exits with code 1.
+- Breaking: `pluginlake init <name>` is now `pluginlake project new <name>`.
+
 ### Added
 
 - ADR-008: Dataspace Protocol, authentication, and authorization architecture (EHDS/Health-RI compliant, VC-native ODRL).

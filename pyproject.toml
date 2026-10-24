@@ -39,6 +39,10 @@ Documentation = "https://github.com/plugin-healthcare/pluginlake#readme"
 # pluginlake-ehds-demo package; core ships no in-tree project registration.
 
 [project.optional-dependencies]
+cli = [
+    "typer>=0.23.1",
+    "rich>=14.3.2",
+]
 infra = [
     "dagster-graphql>=1.12.14",
     "dagster-postgres>=0.28.14",
