@@ -104,5 +104,5 @@ def run_project_new(name: str, dest: Path, *, force: bool = False) -> int:
     out("\nNext steps:")
     out(f"  cd {target}")
     out("  uv sync")
-    out("  uv run pluginlake verify")
+    out("  uv run pytest")
     return 0

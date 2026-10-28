@@ -46,7 +46,7 @@ Exactly one of `path` or `source` must be set per project. See `src/pluginlake/d
 
 ## Bring the station up
 
-The CLI is an optional extra, so install it with `pip install "pluginlake[cli]"` (in a checkout: `uv sync --extra cli`).
+The CLI is part of the base install: `pip install pluginlake` (in a checkout: `uv sync`).
 Docker with the Compose plugin is required for `up` and `down`.
 
 From a core checkout, with the projects available at the paths in `pluginlake.toml`:

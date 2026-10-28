@@ -7,7 +7,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- The `pluginlake` CLI is now built with Typer and Rich and needs the optional extra `pluginlake[cli]`. Without it the command prints the install instruction and exits with code 1.
+- The `pluginlake` CLI is now built with Typer and Rich, which are part of the base install.
 - Breaking: `pluginlake init <name>` is now `pluginlake project new <name>`.
 
 ### Added

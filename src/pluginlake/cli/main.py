@@ -1,12 +1,8 @@
-"""CLI entry point for pluginlake (``pluginlake ...``).
-
-Only the standard library is imported here, so the missing-extra hint works
-without ``typer`` and ``rich`` installed.
-"""
+"""CLI entry point for pluginlake (``pluginlake ...``)."""
 
 import sys
 
-INSTALL_HINT = 'The pluginlake CLI needs extra dependencies. Install them with: pip install "pluginlake[cli]"'
+from pluginlake.cli.app import app
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -18,12 +14,6 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         Process exit code.
     """
-    try:
-        from pluginlake.cli.app import app  # noqa: PLC0415
-    except ImportError:
-        sys.stderr.write(f"{INSTALL_HINT}\n")
-        return 1
-
     try:
         app(args=argv, prog_name="pluginlake")
     except SystemExit as exc:

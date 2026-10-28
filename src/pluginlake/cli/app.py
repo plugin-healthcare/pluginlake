@@ -1,7 +1,7 @@
 """Typer application for the ``pluginlake`` command.
 
 This module is the only place (with the command modules it imports) that needs
-``typer`` and ``rich``, which are installed through the ``pluginlake[cli]`` extra.
+``typer`` and ``rich``, which are part of the base install.
 """
 
 from pathlib import Path
