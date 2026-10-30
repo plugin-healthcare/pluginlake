@@ -5,8 +5,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- The `pluginlake` CLI is now built with Typer and Rich, which are part of the base install.
+- Breaking: `pluginlake init <name>` is now `pluginlake project new --name <name>`. Without `--name` it asks for the name, the directory and the catalog.
+- Breaking: `pluginlake up` now runs `docker compose up -d --wait` and returns once the services are healthy. The `--detach` option is replaced by `--attach`, which follows the logs afterwards.
+- Breaking: `pluginlake down` no longer accepts `--volumes` and never removes volumes or data.
+
 ### Added
 
+- `pluginlake project demo` scaffolds a small demo project into `.pluginlake/` and starts the stack with it.
+- `pluginlake status` shows whether each service is running and healthy (exit code 1 if not), and `pluginlake logs [SERVICE] [-f]` shows the logs.
+- `up`, `down`, `status` and `logs` check that Docker, the Compose plugin and the daemon are available and report what is missing.
 - ADR-008: Dataspace Protocol, authentication, and authorization architecture (EHDS/Health-RI compliant, VC-native ODRL).
 - ADR-009: Core platform and project plugin architecture (split platform from projects; entry-point plugins for code locations, routers, and UI; CLI + templates for project conformance).
 - Plugin architecture Phase 1: `pluginlake.projects` entry-point discovery and a declarative `ProjectManifest`; core mounts project routers and Dagster code locations without importing project code. OMOP/FHIR registered in-tree via the `ehds-demo` manifest (non-breaking).

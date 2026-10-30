@@ -6,7 +6,8 @@ license = { text = "Apache-2.0" }
 authors = [
     { name = "Yannick Vinkesteijn" },
     { name = "Tim Hendriks" },
-    { name = "Marlou van de Sande" }
+    { name = "Marlou van de Sande" },
+    { name = "Daniel Kapitan"}
 ]
 readme = "README.md"
 requires-python = ">=3.13"
@@ -23,6 +24,8 @@ dependencies = [
     "pydantic-settings>=2.14.2",
     "python-multipart>=0.0.31",
     "packaging>=24.0",
+    "rich>=14.3.2",
+    "typer>=0.23.1",
 ]
 
 [project.scripts]
@@ -49,7 +52,7 @@ azure = [
     "azure-storage-blob>=12.28.0",
 ]
 [build-system]
-requires = ["uv_build>=0.10.0,<0.11.0"]
+requires = ["uv_build>=0.13.0,<0.14.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
@@ -99,6 +102,7 @@ fix = true
 # Skip non-source directories
 exclude = [
     "examples/",
+    ".pluginlake/",
     "docs/",
     "scripts/",
 ]
@@ -211,6 +215,7 @@ filterwarnings = [
 [tool.ty.src]
 exclude = [
     "external_repos/",
+    ".pluginlake/",
     "notebooks/",
     "src/pluginlake-ui/",  # Streamlit modifies sys.path at runtime; ty cannot resolve cross-module imports
     # TODO: re-enable once the plugin-rosetta package is available again upstream.

@@ -32,27 +32,33 @@ Because wiring happens at install time through the entry point, the platform ima
 endpoint_url = "http://localhost:8000"
 
 [[projects]]
-name = "ehds-demo"
-# Dev: a local sibling checkout, mounted and editable-installed into the images.
-path = "../pluginlake-ehds-demo"
+name = "my-project"
+# Dev: a local checkout, mounted and editable-installed into the images.
+path = "../my-project"
 
 # [[projects]]
-# name = "ehds-demo"
+# name = "other-project"
 # Prod: a pinned spec, no local checkout needed.
-# source = "pluginlake-ehds-demo @ git+https://github.com/plugin-healthcare/pluginlake-ehds-demo@v0.1.0"
+# source = "other-project @ git+https://github.com/org/other-project@v1.0.0"
 ```
 
 Exactly one of `path` or `source` must be set per project. See `src/pluginlake/deploy/config.py` for the full schema.
 
 ## Bring the station up
 
+The CLI is part of the base install: `pip install pluginlake` (in a checkout: `uv sync`).
+Docker with the Compose plugin and a running Docker daemon are required.
+The commands check this first and tell you what is missing.
+
 From a core checkout, with the projects available at the paths in `pluginlake.toml`:
 
 ```bash
-uv run pluginlake up -d
+uv run pluginlake up
 ```
 
-This builds the images, starts the stack, installs the configured projects, and wires their contributions. Once it is healthy:
+This builds the images, starts the stack in the background, installs the configured projects, wires their contributions, and returns once the services are healthy.
+Running it again on a running stack leaves it unchanged.
+Add `--attach` to follow the logs afterwards, or `--no-build` to skip rebuilding the images. Once it is healthy:
 
 | Service | URL |
 |---------|-----|
@@ -67,7 +73,15 @@ Verify that the configured projects conform to the plugin contract and are wired
 uv run pluginlake verify
 ```
 
-Stop the station (add `-v` to also remove volumes):
+Check which services are running and healthy (exit code 1 if any is not), and read their logs:
+
+```bash
+uv run pluginlake status
+uv run pluginlake logs dagster -f
+```
+
+Stop the station.
+`down` never removes volumes or data:
 
 ```bash
 uv run pluginlake down
@@ -78,7 +92,9 @@ uv run pluginlake down
 Scaffold a conformant project package, implement its assets and routers, then add it to `pluginlake.toml`:
 
 ```bash
-uv run pluginlake init my-project
+uv run pluginlake project new --name my-project
 ```
 
-Add a `[[projects]]` entry pointing at the new checkout (or its pinned source) and run `pluginlake up` again. The `pluginlake-ehds-demo` repository is a complete worked example of a project package.
+Without `--name` the command asks for the name, the directory and the catalog.
+
+Add a `[[projects]]` entry pointing at the new checkout (or its pinned source) and run `pluginlake up` again. To try a complete project first, run `uv run pluginlake project demo`, which scaffolds a small demo project into `.pluginlake/` and starts the stack with it. The `pluginlake-ehds-demo` repository is a larger worked example.

@@ -7,33 +7,27 @@ entrypoint installs those projects at start, so discovery wires their code
 locations and routers automatically (ADR-009).
 """
 
-import contextlib
 import json
-import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
+from pluginlake.cli.console import err, out
+from pluginlake.cli.stack import check_docker, compose_command, dashboards_enabled, find_compose_dir, run
 from pluginlake.deploy.config import CONTAINER_PROJECTS_DIR, StationConfig, load_station_config
-from pluginlake.utils.logger import get_logger
 
-logger = get_logger(__name__)
-
-_DEV_COMPOSE_PARTS = ("deploy", "compose", "docker-compose.dev.yaml")
 _MOUNTED_SERVICES = ("dagster", "pluginlake")
 
 
-def _find_compose_dir() -> Path | None:
-    """Locate the bundled ``deploy/compose`` directory by walking up from this file."""
-    for parent in Path(__file__).resolve().parents:
-        candidate = parent.joinpath(*_DEV_COMPOSE_PARTS)
-        if candidate.exists():
-            return candidate.parent
-    return None
-
-
 def _build_override(config: StationConfig, config_path: Path) -> dict:
-    """Build a compose override dict wiring projects into the mounted services."""
+    """Build a compose override dict wiring projects into the mounted services.
+
+    Args:
+        config: The station config.
+        config_path: Path to the station config, used to resolve relative project paths.
+
+    Returns:
+        The compose override as a dict.
+    """
     specs = config.projects_env()
     volumes: list[str] = []
     for project in config.local_projects:
@@ -49,104 +43,85 @@ def _build_override(config: StationConfig, config_path: Path) -> dict:
     return {"services": services}
 
 
-def _compose_command(compose_dir: Path, override_path: Path, *, dashboards: bool) -> list[str]:
-    """Assemble the base ``docker compose`` command shared by up and down."""
-    cmd = [
-        "docker",
-        "compose",
-        "-f",
-        str(compose_dir / _DEV_COMPOSE_PARTS[-1]),
-        "-f",
-        str(override_path),
-    ]
-    if dashboards:
-        cmd += ["--profile", "ui"]
-    return cmd
+def run_up(config_path: Path, *, attach: bool = False, build: bool = True) -> int:
+    """Bring up the station stack with the configured projects and wait until it is healthy.
 
-
-def _run(cmd: list[str], cwd: Path) -> int:
-    logger.info("Running: %s", " ".join(cmd))
-    return subprocess.run(cmd, cwd=cwd, check=False).returncode  # noqa: S603
-
-
-def run_up(config_path: Path, *, detach: bool = False, build: bool = True) -> int:
-    """Bring up the station stack with the configured projects.
+    Runs ``docker compose up -d --wait``, so the command returns once the services are
+    healthy. Running it again on a running stack leaves it unchanged.
 
     Args:
         config_path: Path to the ``pluginlake.toml`` station config.
-        detach: Run containers in the background.
+        attach: Follow the logs after the stack is up.
         build: Rebuild images before starting.
 
     Returns:
         Process exit code.
     """
-    compose_dir = _find_compose_dir()
+    problem = check_docker()
+    if problem is not None:
+        err(problem)
+        return 1
+
+    compose_dir = find_compose_dir()
     if compose_dir is None:
-        print(
+        err(
             "Could not locate the bundled deploy/compose stack. Run 'pluginlake up' from a "
-            "pluginlake source checkout (packaged deploy assets are not yet supported).",
-            file=sys.stderr,
+            "pluginlake source checkout (packaged deploy assets are not yet supported)."
         )
         return 1
 
     try:
         config = load_station_config(config_path)
     except (FileNotFoundError, ValueError) as exc:
-        print(f"Invalid station config: {exc}", file=sys.stderr)
+        err(f"Invalid station config: {exc}")
         return 1
 
     if not (compose_dir / ".env").exists():
-        print(
+        err(
             f"Warning: no {compose_dir / '.env'} found; copy {compose_dir / '.env.example'} first "
-            "(postgres credentials etc.).",
-            file=sys.stderr,
+            "(postgres credentials etc.)."
         )
 
-    override = _build_override(config, config_path)
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".pluginlake-projects.json", delete=False, encoding="utf-8"
-    ) as handle:
-        json.dump(override, handle)
-        override_path = Path(handle.name)
+    with tempfile.TemporaryDirectory() as tmp:
+        override_path = Path(tmp) / "pluginlake-projects.json"
+        override_path.write_text(json.dumps(_build_override(config, config_path)), encoding="utf-8")
 
-    print(f"Deploying station with projects: {config.projects_env() or '(none)'}")
-    cmd = _compose_command(compose_dir, override_path, dashboards=config.station.dashboards)
-    cmd.append("up")
-    if build:
-        cmd.append("--build")
-    if detach:
-        cmd.append("-d")
-    return _run(cmd, cwd=compose_dir)
+        out(f"Deploying station with projects: {config.projects_env() or '(none)'}")
+        cmd = compose_command(compose_dir, dashboards=config.station.dashboards, override_path=override_path)
+        cmd += ["up", "-d", "--wait"]
+        if build:
+            cmd.append("--build")
+        code = run(cmd, cwd=compose_dir)
+
+    if code != 0:
+        err("The station did not become healthy. Run 'pluginlake status' and 'pluginlake logs' to see why.")
+        return code
+
+    out("Station is up. Run 'pluginlake status' to check it.")
+    if attach:
+        logs_cmd = compose_command(compose_dir, dashboards=config.station.dashboards)
+        return run([*logs_cmd, "logs", "-f"], cwd=compose_dir)
+    return 0
 
 
-def run_down(config_path: Path, *, volumes: bool = False) -> int:
-    """Stop the station stack.
+def run_down(config_path: Path) -> int:
+    """Stop the station stack. Volumes and data are never removed.
 
     Args:
         config_path: Path to the ``pluginlake.toml`` station config.
-        volumes: Also remove named volumes.
 
     Returns:
         Process exit code.
     """
-    compose_dir = _find_compose_dir()
-    if compose_dir is None:
-        print("Could not locate the bundled deploy/compose stack.", file=sys.stderr)
+    problem = check_docker()
+    if problem is not None:
+        err(problem)
         return 1
 
-    dashboards = True
-    with contextlib.suppress(FileNotFoundError, ValueError):
-        dashboards = load_station_config(config_path).station.dashboards
+    compose_dir = find_compose_dir()
+    if compose_dir is None:
+        err("Could not locate the bundled deploy/compose stack.")
+        return 1
 
-    cmd = [
-        "docker",
-        "compose",
-        "-f",
-        str(compose_dir / _DEV_COMPOSE_PARTS[-1]),
-    ]
-    if dashboards:
-        cmd += ["--profile", "ui"]
-    cmd.append("down")
-    if volumes:
-        cmd.append("-v")
-    return _run(cmd, cwd=compose_dir)
+    cmd = compose_command(compose_dir, dashboards=dashboards_enabled(config_path))
+    return run([*cmd, "down"], cwd=compose_dir)

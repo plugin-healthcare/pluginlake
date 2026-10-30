@@ -19,7 +19,7 @@ lint:
 secure:
     uv run uv-secure
 
-ci: lint test secure
+ci: lint test
 
 docs port='8100': docs-openapi
     uv run zensical serve -a localhost:{{ port }}

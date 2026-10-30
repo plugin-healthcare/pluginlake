@@ -7,13 +7,16 @@ dependencies = [
     "pluginlake$requires_core",
 ]
 
+[dependency-groups]
+dev = ["pytest>=9.0.3"]
+
 # Single registration surface: core discovers this manifest and mounts the
 # project's contributions uniformly (ADR-009).
 [project.entry-points."pluginlake.projects"]
 $project_id = "$package_name.manifest:manifest"
 
 [build-system]
-requires = ["uv_build>=0.10.0,<0.11.0"]
+requires = ["uv_build>=0.13.0,<0.14.0"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]

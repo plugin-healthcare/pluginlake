@@ -8,7 +8,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ${POSTGRES_DATA:-../../.data/postgres}:/var/lib/postgresql/data
+      - postgres-dev-data:/var/lib/postgresql/data
     env_file:
       - ${PLUGINLAKE_ENV_FILE:-../../.env}
     healthcheck:
@@ -48,7 +48,7 @@ services:
       - ../../examples:/app/examples
       - ../../config/dagster:/app/config/dagster
       - ${PLUGINLAKE_DATA:-../../.data}:/app/.data
-      - ${DAGSTER_COMPUTE_LOGS:-../../.data/dagster/compute_logs}:/app/compute_logs
+      - dagster-dev-compute-logs:/app/compute_logs
 
   pluginlake:
     build:
@@ -118,3 +118,7 @@ services:
     volumes:
       - ../../src/pluginlake-ui/datastation:/app/src/pluginlake-ui/datastation
       - ../../assets:/app/assets:ro
+
+volumes:
+  postgres-dev-data:
+  dagster-dev-compute-logs:
