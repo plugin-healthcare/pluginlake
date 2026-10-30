@@ -102,6 +102,7 @@ fix = true
 # Skip non-source directories
 exclude = [
     "examples/",
+    ".pluginlake/",
     "docs/",
     "scripts/",
 ]
@@ -214,6 +215,7 @@ filterwarnings = [
 [tool.ty.src]
 exclude = [
     "external_repos/",
+    ".pluginlake/",
     "notebooks/",
     "src/pluginlake-ui/",  # Streamlit modifies sys.path at runtime; ty cannot resolve cross-module imports
     # TODO: re-enable once the plugin-rosetta package is available again upstream.

@@ -237,4 +237,7 @@ __marimo__/
 .agents/plan/
 .agents/memory/
 .agents/review/
+.agents/runbooks/
+.agents/issues/
 .github/skills/
+.pluginlake/

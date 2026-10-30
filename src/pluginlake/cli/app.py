@@ -9,7 +9,8 @@ from typing import Annotated
 
 import typer
 
-from pluginlake.cli.project import run_project_new
+from pluginlake.cli.observe import run_logs, run_status
+from pluginlake.cli.project import default_catalog, run_project_demo, run_project_new
 from pluginlake.cli.up import run_down, run_up
 from pluginlake.cli.verify import run_verify
 
@@ -36,13 +37,31 @@ def _exit(code: int) -> None:
 
 @project_app.command("new")
 def project_new(
-    name: Annotated[str, typer.Argument(help="Project name (lowercase, digits, hyphens; e.g. 'ehds-demo').")],
-    dest: Annotated[Path, typer.Option(help="Directory to create the project package in.")] = Path(),
+    name: Annotated[str | None, typer.Option(help="Project name (lowercase, digits, hyphens; e.g. 'ehds-demo').")] = None,
+    dest: Annotated[Path | None, typer.Option(help="Directory to create the project package in.")] = None,
+    catalog: Annotated[str | None, typer.Option(help="DuckLake catalog name. Defaults to the package name.")] = None,
     *,
     force: Annotated[bool, typer.Option(help="Write into the target directory even if it already exists.")] = False,
 ) -> None:
-    """Scaffold a new conformant project package."""
-    _exit(run_project_new(name=name, dest=dest.resolve(), force=force))
+    """Scaffold a new conformant project package.
+
+    Without --name, asks for the name and the basic settings.
+    """
+    if name is None:
+        name = typer.prompt("Project name (lowercase, digits, hyphens)")
+        dest = Path(typer.prompt("Directory to create it in", default=".")) if dest is None else dest
+        catalog = typer.prompt("Catalog name", default=default_catalog(name)) if catalog is None else catalog
+    _exit(run_project_new(name=name, dest=(dest or Path()).resolve(), catalog=catalog, force=force))
+
+
+@project_app.command("demo")
+def project_demo(
+    *,
+    attach: Annotated[bool, typer.Option("--attach", help="Follow the logs after the stack is healthy.")] = False,
+    no_build: Annotated[bool, typer.Option("--no-build", help="Do not rebuild images before starting.")] = False,
+) -> None:
+    """Start the stack with the bundled demo station config. Stop it with 'pluginlake down'."""
+    _exit(run_project_demo(attach=attach, build=not no_build))
 
 
 @app.command()
@@ -57,18 +76,31 @@ def verify(
 def up(
     config: ConfigOption = DEFAULT_CONFIG,
     *,
-    detach: Annotated[bool, typer.Option("--detach", "-d", help="Run containers in the background.")] = False,
+    attach: Annotated[bool, typer.Option("--attach", help="Follow the logs after the stack is healthy.")] = False,
     no_build: Annotated[bool, typer.Option("--no-build", help="Do not rebuild images before starting.")] = False,
 ) -> None:
-    """Deploy the station stack with the configured projects."""
-    _exit(run_up(config_path=config, detach=detach, build=not no_build))
+    """Deploy the station stack and wait until it is healthy."""
+    _exit(run_up(config_path=config, attach=attach, build=not no_build))
 
 
 @app.command()
-def down(
+def down(config: ConfigOption = DEFAULT_CONFIG) -> None:
+    """Stop the station stack. Volumes and data are never removed."""
+    _exit(run_down(config_path=config))
+
+
+@app.command()
+def status(config: ConfigOption = DEFAULT_CONFIG) -> None:
+    """Show whether each service is running and healthy (exit 1 if not)."""
+    _exit(run_status(config_path=config))
+
+
+@app.command()
+def logs(
+    service: Annotated[str | None, typer.Argument(help="Only show the logs of this service.")] = None,
     config: ConfigOption = DEFAULT_CONFIG,
     *,
-    volumes: Annotated[bool, typer.Option("--volumes", "-v", help="Also remove named volumes.")] = False,
+    follow: Annotated[bool, typer.Option("--follow", "-f", help="Keep streaming new log lines.")] = False,
 ) -> None:
-    """Stop the station stack."""
-    _exit(run_down(config_path=config, volumes=volumes))
+    """Show the logs of the station stack."""
+    _exit(run_logs(config_path=config, service=service, follow=follow))

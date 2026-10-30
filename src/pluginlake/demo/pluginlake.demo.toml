@@ -1,0 +1,9 @@
+# Demo station config used by `pluginlake project demo`.
+# The `demo` project is scaffolded next to this file from the project template.
+
+[station]
+endpoint_url = "http://localhost:8000"
+
+[[projects]]
+name = "demo"
+path = "demo"

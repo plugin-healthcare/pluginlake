@@ -73,7 +73,7 @@ just test         # Run tests
 just lint         # Run ruff + ty
 just secure       # Security audit dependencies
 just pre-commit   # Run all pre-commit hooks
-just ci           # Run all checks (lint + test + secure)
+just ci           # Run lint and tests
 ```
 
 ## Production
