@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock, call
 
+from pydantic import SecretStr
+
 from pluginlake.core.config import DuckLakeSettings
 from pluginlake.core.ducklake.setup import _apply_tuning_options
 
@@ -16,7 +18,7 @@ def _make_settings(
         pg_host="localhost",
         pg_port=5432,
         pg_user="test",
-        pg_password="test",  # noqa: S106
+        pg_password=SecretStr("test"),
         pg_db="testdb",
         target_file_size=target_file_size,
         parquet_compression=parquet_compression,

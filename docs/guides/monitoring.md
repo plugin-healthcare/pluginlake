@@ -45,13 +45,14 @@ cAdvisor runs on a separate `monitoring` network shared only with Prometheus, so
 Metrics are pushed outbound with Prometheus `remote_write`, the same model vantage6-ops uses for its nodes.
 
 1. Set `remote_write_url` in `pluginlake.toml` (or `PROMETHEUS_REMOTE_WRITE_URL` in the env file).
-2. Copy `deploy/compose/.env.monitoring.example` to `deploy/compose/.env.monitoring` and fill in the credentials issued by the central monitoring:
+2. Copy `deploy/compose/.env.monitoring.example` to `deploy/compose/.env.monitoring` and set the username issued by the central monitoring:
 
     ```bash
     PROMETHEUS_REMOTE_WRITE_USERNAME=...
-    PROMETHEUS_REMOTE_WRITE_PASSWORD=...
     ```
 
+   The password is a Docker secret, not part of `.env.monitoring`: set `PROMETHEUS_REMOTE_WRITE_PASSWORD` in `deploy/compose/.env` (dev, `pluginlake up`) or `deploy/compose/.env.production.secrets` (production).
+   Prometheus reads it from `/run/secrets/prometheus_remote_write_password` and refuses to start if the password is found in its environment.
 3. Run `pluginlake up` again. The Prometheus log shows `remote_write enabled to <scheme>://<host>` (path and query are not logged).
 
 The URL must use `https://` and must not contain credentials (`user:pass@host`); `pluginlake up` and Prometheus refuse it otherwise.
@@ -64,16 +65,40 @@ A central Prometheus that can reach the station can alternatively federate from 
 The production compose (`deploy/compose/docker-compose.yaml`) has the same profile, started manually:
 
 ```bash
-docker compose -f deploy/compose/docker-compose.yaml --profile monitoring up -d
+COMPOSE_PROFILES=monitoring just up -d
 ```
 
 Set `PROMETHEUS_STATION_ID` in `deploy/compose/.env.monitoring`.
-Copy `deploy/compose/.env.postgres-exporter.example` to `deploy/compose/.env.postgres-exporter` and set the exporter credentials (`DATA_SOURCE_USER`, `DATA_SOURCE_PASS`); only postgres-exporter reads that file.
+The exporter logs in as `POSTGRES_EXPORTER_USER` (`.env.production`, default `monitoring`) with the secret `POSTGRES_EXPORTER_PASSWORD` from `.env.production.secrets`; see [secrets](docker.md#secrets).
+Compose refuses to start the profile when `POSTGRES_EXPORTER_PASSWORD` or `PROMETHEUS_REMOTE_WRITE_PASSWORD` is not set (the latter may be empty).
 Use a dedicated read-only database user for the exporter:
 
 ```sql
 CREATE ROLE monitoring LOGIN PASSWORD '...' IN ROLE pg_monitor;
 ```
+
+## Missing container metrics
+
+cAdvisor runs without `privileged` and only gets read access to `/dev/kmsg` and the host paths it needs.
+On some hosts (certain cgroup v2 or storage setups) a few container metrics, such as disk I/O or filesystem usage, stay empty.
+Check *Status > Targets* and query `container_memory_usage_bytes` first.
+Only if metrics are missing on that host, enable `privileged` for cAdvisor with a local override file next to the production compose:
+
+```yaml
+# deploy/compose/docker-compose.local.yaml (gitignored)
+services:
+  cadvisor:
+    privileged: true
+```
+
+```bash
+docker compose --env-file deploy/compose/.env.production --env-file deploy/compose/.env.production.secrets \
+  -f deploy/compose/docker-compose.yaml -f deploy/compose/docker-compose.local.yaml --profile monitoring up -d
+```
+
+`privileged` gives the container full access to the host devices.
+cAdvisor already has root-equivalent access through the Docker socket, so this adds little risk, but keep it to the hosts that need it.
+`pluginlake up` does not load extra compose files; on such a host, set `[monitoring] cadvisor = false` and run cAdvisor in the host stack instead.
 
 ## Configuration reference
 
@@ -83,7 +108,8 @@ CREATE ROLE monitoring LOGIN PASSWORD '...' IN ROLE pg_monitor;
 | `station_id` | `[monitoring]` | `pluginlake` | `station` label on every metric (`[A-Za-z0-9._-]`). |
 | `cadvisor` | `[monitoring]` | `true` | Collect container metrics with cAdvisor. |
 | `remote_write_url` | `[monitoring]` | unset | Central remote-write endpoint. |
-| `PROMETHEUS_REMOTE_WRITE_USERNAME` / `_PASSWORD` | `.env.monitoring` | unset | Basic-auth credentials for remote write. |
+| `PROMETHEUS_REMOTE_WRITE_USERNAME` | `.env.monitoring` | unset | Basic-auth username for remote write. |
+| `PROMETHEUS_REMOTE_WRITE_PASSWORD` | compose secrets env | empty | Basic-auth password, mounted as a Docker secret. |
 | `PROMETHEUS_RETENTION` | `.env.monitoring` | `15d` | Local retention. |
 | `PROMETHEUS_PORT` | shell / `.env` | `9090` | Loopback host port of Prometheus. |
 | `PLUGINLAKE_METRICS_ENABLED` | API env | `true` | Record API metrics and serve them on the metrics port. |

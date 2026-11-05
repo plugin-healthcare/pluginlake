@@ -1,5 +1,6 @@
 """Tests for the Prometheus metrics of the pluginlake API."""
 
+import logging
 import urllib.request
 from http import HTTPStatus
 
@@ -119,7 +120,7 @@ def test_metrics_server_serves_prometheus_format():
     assert "process_cpu_seconds_total" in body
 
 
-def test_metrics_server_port_in_use_is_logged(caplog: pytest.LogCaptureFixture):
+def test_metrics_server_port_in_use_is_logged_as_error(caplog: pytest.LogCaptureFixture):
     first = start_metrics_server(MetricsSettings.model_construct(host="127.0.0.1", port=0))
     assert first is not None
     try:
@@ -127,7 +128,7 @@ def test_metrics_server_port_in_use_is_logged(caplog: pytest.LogCaptureFixture):
     finally:
         stop_metrics_server(first)
     assert second is None
-    assert "Could not start metrics server" in caplog.text
+    assert any(r.levelno == logging.ERROR and "Could not start metrics server" in r.message for r in caplog.records)
 
 
 def test_middleware_disabled(monkeypatch: pytest.MonkeyPatch):

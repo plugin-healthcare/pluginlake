@@ -1,13 +1,17 @@
 """Configuration for the DuckLake data catalog."""
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from pluginlake.config import secrets_dir
 
 
 class DuckLakeSettings(BaseSettings):
     """DuckLake catalog settings.
 
     All settings can be overridden via environment variables
-    prefixed with ``DUCKLAKE_``.
+    prefixed with ``DUCKLAKE_``. In compose the password is the Docker secret
+    ``/run/secrets/ducklake_pg_password``.
     """
 
     model_config = SettingsConfigDict(
@@ -15,12 +19,13 @@ class DuckLakeSettings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        secrets_dir=secrets_dir(),
     )
 
     pg_host: str
     pg_port: int = 5432
     pg_user: str
-    pg_password: str
+    pg_password: SecretStr
     pg_db: str
     catalog_name: str = "lakehouse"
     data_path: str = ".data/lakehouse"
@@ -34,7 +39,7 @@ class DuckLakeSettings(BaseSettings):
         """Build the libpq connection string for DuckLake metadata."""
         return (
             f"host={self.pg_host} port={self.pg_port} "
-            f"dbname={self.pg_db} user={self.pg_user} password={self.pg_password}"
+            f"dbname={self.pg_db} user={self.pg_user} password={self.pg_password.get_secret_value()}"
         )
 
     @property

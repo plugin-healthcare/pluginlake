@@ -3,12 +3,11 @@
 import time
 
 import duckdb
-import psycopg2
-from psycopg2 import sql
 
 from pluginlake.core.config import DuckLakeSettings
 from pluginlake.core.storage.base import StorageBackend
 from pluginlake.core.storage.local import LocalStorageBackend
+from pluginlake.utils import postgres
 from pluginlake.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -29,36 +28,16 @@ def _resolve_storage_backend(settings: DuckLakeSettings) -> StorageBackend:
 def ensure_database(settings: DuckLakeSettings) -> None:
     """Create the DuckLake PostgreSQL database if it does not exist.
 
-    Connects to the default ``postgres`` database to check for and
-    optionally create the target database. Uses autocommit because
-    CREATE DATABASE cannot run inside a transaction.
-
     Args:
         settings: DuckLake settings with PostgreSQL connection details.
     """
-    conn = psycopg2.connect(
+    postgres.ensure_database(
         host=settings.pg_host,
         port=settings.pg_port,
         user=settings.pg_user,
-        password=settings.pg_password,
-        dbname="postgres",
+        password=settings.pg_password.get_secret_value(),
+        dbname=settings.pg_db,
     )
-    conn.autocommit = True
-
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT 1 FROM pg_database WHERE datname = %s",
-                (settings.pg_db,),
-            )
-            if cur.fetchone():
-                logger.info("DuckLake database '%s' already exists.", settings.pg_db)
-                return
-
-            cur.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(settings.pg_db)))
-            logger.info("Created DuckLake database '%s'.", settings.pg_db)
-    finally:
-        conn.close()
 
 
 def create_connection(

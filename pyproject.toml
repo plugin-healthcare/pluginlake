@@ -13,6 +13,7 @@ requires-python = ">=3.13"
 
 dependencies = [
     "dagster>=1.13.1",
+    "dagster-postgres>=0.28.14",  # Dagster instance storage; runs execute in the code server
     "duckdb>=1.4.4",
     "fastapi>=0.139.0",
     "httpx>=0.28.0",
@@ -42,7 +43,6 @@ Documentation = "https://github.com/plugin-healthcare/pluginlake#readme"
 [project.optional-dependencies]
 infra = [
     "dagster-graphql>=1.12.14",
-    "dagster-postgres>=0.28.14",
     "dagster-webserver>=1.12.14",
 ]
 azure = [
@@ -60,16 +60,12 @@ dev = [
     "pre-commit>=4.5.1",
     { include-group = "lint" },
     { include-group = "test" },
-    { include-group = "security" },
     { include-group = "docs" },
     { include-group = "nb" },
 ]
 lint = [
     "ruff>=0.15.20",
     "ty>=0.0.15",
-]
-security = [
-    "uv-secure>=0.15.4",
 ]
 test = [
     "pytest>=9.0.3",
@@ -85,9 +81,17 @@ nb = [
     "pyzmq>=27.1.0",
 ]
 dashboard = [
-    "streamlit[starlette]>=1.53.0",
+    "streamlit>=1.66.1",
     "httpx>=0.28.0",
     "plotly>=6.1.0",
+    "pydantic-settings>=2.14.2",
+]
+# Production dagster-webserver/daemon image: no pluginlake install, definitions come from the code server.
+dagster-webserver = [
+    "dagster>=1.13.1",
+    "dagster-graphql>=1.12.14",
+    "dagster-postgres>=0.28.14",
+    "dagster-webserver>=1.12.14",
     "pydantic-settings>=2.14.2",
 ]
 
@@ -229,11 +233,6 @@ invalid-argument-type = "error"
 division-by-zero = "error"
 redundant-cast = "warn"
 invalid-method-override = "warn"
-
-[tool.uv-secure.maintainability_criteria]
-forbid_yanked = true
-forbid_archived = true
-forbid_quarantined = true
 
 [tool.rumdl]
 disable = [

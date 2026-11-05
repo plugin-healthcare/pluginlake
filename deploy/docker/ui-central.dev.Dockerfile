@@ -16,4 +16,4 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 EXPOSE 8502
 
-CMD ["streamlit", "run", "src/pluginlake-ui/central/app.py", "--server.port=8502", "--server.address=0.0.0.0", "--server.headless=true", "--server.runOnSave=true", "--server.useStarlette=true"]
+CMD ["streamlit", "run", "src/pluginlake-ui/central/app.py", "--server.port=8502", "--server.address=0.0.0.0", "--server.headless=true", "--server.runOnSave=true"]

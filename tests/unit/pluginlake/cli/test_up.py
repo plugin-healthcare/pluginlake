@@ -13,10 +13,10 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
     """Capture compose invocations (command and override contents) instead of running them."""
     captured: list[dict] = []
 
-    def _fake_run(cmd: list[str], cwd: Path) -> int:
+    def _fake_run(cmd: list[str], cwd: Path, env: dict[str, str] | None = None) -> int:
         files = [cmd[i + 1] for i, arg in enumerate(cmd) if arg == "-f"]
         override = json.loads(Path(files[1]).read_text(encoding="utf-8")) if len(files) > 1 else None
-        captured.append({"cmd": cmd, "override": override})
+        captured.append({"cmd": cmd, "override": override, "env": env})
         return 0
 
     monkeypatch.setattr(up_cli, "_run", _fake_run)
@@ -82,3 +82,28 @@ def test_down_always_includes_monitoring(tmp_path: Path, calls: list[dict]):
     cmd = calls[0]["cmd"]
     assert "monitoring" in _profiles(cmd)
     assert cmd[-1] == "down"
+
+
+def test_compose_env_untouched_without_monitoring(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv(up_cli.REMOTE_WRITE_SECRET_VAR, raising=False)
+    assert up_cli._compose_env(tmp_path, monitoring=False) is None
+
+
+def test_compose_env_defaults_remote_write_password_to_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv(up_cli.REMOTE_WRITE_SECRET_VAR, raising=False)
+    (tmp_path / ".env").write_text("POSTGRES_PASSWORD=x\n", encoding="utf-8")
+    env = up_cli._compose_env(tmp_path, monitoring=True)
+    assert env is not None
+    assert env[up_cli.REMOTE_WRITE_SECRET_VAR] == ""
+
+
+@pytest.mark.parametrize("line", ["PROMETHEUS_REMOTE_WRITE_PASSWORD=s3cret", "PROMETHEUS_REMOTE_WRITE_PASSWORD="])
+def test_compose_env_keeps_password_from_dotenv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, line: str):
+    monkeypatch.delenv(up_cli.REMOTE_WRITE_SECRET_VAR, raising=False)
+    (tmp_path / ".env").write_text(f"{line}\n", encoding="utf-8")
+    assert up_cli._compose_env(tmp_path, monitoring=True) is None
+
+
+def test_compose_env_keeps_password_from_shell(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv(up_cli.REMOTE_WRITE_SECRET_VAR, "s3cret")
+    assert up_cli._compose_env(tmp_path, monitoring=True) is None

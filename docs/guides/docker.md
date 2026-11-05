@@ -56,13 +56,8 @@ The build context is always the project root (`../../` in the compose files) bec
 ## Projects and database provisioning
 
 The development images (`pluginlake.dev.Dockerfile` and `dagster.dev.Dockerfile`) share the entrypoint `deploy/docker/entrypoint.sh`.
-It runs before the service starts and reads two environment variables.
-The production images used by `just up` do not run the entrypoint, so these variables have no effect there.
-
-| Variable | Purpose |
-|----------|---------|
-| `PLUGINLAKE_PROJECTS` | Whitespace-separated `uv pip install` arguments for the project packages to install. |
-| `PLUGINLAKE_ENSURE_DB` | Whitespace-separated database names to create in Postgres when they do not exist yet. |
+It runs before the service starts and reads `PLUGINLAKE_PROJECTS`: whitespace-separated `uv pip install` arguments for the project packages to install.
+The production images used by `just up` do not run this entrypoint, so the variable has no effect there.
 
 Projects register themselves through the `pluginlake.projects` entry point, so the core discovers their code locations and routers without importing project code (ADR-009).
 In development, point `PLUGINLAKE_PROJECTS` at a local editable checkout:
@@ -78,7 +73,7 @@ PLUGINLAKE_PROJECTS="my-project@git+https://github.com/org/my-project@v1.2.3"
 ```
 
 Projects are installed with `--no-sources`, so the `[tool.uv.sources]` table of a project is ignored inside the image.
-`PLUGINLAKE_ENSURE_DB` is idempotent and safe to run on every start.
+The dev Dagster container creates its own database on start when it does not exist yet (`dagster_env --ensure-db`, see [secrets](#secrets)); DuckLake creates its catalog database the same way.
 The databases are currently created with the Postgres superuser; per-component roles are tracked in #224.
 
 ## Smoke test
@@ -92,13 +87,10 @@ just smoke-test        # Run against an already running stack
 just smoke-test-full   # Start an isolated stack, run the test, tear it down (removes volumes)
 ```
 
-`smoke-test-full` reads `deploy/compose/smoke.env`, so it does not depend on your local `.env`.
-It does this by setting `PLUGINLAKE_ENV_FILE=smoke.env`, which selects the file the dev compose services load (default: `../../.env`, relative to `deploy/compose/`).
-Compose resolves `${...}` interpolation from the `--env-file` flag and not from `PLUGINLAKE_ENV_FILE`, so pass the same file to both when you use another environment file:
-
-```bash
-PLUGINLAKE_ENV_FILE=custom.env docker compose --env-file deploy/compose/custom.env -f deploy/compose/docker-compose.dev.yaml up
-```
+`smoke-test-full` reads `deploy/compose/smoke.env` and `deploy/compose/smoke.secrets.env`, so it does not depend on your local `.env`.
+`smoke.env` holds non-secret settings: it is passed to compose with `--env-file` for interpolation and loaded into the containers through `PLUGINLAKE_ENV_FILE=smoke.env`.
+`smoke.secrets.env` holds the throwaway passwords and is only passed with `--env-file`, like `deploy/compose/.env` in normal dev.
+`PLUGINLAKE_ENV_FILE` (default `deploy/compose/.env.containers`, optional) is the only env file the dev containers load; never put passwords in it.
 
 It publishes the same host ports as the dev stack, so stop `just dev-up` first if a port is already in use.
 
@@ -202,88 +194,121 @@ CMD dagster dev -h 0.0.0.0 -p 3000 -m "$DAGSTER_MODULE"
 
 Containers need configuration (database host, ports) and secrets (passwords, API keys). These should not be hardcoded in Dockerfiles or compose files, and secrets must never be committed to version control.
 
-### Development: `.env` file
+Configuration is passed as environment variables. Passwords are Docker Compose secrets, mounted as files under `/run/secrets/`.
+They are not part of any container's configuration (`docker inspect`) or env file, and pluginlake reads them straight into its settings, so they are not in the environment of the API or the code server either.
+The one exception is Dagster: `dagster.yaml` can only read its storage password from `DAGSTER_PG_PASSWORD`, so the Dagster processes have it in their environment (see below).
 
-Docker Compose automatically loads a `.env` file from the same directory as the compose file. The dev setup uses variable interpolation:
+### Secrets
+
+Both compose files declare their passwords as environment-sourced secrets:
 
 ```yaml
-# docker-compose.dev.yaml
 services:
   postgres:
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - source: postgres_password
+        uid: "70"        # the user the service runs as
+        mode: 0400
+
+secrets:
+  postgres_password:
+    environment: POSTGRES_PASSWORD   # read by docker compose, not by the container
 ```
 
-The actual values live in `deploy/compose/.env`:
+`docker compose` reads the value from its own environment (the shell or an `--env-file`) and copies it into the container as `/run/secrets/<name>`, owned by the service user with mode `0400`.
+The secrets env file is never passed to `env_file:`, so the value is not in any container's environment.
+
+File-based secrets (`file: ./secrets/x`) are not used: without Swarm, compose bind-mounts the host file with its host permissions and ignores `uid`/`mode`, so the file would have to be world-readable for non-root containers.
+
+How each service reads its secret:
+
+| Service | Secret file | How |
+|---------|-------------|-----|
+| pluginlake API, code server, Dagster (DuckLake) | `ducklake_pg_password` | `DuckLakeSettings` (pydantic `secrets_dir`) |
+| Dagster webserver, daemon, code server, `dagster dev` | `dagster_pg_password` | `DagsterPostgresSettings` (in `pluginlake.deploy.dagster_env`), exported as `DAGSTER_PG_PASSWORD` by that launcher |
+| postgres | `postgres_password` | `POSTGRES_PASSWORD_FILE`, native in the image |
+| postgres-exporter | `postgres_exporter_password` | `DATA_SOURCE_PASS_FILE`, native in the image |
+| Prometheus | `prometheus_remote_write_password` | `basic_auth.password_file`, set by its entrypoint |
+
+pluginlake settings classes set `secrets_dir=secrets_dir()` (`pluginlake.config`), which is `/run/secrets` when it exists.
+pydantic then reads a field from the file named after its environment variable in lowercase, e.g. `DUCKLAKE_PG_PASSWORD` from `/run/secrets/ducklake_pg_password`.
+Environment variables and `.env` take precedence over secret files, so keep passwords out of every env file a container loads; locally, without `/run/secrets`, the settings read the root `.env` as before.
+
+`pluginlake.deploy.dagster_env` is the image entrypoint of the production Dagster webserver/daemon, wraps the production code server and wraps `dagster dev` in the dev image.
+The code server needs the password too: runs execute there (`DefaultRunLauncher` with a gRPC code location) and write their events to the Dagster instance.
+It loads `DagsterPostgresSettings`, sets `DAGSTER_PG_PASSWORD` for the Dagster process only and `exec`s the command; with `--ensure-db` it first creates the Dagster database if it is missing.
+The launcher only depends on pydantic-settings, so the production webserver/daemon image does not install pluginlake: it installs the `dagster-webserver` dependency group and runs the launcher as a single file (`python /app/dagster_env.py`).
+`--ensure-db` needs pluginlake and is only used in the dev image.
+
+### Dagster instance config and run logs
+
+The dev stack uses `config/dagster/dagster.yaml`; the production webserver/daemon image uses `config/dagster/dagster.production.yaml` as its `dagster.yaml`.
+The daemon passes this instance config to runs, so the code server needs no copy of its own.
+The two files differ only in compute logs: production uses `NoOpComputeLogManager`, because capturing stdout/stderr needs `tail`, which the hardened runtime images lack.
+In production, `context.log` messages are stored in Postgres and shown in the Dagster UI; stdout/stderr of steps only appear in the code-server container log (`docker compose logs dagster-code-server`).
+Telemetry is disabled in both files.
+
+### Container logs
+
+The production compose rotates the log of every container (`x-logging` anchor): Docker's `json-file` driver with at most 5 files of 10 MB per container, so up to 50 MB is kept on the host.
+Without it, Docker keeps logs without limit for as long as the container exists.
+Step stdout/stderr ends up in the `dagster-code-server` log, and a `print(df)` there writes data rows; do not print data, and change the limits in `docker-compose.yaml` if the station needs a shorter or longer retention.
+
+### Development: `deploy/compose/.env`
+
+Docker Compose automatically loads `.env` from the directory of the compose file, for interpolation and as the source of the secrets.
+Only compose reads it; the containers never load it.
 
 ```dotenv
+# deploy/compose/.env (from deploy/compose/.env.example)
 POSTGRES_USER=dagster
 POSTGRES_PASSWORD=dagster
+PROMETHEUS_REMOTE_WRITE_PASSWORD=
 ```
 
-A committed `.env.example` documents which variables are needed. The `.env` file itself is gitignored.
+The dev stack uses the Postgres superuser for every service, so `POSTGRES_PASSWORD` is the only database secret.
+`pluginlake up` passes an empty `PROMETHEUS_REMOTE_WRITE_PASSWORD` when monitoring is enabled and the variable is not defined.
 
-### Production: `env_file`
+The dev containers do not load the root `.env`; it is only for `just dev-local` (no Docker) and keeps its passwords for that.
+Container settings are set explicitly in the compose file; extra non-secret settings (e.g. for a project) can go in `deploy/compose/.env.containers`, or another file selected with `PLUGINLAKE_ENV_FILE`.
+The dev stack mounts its one `postgres_password` secret under the names the settings read (`dagster_pg_password`, `ducklake_pg_password`).
 
-The production compose file uses `env_file` to load variables from a separate file:
+### Production: `.env.production` and `.env.production.secrets`
 
-```yaml
-# docker-compose.yaml
-services:
-  postgres:
-    env_file: .env.production
-```
+Production splits configuration from secrets:
 
-Operators create `.env.production` on the server from the committed `.env.production.example` template and fill in real credentials. This file is gitignored and should be readable only by the user running Docker.
+| File | Read by | Contains |
+|------|---------|----------|
+| `.env.production` | containers (`env_file`) and compose | users, database names, hosts |
+| `.env.production.secrets` | compose only (`--env-file`) | `POSTGRES_PASSWORD`, `DAGSTER_PG_PASSWORD`, `DUCKLAKE_PG_PASSWORD`, `POSTGRES_EXPORTER_PASSWORD`, `PROMETHEUS_REMOTE_WRITE_PASSWORD` |
 
 ```bash
 cp deploy/compose/.env.production.example deploy/compose/.env.production
-chmod 600 deploy/compose/.env.production
-# Edit with real values
+cp deploy/compose/.env.production.secrets.example deploy/compose/.env.production.secrets
+chmod 600 deploy/compose/.env.production deploy/compose/.env.production.secrets
+# Edit both with real values, then:
+just up
 ```
 
-### Docker Compose secrets (Swarm mode)
-
-Docker has a built-in secrets mechanism that mounts secret values as files at `/run/secrets/<name>` inside containers, rather than exposing them as environment variables. This is more secure because:
-
-- Secrets are encrypted at rest and in transit
-- They don't appear in `docker inspect` output
-- They're stored in a tmpfs mount, never written to disk in the container
-
-```yaml
-# Example (requires Docker Swarm or docker compose with secrets support)
-services:
-  postgres:
-    secrets:
-      - pg_password
-    environment:
-      POSTGRES_PASSWORD_FILE: /run/secrets/pg_password
-
-secrets:
-  pg_password:
-    file: ./secrets/pg_password.txt    # For compose
-    # external: true                   # For Swarm (managed via `docker secret create`)
-```
-
-The application reads the password from the file instead of an environment variable. Postgres and many other images support the `_FILE` suffix convention (e.g. `POSTGRES_PASSWORD_FILE`) for this purpose.
-
-**Why we don't use it (yet):**
-
-- `docker compose` (non-Swarm) supports file-based secrets but the mechanism is essentially the same as `env_file` — the file is bind-mounted into the container. There is no encryption or access control beyond filesystem permissions.
-- True secret isolation requires Docker Swarm mode or an external vault (HashiCorp Vault, AWS Secrets Manager, Azure Key Vault).
-- For our current deployment model, `env_file` with proper file permissions is sufficient. When deploying to Kubernetes, secrets are handled by the cluster's secret management.
+`just up` and `just down` pass both files with `--env-file`.
+When running compose by hand, pass them too; compose refuses to start a service whose secret variable is not set.
+`POSTGRES_EXPORTER_PASSWORD` and `PROMETHEUS_REMOTE_WRITE_PASSWORD` are only needed when the `monitoring` profile starts; the latter may be empty when remote write is not used.
 
 ### Comparison
 
 | Approach | Where secrets live | Visible in `docker inspect` | Encryption | Best for |
 |----------|-------------------|----------------------------|------------|----------|
 | `environment:` in compose | Compose file (committed) | Yes | No | Never use for real secrets |
-| `.env` + `${VAR}` | `.env` file (gitignored) | Yes | No | Local development |
-| `env_file:` | Separate file (gitignored) | Yes | No | Simple production |
-| Compose `secrets:` | File mount at `/run/secrets/` | No | No (file-based) | Compose production |
+| `.env` + `${VAR}` in `environment:` | `.env` file (gitignored) | Yes | No | Not used for secrets |
+| `env_file:` | Separate file (gitignored) | Yes | No | Non-secret configuration |
+| Compose `secrets:` (environment source) | Compose-only env file, copied to `/run/secrets/` | No | No | Our dev and production compose |
 | Swarm `secrets:` | Raft log (encrypted) | No | Yes | Swarm production |
 | External vault | Vault/KMS | No | Yes | Kubernetes / regulated environments |
+
+Compose secrets are not encrypted at rest on the host: protect the secrets env file with file permissions (`chmod 600`).
+Kubernetes and Swarm mount secrets as files too, so the same `/run/secrets/<name>` files work with the platform's secret store.
 
 ### What goes where
 
@@ -292,25 +317,28 @@ The application reads the password from the file instead of an environment varia
 | `DAGSTER_HOME` | No | Always `/app/config/dagster`, set in Dockerfile |
 | `DAGSTER_MODULE` | No | Which Python module to load |
 | `DAGSTER_PG_HOST` | No | Service name within the Docker network |
-| `DAGSTER_PG_USER` | No | Can be in `.env` |
-| `DAGSTER_PG_PASSWORD` | **Yes** | Must be in `.env` / `env_file`, never in compose |
-| `POSTGRES_PASSWORD` | **Yes** | Must be in `.env` / `env_file`, never in compose |
-| `PROMETHEUS_REMOTE_WRITE_PASSWORD` | **Yes** | Only in `.env.monitoring`, read by Prometheus alone |
-| `DATA_SOURCE_PASS` | **Yes** | postgres-exporter password, only in `.env.postgres-exporter`, read by the exporter alone |
+| `DAGSTER_PG_USER` | No | `.env.production` |
+| `POSTGRES_PASSWORD` | **Yes** | Secret `postgres_password` |
+| `DAGSTER_PG_PASSWORD` | **Yes** | Secret `dagster_pg_password` (production; dev uses `postgres_password`) |
+| `DUCKLAKE_PG_PASSWORD` | **Yes** | Secret `ducklake_pg_password` (production; dev uses `postgres_password`) |
+| `POSTGRES_EXPORTER_PASSWORD` | **Yes** | Secret `postgres_exporter_password` (production; dev uses `postgres_password`) |
+| `PROMETHEUS_REMOTE_WRITE_PASSWORD` | **Yes** | Secret `prometheus_remote_write_password`; never in `.env.monitoring` |
 
 ## File layout
 
 ```text
 deploy/
 ├── compose/
-│   ├── .env                          # Dev values (gitignored)
+│   ├── .env                          # Dev compose env and secret values (gitignored)
 │   ├── .env.example                  # Template for dev (committed)
-│   ├── .env.production               # Prod values (gitignored)
-│   ├── .env.production.example       # Template for prod (committed)
-│   ├── .env.monitoring               # Prometheus remote-write secrets (gitignored)
-│   ├── .env.monitoring.example       # Template for monitoring secrets (committed)
-│   ├── .env.postgres-exporter        # postgres-exporter credentials (gitignored)
-│   ├── .env.postgres-exporter.example # Template for exporter credentials (committed)
+│   ├── .env.containers               # Optional extra non-secret settings for dev containers (gitignored)
+│   ├── .env.production               # Prod config, no passwords (gitignored)
+│   ├── .env.production.example       # Template for prod config (committed)
+│   ├── .env.production.secrets       # Prod passwords, compose-only (gitignored)
+│   ├── .env.production.secrets.example # Template for prod passwords (committed)
+│   ├── .env.monitoring               # Prometheus remote-write URL and username (gitignored)
+│   ├── .env.monitoring.example       # Template for Prometheus settings (committed)
+│   ├── smoke.env / smoke.secrets.env # Throwaway config and secrets for the smoke test (committed)
 │   ├── docker-compose.dev.yaml       # Dev: single dagster container + postgres + pluginlake + UI
 │   ├── docker-compose.central.yaml   # Central dashboard (separate compose)
 │   └── docker-compose.yaml           # Prod: separate webserver, daemon, code-server

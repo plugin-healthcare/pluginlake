@@ -25,4 +25,5 @@ RUN cp deploy/docker/entrypoint.sh /usr/local/bin/pluginlake-entrypoint.sh \
 EXPOSE 3000
 
 ENTRYPOINT ["/usr/local/bin/pluginlake-entrypoint.sh"]
-CMD dagster dev -h 0.0.0.0 -p 3000 -m "$DAGSTER_MODULE"
+# dagster_env sets DAGSTER_PG_PASSWORD from the secret and creates the Dagster database if missing.
+CMD python -m pluginlake.deploy.dagster_env --ensure-db dagster dev -h 0.0.0.0 -p 3000 -m "$DAGSTER_MODULE"

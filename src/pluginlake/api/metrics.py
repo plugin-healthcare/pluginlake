@@ -138,11 +138,12 @@ def start_metrics_server(settings: MetricsSettings) -> WSGIServer | None:
     try:
         server, _thread = start_http_server(settings.port, addr=settings.host, registry=REGISTRY)
     except OSError:
-        logger.warning(
+        # Error, not warning: Prometheus will report the target down, and with several
+        # processes on one port only the first one exports, so this must stand out.
+        logger.exception(
             "Could not start metrics server on %s:%d; metrics are not exposed",
             settings.host,
             settings.port,
-            exc_info=True,
         )
         return None
     logger.info("Metrics server listening on %s:%d", settings.host, server.server_port)

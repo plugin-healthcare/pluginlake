@@ -3,17 +3,19 @@
 #
 # Environment:
 #   PROMETHEUS_STATION_ID              value of the `station` label (default: pluginlake)
-#   PROMETHEUS_SCRAPE_CADVISOR         "false" skips the cAdvisor job (default: true)
+#   PROMETHEUS_SCRAPE_CADVISOR         false/0/no/off skips the cAdvisor job (default: true)
 #   PROMETHEUS_COMPOSE_PROJECT         compose project whose containers cAdvisor reports
 #   PROMETHEUS_REMOTE_WRITE_URL        central remote-write endpoint (optional, https:// only, no '@')
 #   PROMETHEUS_REMOTE_WRITE_USERNAME   basic-auth username (optional)
-#   PROMETHEUS_REMOTE_WRITE_PASSWORD   basic-auth password, written to a file, never logged
+#   PROMETHEUS_REMOTE_WRITE_PASSWORD   never in the environment: compose mounts it as the
+#                                      secret /run/secrets/prometheus_remote_write_password
 #   PROMETHEUS_RETENTION               local retention (default: 15d)
 set -eu
 
 SRC_DIR=/etc/prometheus/pluginlake
 OUT_DIR=/tmp/prometheus-config
 CONFIG="$OUT_DIR/prometheus.yml"
+PASSWORD_FILE=/run/secrets/prometheus_remote_write_password
 
 fail() {
     echo "prometheus-entrypoint: $*" >&2
@@ -34,6 +36,9 @@ reject_unquotable() {
     esac
 }
 
+[ -z "${PROMETHEUS_REMOTE_WRITE_PASSWORD:-}" ] ||
+    fail "PROMETHEUS_REMOTE_WRITE_PASSWORD must not be set in the container env (e.g. .env.monitoring); it is a compose secret"
+
 export PROMETHEUS_STATION_ID="${PROMETHEUS_STATION_ID:-pluginlake}"
 require_safe PROMETHEUS_STATION_ID "$PROMETHEUS_STATION_ID"
 
@@ -42,7 +47,13 @@ mkdir -p "$OUT_DIR/scrape.d"
 cp "$SRC_DIR/prometheus.yml" "$CONFIG"
 cp "$SRC_DIR"/scrape.d/*.yml "$OUT_DIR/scrape.d/"
 
-if [ "${PROMETHEUS_SCRAPE_CADVISOR:-true}" = "false" ]; then
+case "$(printf '%s' "${PROMETHEUS_SCRAPE_CADVISOR:-true}" | tr '[:upper:]' '[:lower:]')" in
+    false | 0 | no | off) scrape_cadvisor=false ;;
+    true | 1 | yes | on) scrape_cadvisor=true ;;
+    *) fail "PROMETHEUS_SCRAPE_CADVISOR must be true or false, got '$PROMETHEUS_SCRAPE_CADVISOR'" ;;
+esac
+
+if [ "$scrape_cadvisor" = "false" ]; then
     rm "$OUT_DIR/scrape.d/cadvisor.yml"
     echo "prometheus-entrypoint: cAdvisor scraping disabled"
 else
@@ -70,13 +81,12 @@ if [ -n "$url" ]; then
     username="${PROMETHEUS_REMOTE_WRITE_USERNAME:-}"
     if [ -n "$username" ]; then
         reject_unquotable PROMETHEUS_REMOTE_WRITE_USERNAME "$username"
-        [ -n "${PROMETHEUS_REMOTE_WRITE_PASSWORD:-}" ] || fail "PROMETHEUS_REMOTE_WRITE_PASSWORD is required with a username"
-        umask 077
-        printf '%s' "$PROMETHEUS_REMOTE_WRITE_PASSWORD" >"$OUT_DIR/remote_write_password"
+        [ -s "$PASSWORD_FILE" ] ||
+            fail "a remote-write username needs a password: set PROMETHEUS_REMOTE_WRITE_PASSWORD in the compose secrets env file"
         {
             echo "    basic_auth:"
             echo "      username: \"$username\""
-            echo "      password_file: $OUT_DIR/remote_write_password"
+            echo "      password_file: $PASSWORD_FILE"
         } >>"$CONFIG"
     fi
     # Log only scheme and host; path and query may carry tokens.
@@ -88,7 +98,6 @@ if [ -n "$url" ]; then
 else
     echo "prometheus-entrypoint: remote_write disabled, metrics stay local"
 fi
-unset PROMETHEUS_REMOTE_WRITE_PASSWORD
 
 exec /bin/prometheus \
     --config.file="$CONFIG" \

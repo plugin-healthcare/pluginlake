@@ -44,7 +44,7 @@ The API records `pluginlake_http_requests_total`, `pluginlake_http_request_durat
 - `route` is the matched route template (`/assets/{asset_id}`), never the raw path; unmatched requests share `route="unmatched"`.
 - `method` is limited to the standard HTTP methods (others become `OTHER`); `status` is the numeric code; `exception` is the exception class name.
 - The metrics are served by a separate HTTP server on `PLUGINLAKE_METRICS_PORT` (default `9464`), which compose only `expose`s. The public API port has no `/metrics` route. It binds to loopback by default; the compose files set `PLUGINLAKE_METRICS_HOST=0.0.0.0` so Prometheus can scrape it over the compose network.
-- Failing to bind the metrics port logs a warning; the API keeps running.
+- Failing to bind the metrics port logs an error; the API keeps running. Prometheus then reports the `pluginlake` target as down.
 
 ### Scrape configuration
 
@@ -54,9 +54,10 @@ An entrypoint script renders the final config at container start:
 - `station` external label from `PROMETHEUS_STATION_ID` (`[monitoring] station_id`).
 - `scrape.d/cadvisor.yml` is dropped when `PROMETHEUS_SCRAPE_CADVISOR=false`, for hosts that already run cAdvisor (such as a vantage6 host stack).
 - cAdvisor series are kept only for containers of this compose project.
-- A `remote_write` block with basic auth is appended when `PROMETHEUS_REMOTE_WRITE_URL` is set. The password is written to a file readable by Prometheus only and removed from its environment. Only `https://` URLs are accepted, URLs with embedded credentials are rejected, and only the scheme and host are logged.
+- A `remote_write` block with basic auth is appended when `PROMETHEUS_REMOTE_WRITE_URL` is set. The password is the Docker secret `/run/secrets/prometheus_remote_write_password`, referenced as `password_file`; it is never in the Prometheus environment. Only `https://` URLs are accepted, URLs with embedded credentials are rejected, and only the scheme and host are logged.
 
-The URL can be set in `pluginlake.toml`; remote-write credentials live in `deploy/compose/.env.monitoring`, read by Prometheus only, and the postgres-exporter credentials in `deploy/compose/.env.postgres-exporter`, read by the exporter only.
+The URL can be set in `pluginlake.toml`; the remote-write username lives in `deploy/compose/.env.monitoring`, read by Prometheus only.
+The remote-write and postgres-exporter passwords are Docker Compose secrets (see the [Docker guide](../guides/docker.md#secrets)): mounted under `/run/secrets/` in their own service only, never in a container environment.
 A central Prometheus that can reach the station may alternatively federate from `/federate`.
 
 ### No patient data, no free input in labels

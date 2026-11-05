@@ -17,7 +17,7 @@ lint:
     uv run ty check .
 
 secure:
-    uv run uv-secure
+    uv audit --locked --preview-features audit-command
 
 ci: lint test secure
 
@@ -69,7 +69,7 @@ _compose_central := "docker compose -f deploy/compose/docker-compose.central.yam
 dev-central *args='':
     {{ _compose_central }} up --build {{ args }}
 
-_smoke-compose := 'env -i HOME="$HOME" PATH="$PATH" PLUGINLAKE_ENV_FILE=smoke.env docker compose --env-file deploy/compose/smoke.env -f deploy/compose/docker-compose.dev.yaml -f deploy/compose/docker-compose.smoke.yaml'
+_smoke-compose := 'env -i HOME="$HOME" PATH="$PATH" PLUGINLAKE_ENV_FILE=smoke.env docker compose --env-file deploy/compose/smoke.env --env-file deploy/compose/smoke.secrets.env -f deploy/compose/docker-compose.dev.yaml -f deploy/compose/docker-compose.smoke.yaml'
 
 # Run smoke test against running stack
 smoke-test:
@@ -84,13 +84,16 @@ smoke-test-full:
 dev-local:
     uv run dg dev -f examples/titanic.py
 
+# Production compose: config from .env.production, passwords (Docker secrets) from .env.production.secrets
+_compose_prod := "docker compose --env-file deploy/compose/.env.production --env-file deploy/compose/.env.production.secrets -f deploy/compose/docker-compose.yaml"
+
 # Start production environment
 up *args='':
-    docker compose -f deploy/compose/docker-compose.yaml up --build {{ args }}
+    {{ _compose_prod }} up --build {{ args }}
 
 # Stop production environment
 down *args='':
-    docker compose -f deploy/compose/docker-compose.yaml down {{ args }}
+    {{ _compose_prod }} down {{ args }}
 
 # --- Infrastructure (OpenTofu) ---
 

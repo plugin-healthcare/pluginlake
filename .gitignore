@@ -165,11 +165,15 @@ activemq-data/
 
 # Environments
 .env
-.env.production
-.env.monitoring
-.env.postgres-exporter
-*.env*
+.env.*
+*.env
 !.env*.example
+!*.env.example
+# Throwaway credentials for the isolated smoke-test stack
+!deploy/compose/smoke.env
+!deploy/compose/smoke.secrets.env
+# Host-specific compose overrides
+deploy/compose/docker-compose.local.yaml
 .envrc
 .venv
 env/

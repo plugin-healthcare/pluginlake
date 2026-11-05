@@ -12,7 +12,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # ---------------------------------------------------------------------------
@@ -42,6 +42,24 @@ class StorageLayer(StrEnum):
     RAW = "raw"
     PROCESSED = "processed"
     OUTPUT = "output"
+
+
+# ---------------------------------------------------------------------------
+# Docker secrets
+# ---------------------------------------------------------------------------
+
+SECRETS_DIR = Path("/run/secrets")
+
+
+def secrets_dir() -> Path | None:
+    """Directory pydantic reads secret files from, if present.
+
+    Compose mounts secrets as ``/run/secrets/<env_prefix><field>`` (lowercase), so a
+    settings class with ``secrets_dir=secrets_dir()`` reads e.g. ``DUCKLAKE_PG_PASSWORD``
+    from ``/run/secrets/ducklake_pg_password``. Environment variables take precedence.
+    Returns ``None`` outside containers, where pydantic would warn about a missing directory.
+    """
+    return SECRETS_DIR if SECRETS_DIR.is_dir() else None
 
 
 # ---------------------------------------------------------------------------
@@ -188,32 +206,7 @@ class ServerSettings(BaseSettings):
 
 
 # ---------------------------------------------------------------------------
-# Postgres settings
-# ---------------------------------------------------------------------------
-
-
-class PostgresSettings(BaseSettings):
-    """PostgreSQL connection configuration.
-
-    Environment variables are prefixed with ``PLUGINLAKE_POSTGRES_``.
-    """
-
-    model_config = SettingsConfigDict(
-        env_prefix="PLUGINLAKE_POSTGRES_",
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
-
-    host: str = Field(default="localhost", description="PostgreSQL hostname.")
-    port: int = Field(default=5432, description="PostgreSQL port.")
-    user: SecretStr = Field(description="PostgreSQL user.")
-    password: SecretStr = Field(description="PostgreSQL password.")
-    db: str = Field(default="pluginlake", description="PostgreSQL database name.")
-
-
-# ---------------------------------------------------------------------------
-# Dagster settings
+# Log settings
 # ---------------------------------------------------------------------------
 
 
@@ -254,36 +247,3 @@ class LogSettings(BaseSettings):
         """Create both log subdirectories."""
         self.query_log_dir.mkdir(parents=True, exist_ok=True)
         self.ingestion_log_dir.mkdir(parents=True, exist_ok=True)
-
-
-# ---------------------------------------------------------------------------
-# Dagster settings
-# ---------------------------------------------------------------------------
-
-
-class DagsterSettings(BaseSettings):
-    """Dagster orchestrator configuration.
-
-    Environment variables are prefixed with ``PLUGINLAKE_DAGSTER_``.
-    """
-
-    model_config = SettingsConfigDict(
-        env_prefix="PLUGINLAKE_DAGSTER_",
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
-
-    module: str = Field(
-        default="pluginlake.definitions",
-        description="Python module containing Dagster definitions.",
-    )
-    webserver_url: str = Field(
-        default="http://localhost:3000",
-        description="URL of the Dagster webserver (GraphQL API).",
-    )
-    pg_host: str = Field(default="localhost", description="Dagster PostgreSQL hostname.")
-    pg_user: SecretStr = Field(description="Dagster PostgreSQL user.")
-    pg_password: SecretStr = Field(description="Dagster PostgreSQL password.")
-    pg_db: str = Field(default="dagster", description="Dagster PostgreSQL database name.")
-    DAGSTER_HOME: Path = Field(default=Path.home(), description="Directory for Dagster to store instance data.")

@@ -10,6 +10,8 @@ the ``monitoring`` compose profile (Prometheus and exporters) is started too.
 
 import contextlib
 import json
+import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -23,6 +25,7 @@ logger = get_logger(__name__)
 _DEV_COMPOSE_PARTS = ("deploy", "compose", "docker-compose.dev.yaml")
 _MOUNTED_SERVICES = ("dagster", "pluginlake")
 MONITORING_PROFILE = "monitoring"
+REMOTE_WRITE_SECRET_VAR = "PROMETHEUS_REMOTE_WRITE_PASSWORD"  # noqa: S105 (variable name, not a value)
 
 
 def _find_compose_dir() -> Path | None:
@@ -83,9 +86,32 @@ def _compose_command(compose_dir: Path, override_path: Path, *, dashboards: bool
     return cmd
 
 
-def _run(cmd: list[str], cwd: Path) -> int:
+def _defines(env_file: Path, name: str) -> bool:
+    """Whether the dotenv file ``env_file`` assigns ``name`` (to any value, also empty)."""
+    if not env_file.is_file():
+        return False
+    pattern = re.compile(rf"^\s*(?:export\s+)?{re.escape(name)}\s*=", re.MULTILINE)
+    return bool(pattern.search(env_file.read_text(encoding="utf-8")))
+
+
+def _compose_env(compose_dir: Path, *, monitoring: bool) -> dict[str, str] | None:
+    """Environment for ``docker compose up``; ``None`` keeps the current one.
+
+    The remote-write password is a compose secret, so it must be defined whenever
+    Prometheus starts. Without remote write it may be empty: an undefined value is
+    passed as empty instead of failing. A value from the shell or the compose
+    ``.env`` always wins.
+    """
+    if not monitoring or REMOTE_WRITE_SECRET_VAR in os.environ:
+        return None
+    if _defines(compose_dir / ".env", REMOTE_WRITE_SECRET_VAR):
+        return None
+    return {**os.environ, REMOTE_WRITE_SECRET_VAR: ""}
+
+
+def _run(cmd: list[str], cwd: Path, env: dict[str, str] | None = None) -> int:
     logger.info("Running: %s", " ".join(cmd))
-    return subprocess.run(cmd, cwd=cwd, check=False).returncode  # noqa: S603
+    return subprocess.run(cmd, cwd=cwd, env=env, check=False).returncode  # noqa: S603
 
 
 def run_up(config_path: Path, *, detach: bool = False, build: bool = True) -> int:
@@ -140,7 +166,7 @@ def run_up(config_path: Path, *, detach: bool = False, build: bool = True) -> in
         cmd.append("-d")
     if monitoring.enabled and not monitoring.cadvisor:
         cmd += ["--scale", "cadvisor=0"]
-    return _run(cmd, cwd=compose_dir)
+    return _run(cmd, cwd=compose_dir, env=_compose_env(compose_dir, monitoring=monitoring.enabled))
 
 
 def run_down(config_path: Path, *, volumes: bool = False) -> int:
