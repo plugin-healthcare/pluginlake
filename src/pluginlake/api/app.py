@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from pluginlake import __version__
 from pluginlake.api.config import MetricsSettings
 from pluginlake.api.exceptions import register_exception_handlers
 from pluginlake.api.metrics import PrometheusMiddleware, start_metrics_server, stop_metrics_server
@@ -22,7 +23,7 @@ from pluginlake.api.routers import (
 )
 from pluginlake.config import LogSettings, Settings
 from pluginlake.core.config import DuckLakeSettings
-from pluginlake.core.ducklake.setup import ensure_database
+from pluginlake.core.ducklake.setup import close_shared_connection, ensure_database
 from pluginlake.plugins.discovery import discover_manifests, load_router
 from pluginlake.utils.logger import get_logger, setup_logging
 
@@ -30,7 +31,7 @@ logger = get_logger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan: setup logging, DuckLake database and metrics server."""
     settings = Settings()
     setup_logging(settings.effective_log_level)
@@ -39,10 +40,11 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     ducklake_settings = DuckLakeSettings()  # type: ignore[missing-argument]
     ensure_database(ducklake_settings)
 
-    metrics_settings = MetricsSettings()
+    metrics_settings: MetricsSettings = app.state.metrics_settings
     metrics_server = start_metrics_server(metrics_settings) if metrics_settings.enabled else None
 
     yield
+    close_shared_connection()
     if metrics_server is not None:
         stop_metrics_server(metrics_server)
     logger.info("pluginlake API shutting down")
@@ -57,23 +59,25 @@ def create_app() -> FastAPI:
     """
     log_settings = LogSettings()
     log_settings.ensure_directories()
+    metrics_settings = MetricsSettings()
 
     app = FastAPI(
         title="pluginlake",
         description="Central API endpoint for the pluginlake data station.",
-        version="0.1.0",
+        version=__version__,
         lifespan=lifespan,
     )
     app.state.log_settings = log_settings
+    app.state.metrics_settings = metrics_settings
 
-    _add_middleware(app, log_settings)
+    _add_middleware(app, log_settings, metrics_settings)
     _include_routers(app)
     register_exception_handlers(app)
 
     return app
 
 
-def _add_middleware(app: FastAPI, log_settings: LogSettings) -> None:
+def _add_middleware(app: FastAPI, log_settings: LogSettings, metrics_settings: MetricsSettings) -> None:
     """Attach middleware to the application."""
     app.add_middleware(
         CORSMiddleware,  # type: ignore[invalid-argument-type]
@@ -86,7 +90,7 @@ def _add_middleware(app: FastAPI, log_settings: LogSettings) -> None:
         RequestLoggingMiddleware,  # type: ignore[invalid-argument-type]
         query_log_dir=log_settings.query_log_dir,
     )
-    if MetricsSettings().enabled:
+    if metrics_settings.enabled:
         # Added last so it is the outermost middleware and also times the others.
         app.add_middleware(PrometheusMiddleware)  # type: ignore[invalid-argument-type]
 

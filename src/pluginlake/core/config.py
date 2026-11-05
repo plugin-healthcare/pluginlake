@@ -1,9 +1,9 @@
 """Configuration for the DuckLake data catalog."""
 
 from pydantic import SecretStr
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings
 
-from pluginlake.config import secrets_dir
+from pluginlake.config import settings_config
 
 
 class DuckLakeSettings(BaseSettings):
@@ -14,13 +14,7 @@ class DuckLakeSettings(BaseSettings):
     ``/run/secrets/ducklake_pg_password``.
     """
 
-    model_config = SettingsConfigDict(
-        env_prefix="DUCKLAKE_",
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-        secrets_dir=secrets_dir(),
-    )
+    model_config = settings_config("DUCKLAKE_", secrets=True)
 
     pg_host: str
     pg_port: int = 5432

@@ -1,7 +1,9 @@
 """Configuration module for pluginlake API."""
 
 from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings
+
+from pluginlake.config import settings_config
 
 
 class IngestionSettings(BaseSettings):
@@ -11,12 +13,7 @@ class IngestionSettings(BaseSettings):
     Environment variables are prefixed with ``PLUGINLAKE_INGEST_``.
     """
 
-    model_config = SettingsConfigDict(
-        env_prefix="PLUGINLAKE_INGEST_",
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
+    model_config = settings_config("PLUGINLAKE_INGEST_")
 
     max_file_size_mb: int = Field(
         default=500,
@@ -50,12 +47,7 @@ class MetricsSettings(BaseSettings):
     Environment variables are prefixed with ``PLUGINLAKE_METRICS_``.
     """
 
-    model_config = SettingsConfigDict(
-        env_prefix="PLUGINLAKE_METRICS_",
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
+    model_config = settings_config("PLUGINLAKE_METRICS_")
 
     enabled: bool = Field(default=True, description="Collect HTTP metrics and serve them on the metrics port.")
     host: str = Field(default="127.0.0.1", description="Bind address of the internal metrics server.")

@@ -4,12 +4,16 @@ Orchestrates the flow from file upload to raw storage layer and Dagster job
 triggering, with proper validation and error handling.
 """
 
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
+from http import HTTPStatus
+from pathlib import Path, PureWindowsPath
+from typing import BinaryIO
 
 from fastapi import UploadFile
+from starlette.concurrency import run_in_threadpool
 
 from pluginlake.api.config import IngestionSettings
 from pluginlake.config import StorageLayer
@@ -20,9 +24,49 @@ from pluginlake.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+# One path segment: no separators, and cannot be "." or "..".
+_DATASET_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+_COPY_CHUNK_BYTES = 1024 * 1024
+
 
 class IngestionError(Exception):
-    """Raised when file ingestion fails due to validation or storage errors."""
+    """Raised when an uploaded file is rejected.
+
+    Attributes:
+        status_code: HTTP status the API returns for this error.
+    """
+
+    status_code: HTTPStatus = HTTPStatus.UNPROCESSABLE_ENTITY
+
+
+class FileTooLargeError(IngestionError):
+    """Raised when an uploaded file exceeds the configured size limit."""
+
+    status_code = HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+
+
+def safe_filename(filename: str | None) -> str:
+    """Return the base name of a client-supplied filename.
+
+    Directory parts (with either path separator) are dropped so the name can
+    never point outside the target directory.
+    """
+    name = PureWindowsPath(filename or "").name
+    return name if name not in {"", ".", ".."} else "unnamed"
+
+
+def validate_dataset(dataset: str) -> None:
+    """Check that a dataset name is a single safe path segment.
+
+    Raises:
+        IngestionError: If the name contains separators or other unsafe characters.
+    """
+    if not _DATASET_PATTERN.match(dataset):
+        msg = (
+            f"Invalid dataset name {dataset!r}. Use letters, digits, '.', '_' or '-', "
+            "starting with a letter or digit (max 128 characters)."
+        )
+        raise IngestionError(msg)
 
 
 @dataclass
@@ -57,12 +101,13 @@ class IngestionService:
         storage_manager: Manages the medallion storage layers.
         dagster_client: Client for triggering Dagster jobs.
         settings: Ingestion-specific configuration.
+        ingestion_log_dir: Directory for the JSONL ingestion log; ``None`` disables it.
     """
 
     def __init__(
         self,
-        storage_manager: StorageLayerManager | None = None,
-        dagster_client: DagsterClient | None = None,
+        storage_manager: StorageLayerManager,
+        dagster_client: DagsterClient,
         settings: IngestionSettings | None = None,
         ingestion_log_dir: Path | None = None,
     ) -> None:
@@ -83,16 +128,18 @@ class IngestionService:
             An IngestionResult describing the outcome.
 
         Raises:
-            IngestionError: If validation fails (extension, size).
+            IngestionError: If validation fails (extension, dataset name, size).
         """
-        filename = file.filename or "unnamed"
+        filename = safe_filename(file.filename)
         file_id = uuid.uuid4().hex[:12]
 
         logger.info("Ingesting file %r for dataset %r (file_id=%s)", filename, dataset, file_id)
 
         self._validate_extension(filename)
-        content = await self._read_and_validate_size(file, filename)
-        file_path = self._store_file(content, filename, dataset, file_id)
+        validate_dataset(dataset)
+        if file.size is not None and file.size > self._settings.max_file_size_bytes:
+            raise FileTooLargeError(self._too_large_message(filename))
+        file_path, size_bytes = await self._store_file(file, filename, dataset, file_id)
         dagster_run_id = await self._trigger_dagster(file_path, dataset, filename)
 
         status = "completed" if dagster_run_id else "stored"
@@ -116,7 +163,7 @@ class IngestionService:
             filename=filename,
             dataset=dataset,
             file_path=str(file_path),
-            size_bytes=len(content),
+            size_bytes=size_bytes,
             dagster_run_id=dagster_run_id,
             status=status,
             message=message,
@@ -142,40 +189,49 @@ class IngestionService:
             msg = f"File extension {suffix!r} is not allowed. Allowed: {', '.join(self._settings.allowed_extensions)}"
             raise IngestionError(msg)
 
-    async def _read_and_validate_size(self, file: UploadFile, filename: str) -> bytes:
-        """Read the full file content and validate against the size limit."""
-        content = await file.read()
-        if len(content) > self._settings.max_file_size_bytes:
-            msg = (
-                f"File {filename!r} ({len(content)} bytes) exceeds the maximum "
-                f"allowed size of {self._settings.max_file_size_mb} MB."
-            )
-            raise IngestionError(msg)
-        return content
+    def _too_large_message(self, filename: str) -> str:
+        return f"File {filename!r} exceeds the maximum allowed size of {self._settings.max_file_size_mb} MB."
 
-    def _store_file(
+    async def _store_file(
         self,
-        content: bytes,
+        file: UploadFile,
         filename: str,
         dataset: str,
         file_id: str,
-    ) -> Path:
-        """Write the file content to the raw storage layer.
+    ) -> tuple[Path, int]:
+        """Stream the upload to the raw storage layer.
 
-        Files are stored as: ``raw/{dataset}/{timestamp}_{file_id}_{filename}``
+        Files are stored as ``raw/{dataset}/{timestamp}_{file_id}_{filename}``.
+        The upload is copied in chunks, so it is never held in memory as a whole;
+        a partially written file is removed if the copy fails.
+
+        Returns:
+            The stored path and its size in bytes.
         """
-        if self._storage is None:
-            msg = "_store_file requires storage_manager"
-            raise TypeError(msg)
         timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%S")
-        stored_name = f"{timestamp}_{file_id}_{filename}"
-        dest = self._storage.get_path(StorageLayer.RAW, dataset, stored_name)
-
+        dest = self._storage.get_path(StorageLayer.RAW, dataset, f"{timestamp}_{file_id}_{filename}")
         dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(content)
 
-        logger.info("Stored file at %s (%d bytes)", dest, len(content))
-        return dest
+        try:
+            size = await run_in_threadpool(self._copy_with_limit, file.file, dest, filename)
+        except BaseException:
+            dest.unlink(missing_ok=True)
+            raise
+
+        logger.info("Stored file at %s (%d bytes)", dest, size)
+        return dest, size
+
+    def _copy_with_limit(self, source: BinaryIO, dest: Path, filename: str) -> int:
+        """Copy ``source`` to ``dest`` and stop as soon as the size limit is exceeded."""
+        limit = self._settings.max_file_size_bytes
+        size = 0
+        with dest.open("wb") as out:
+            while chunk := source.read(_COPY_CHUNK_BYTES):
+                size += len(chunk)
+                if size > limit:
+                    raise FileTooLargeError(self._too_large_message(filename))
+                out.write(chunk)
+        return size
 
     async def _trigger_dagster(
         self,
@@ -188,9 +244,6 @@ class IngestionService:
         Returns the run ID on success, or None if triggering fails.
         Failures are logged but do not raise — the file is already stored.
         """
-        if self._dagster is None:
-            msg = "_trigger_dagster requires dagster_client"
-            raise TypeError(msg)
         try:
             result = await self._dagster.trigger_job(
                 job_name=self._settings.dagster_job_name,

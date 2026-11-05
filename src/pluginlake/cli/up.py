@@ -69,16 +69,13 @@ def _prometheus_env(config: StationConfig) -> dict[str, str]:
     return env
 
 
-def _compose_command(compose_dir: Path, override_path: Path, *, dashboards: bool, monitoring: bool) -> list[str]:
-    """Assemble the base ``docker compose`` command for ``up``."""
-    cmd = [
-        "docker",
-        "compose",
-        "-f",
-        str(compose_dir / _DEV_COMPOSE_PARTS[-1]),
-        "-f",
-        str(override_path),
-    ]
+def _compose_command(
+    compose_dir: Path, *, override_path: Path | None = None, dashboards: bool, monitoring: bool
+) -> list[str]:
+    """Assemble the base ``docker compose`` command (files and profiles)."""
+    cmd = ["docker", "compose", "-f", str(compose_dir / _DEV_COMPOSE_PARTS[-1])]
+    if override_path is not None:
+        cmd += ["-f", str(override_path)]
     if dashboards:
         cmd += ["--profile", "ui"]
     if monitoring:
@@ -157,7 +154,10 @@ def run_up(config_path: Path, *, detach: bool = False, build: bool = True) -> in
     print(f"Deploying station with projects: {config.projects_env() or '(none)'}")
     monitoring = config.monitoring
     cmd = _compose_command(
-        compose_dir, override_path, dashboards=config.station.dashboards, monitoring=monitoring.enabled
+        compose_dir,
+        override_path=override_path,
+        dashboards=config.station.dashboards,
+        monitoring=monitoring.enabled,
     )
     cmd.append("up")
     if build:
@@ -166,7 +166,10 @@ def run_up(config_path: Path, *, detach: bool = False, build: bool = True) -> in
         cmd.append("-d")
     if monitoring.enabled and not monitoring.cadvisor:
         cmd += ["--scale", "cadvisor=0"]
-    return _run(cmd, cwd=compose_dir, env=_compose_env(compose_dir, monitoring=monitoring.enabled))
+    try:
+        return _run(cmd, cwd=compose_dir, env=_compose_env(compose_dir, monitoring=monitoring.enabled))
+    finally:
+        override_path.unlink(missing_ok=True)
 
 
 def run_down(config_path: Path, *, volumes: bool = False) -> int:
@@ -188,16 +191,8 @@ def run_down(config_path: Path, *, volumes: bool = False) -> int:
     with contextlib.suppress(FileNotFoundError, ValueError):
         dashboards = load_station_config(config_path).station.dashboards
 
-    cmd = [
-        "docker",
-        "compose",
-        "-f",
-        str(compose_dir / _DEV_COMPOSE_PARTS[-1]),
-    ]
-    if dashboards:
-        cmd += ["--profile", "ui"]
     # Always include monitoring so its containers stop even if it was switched off since `up`.
-    cmd += ["--profile", MONITORING_PROFILE]
+    cmd = _compose_command(compose_dir, dashboards=dashboards, monitoring=True)
     cmd.append("down")
     if volumes:
         cmd.append("-v")

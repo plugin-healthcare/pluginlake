@@ -13,15 +13,15 @@ pluginlake uses separate containers for each concern:
 | **dagster-daemon** | `dagster-webserver.Dockerfile` | Schedules, sensors, run queue |
 | **dagster-code-server** | `pluginlake.Dockerfile` | Asset definitions served via gRPC |
 | **pluginlake** | `pluginlake.Dockerfile` | FastAPI service |
-| **pluginlake-ui** | `ui-datastation.Dockerfile` | Datastation Streamlit dashboard |
-| **pluginlake-central** | `ui-central.Dockerfile` | Central aggregation dashboard |
+| **pluginlake-ui** | `ui.Dockerfile` (`APP=datastation`) | Datastation Streamlit dashboard |
+| **pluginlake-central** | `ui.Dockerfile` (`APP=central`) | Central aggregation dashboard |
 | **prometheus** | `quay.io/prometheus/prometheus` (pre-built) | Metrics store, profile `monitoring` |
 | **postgres-exporter** | `quay.io/prometheuscommunity/postgres-exporter` (pre-built) | Postgres metrics, profile `monitoring` |
 | **cadvisor** | `ghcr.io/google/cadvisor` (pre-built) | Container metrics, profile `monitoring` |
 
 The monitoring services only start with `--profile monitoring` (or `[monitoring] enabled = true` with `pluginlake up`); see the [monitoring guide](monitoring.md).
 
-In development, `dagster.dev.Dockerfile` replaces the webserver, daemon, and code-server with a single all-in-one container running `dagster dev`. The UI containers use corresponding `.dev.Dockerfile` variants with hot reload.
+In development, `dagster.dev.Dockerfile` replaces the webserver, daemon, and code-server with a single all-in-one container running `dagster dev`. The UI containers use `ui.dev.Dockerfile` with hot reload. Both dashboards share one Dockerfile; the build arguments `APP` (`datastation` or `central`) and `PORT` (8501 or 8502) select the dashboard.
 
 ## Building and running
 
@@ -347,10 +347,8 @@ deploy/
 │   ├── dagster-webserver.Dockerfile   # Prod webserver + daemon (multi-stage)
 │   ├── pluginlake.dev.Dockerfile      # Dev FastAPI (single stage)
 │   ├── pluginlake.Dockerfile          # Prod FastAPI + code-server (multi-stage)
-│   ├── ui-datastation.dev.Dockerfile  # Dev datastation dashboard (hot reload)
-│   ├── ui-datastation.Dockerfile      # Prod datastation dashboard (multi-stage)
-│   ├── ui-central.dev.Dockerfile      # Dev central dashboard (hot reload)
-│   └── ui-central.Dockerfile          # Prod central dashboard (multi-stage)
+│   ├── ui.dev.Dockerfile              # Dev dashboards, APP=datastation|central (hot reload)
+│   └── ui.Dockerfile                  # Prod dashboards, APP=datastation|central (multi-stage)
 └── monitoring/
     └── prometheus/
         ├── entrypoint.sh              # Renders the config (labels, cAdvisor, remote_write)

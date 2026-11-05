@@ -31,6 +31,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Production compose rotates container logs (`json-file`, 5 × 10 MB per container); Docker kept them without limit before.
 - Credentials are Docker Compose secrets in the dev and production compose: compose reads them from a compose-only env file (`deploy/compose/.env` in dev, the new `.env.production.secrets` in production) and mounts them under `/run/secrets/`. `DuckLakeSettings` and the new `DagsterPostgresSettings` read them with pydantic `secrets_dir`; postgres and postgres-exporter use `<VAR>_FILE`. `dagster.yaml` still needs `DAGSTER_PG_PASSWORD`, which the new `pluginlake.deploy.dagster_env` launcher sets for the Dagster processes only (and, with `--ensure-db`, replaces `$PLUGINLAKE_ENSURE_DB`). `DuckLakeSettings.pg_password` is now a `SecretStr`. Dev containers no longer load the root `.env` (optional `deploy/compose/.env.containers` instead); `.env.production` no longer holds passwords, `.env.postgres-exporter` is removed, and the remote-write password moved from `.env.monitoring` to the secrets env file. `just up`/`down` pass both production env files.
 - Dependency audit: `just secure` and the security workflow use `uv audit` instead of the deprecated, archived `uv-secure` (the `security` dependency group is removed).
+- Catalog endpoints share one DuckLake connection (a cursor per request) instead of opening a connection, loading the extension and attaching the catalog on every request (~190 ms to ~30 ms per request); `layer-summary` no longer queries each schema separately, and filter values are bound parameters.
+- Uploads are streamed to the raw layer in 1 MB chunks and stop as soon as the size limit is exceeded, instead of being read into memory as a whole; the upload size declared by the client is checked first. `IngestionError` carries its HTTP status (`FileTooLargeError` → 413) instead of the router matching on the message text.
+- `RequestLoggingMiddleware` is a pure ASGI middleware and also logs requests that end in an unhandled exception (status 500).
+- Settings classes share one `model_config` via `pluginlake.config.settings_config()` (also used by `project_settings_config`).
+- `pluginlake up` deletes its temporary compose override file after running compose.
+- The two dashboards share `deploy/docker/ui.Dockerfile` and `ui.dev.Dockerfile` (build arguments `APP` and `PORT`), replacing the four `ui-central*`/`ui-datastation*` Dockerfiles.
 - Upgraded vulnerable dependencies: streamlit 1.66.1 (pillow 13.0.0; the `starlette` extra is gone, starlette is now built in), dnspython 2.9.2, filelock 4.2.9, graphql-core 3.2.13, setuptools 84.2.1, packaging 26.3, virtualenv 21.15.5; tornado is no longer installed.
 
 ### Removed
@@ -41,6 +47,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Path traversal in `POST /api/v1/ingest`: the `dataset` form field must now be a single safe path segment, and directory parts are stripped from the uploaded filename, so files can no longer be written outside the raw layer.
 - Production Dagster webserver and daemon crashed at start: Dagster telemetry wrote to `$DAGSTER_HOME/logs`, which the non-root user cannot write. Telemetry is now disabled in `config/dagster/dagster.yaml` (dev and production).
 - Production `dagster-daemon` exited because it got no workspace; the compose command now passes `-w /app/config/dagster/workspace.yaml`.
 - Production runs failed before starting: they execute in the code server, which lacked `dagster-postgres` and `DAGSTER_PG_PASSWORD`. `dagster-postgres` is now a core dependency (moved from the `infra` extra) and the code server gets the `dagster_pg_password` secret through the `dagster_env` launcher.

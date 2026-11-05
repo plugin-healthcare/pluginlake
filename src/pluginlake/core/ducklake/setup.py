@@ -1,6 +1,8 @@
 """DuckLake database setup and connection management."""
 
+import threading
 import time
+from functools import cache
 
 import duckdb
 
@@ -11,6 +13,9 @@ from pluginlake.utils import postgres
 from pluginlake.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+_ATTACH_ATTEMPTS = 3
+_shared_lock = threading.Lock()
 
 
 def _resolve_storage_backend(settings: DuckLakeSettings) -> StorageBackend:
@@ -40,9 +45,23 @@ def ensure_database(settings: DuckLakeSettings) -> None:
     )
 
 
+def _open_connection(backend: StorageBackend, *, pg_connection_cache: bool) -> duckdb.DuckDBPyConnection:
+    """Open an in-memory DuckDB connection with DuckLake loaded and storage configured."""
+    conn = duckdb.connect()
+    conn.execute("INSTALL ducklake")
+    conn.execute("LOAD ducklake")
+    if not pg_connection_cache:
+        # Must precede ATTACH; a connection pooled during ATTACH would otherwise go stale.
+        conn.execute("SET GLOBAL pg_connection_cache = false")
+    backend.configure_duckdb(conn)
+    return conn
+
+
 def create_connection(
     settings: DuckLakeSettings,
     backend: StorageBackend | None = None,
+    *,
+    pg_connection_cache: bool = True,
 ) -> duckdb.DuckDBPyConnection:
     """Create a DuckDB connection with DuckLake attached.
 
@@ -52,6 +71,9 @@ def create_connection(
     Args:
         settings: DuckLake settings with PostgreSQL connection details.
         backend: Storage backend to use. If None, one is resolved from settings.
+        pg_connection_cache: Pool the PostgreSQL metadata connections. Disable
+            for long-lived connections: pooled connections break when
+            PostgreSQL restarts, and each one then fails a query.
 
     Returns:
         A ready-to-use DuckDB connection with the ``ducklake`` catalog attached.
@@ -59,34 +81,22 @@ def create_connection(
     if backend is None:
         backend = _resolve_storage_backend(settings)
 
-    conn = duckdb.connect()
-
-    conn.execute("INSTALL ducklake")
-    conn.execute("LOAD ducklake")
-
-    backend.configure_duckdb(conn)
-
     attach_query = (
         f"ATTACH 'ducklake:postgres:{settings.pg_connection_string}' "
         f"AS ducklake (DATA_PATH '{backend.get_base_path()}', OVERRIDE_DATA_PATH TRUE)"
     )
 
-    max_retries = 3
-    for attempt in range(max_retries):
+    for attempt in range(1, _ATTACH_ATTEMPTS + 1):
+        conn = _open_connection(backend, pg_connection_cache=pg_connection_cache)
         try:
             conn.execute(attach_query)
             break
         except duckdb.Error as exc:
-            if "already exists" in str(exc) and attempt < max_retries - 1:
-                logger.warning("DuckLake catalog init race detected (attempt %d), retrying...", attempt + 1)
-                time.sleep(1)
-                conn.close()
-                conn = duckdb.connect()
-                conn.execute("INSTALL ducklake")
-                conn.execute("LOAD ducklake")
-                backend.configure_duckdb(conn)
-            else:
+            conn.close()
+            if "already exists" not in str(exc) or attempt == _ATTACH_ATTEMPTS:
                 raise
+            logger.warning("DuckLake catalog init race detected (attempt %d), retrying...", attempt)
+            time.sleep(1)
 
     _apply_tuning_options(conn, settings)
 
@@ -98,26 +108,27 @@ def create_connection(
     return conn
 
 
+def _sql_literal(value: str | int | bool) -> str:  # noqa: FBT001 - an option value, not a flag
+    if isinstance(value, str):
+        return f"'{value}'"
+    if isinstance(value, bool):
+        return str(value).lower()
+    return str(value)
+
+
 def _apply_tuning_options(
     conn: duckdb.DuckDBPyConnection,
     settings: DuckLakeSettings,
 ) -> None:
-    tuning: list[tuple[str, int | str | bool]] = []
-    if settings.target_file_size is not None:
-        tuning.append(("target_file_size", settings.target_file_size))
-    if settings.parquet_compression is not None:
-        tuning.append(("parquet_compression", settings.parquet_compression))
-    if settings.per_thread_output is not None:
-        tuning.append(("per_thread_output", settings.per_thread_output))
-
-    for option, value in tuning:
-        if isinstance(value, str):
-            sql_value = f"'{value}'"
-        elif isinstance(value, bool):
-            sql_value = str(value).lower()
-        else:
-            sql_value = str(value)
-        conn.execute(f"CALL ducklake_set_option('ducklake', '{option}', {sql_value})")
+    tuning = {
+        "target_file_size": settings.target_file_size,
+        "parquet_compression": settings.parquet_compression,
+        "per_thread_output": settings.per_thread_output,
+    }
+    for option, value in tuning.items():
+        if value is None:
+            continue
+        conn.execute(f"CALL ducklake_set_option('ducklake', '{option}', {_sql_literal(value)})")
         logger.info("DuckLake option %s = %s", option, value)
 
 
@@ -138,5 +149,32 @@ def setup_ducklake(
         settings = DuckLakeSettings()  # type: ignore[missing-argument]
 
     ensure_database(settings)
-    backend = _resolve_storage_backend(settings)
-    return create_connection(settings, backend)
+    return create_connection(settings)
+
+
+@cache
+def _shared_connection() -> duckdb.DuckDBPyConnection:
+    return create_connection(DuckLakeSettings(), pg_connection_cache=False)  # type: ignore[missing-argument]
+
+
+def shared_cursor() -> duckdb.DuckDBPyConnection:
+    """Return a new cursor on the process-wide DuckLake connection.
+
+    Opening a connection loads the extension and attaches the catalog over
+    PostgreSQL (~200 ms), so request handlers share one connection instead. A
+    cursor shares the attached catalog, is safe to use from its own thread and
+    sees tables written by other processes. Close it when done.
+
+    Returns:
+        A cursor with the ``ducklake`` catalog attached.
+    """
+    with _shared_lock:
+        return _shared_connection().cursor()
+
+
+def close_shared_connection() -> None:
+    """Close the shared connection, if open; the next cursor reconnects."""
+    with _shared_lock:
+        if _shared_connection.cache_info().currsize:
+            _shared_connection().close()
+        _shared_connection.cache_clear()

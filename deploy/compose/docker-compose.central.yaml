@@ -2,7 +2,10 @@ services:
   pluginlake-ui-central:
     build:
       context: ../../
-      dockerfile: deploy/docker/ui-central.dev.Dockerfile
+      dockerfile: deploy/docker/ui.dev.Dockerfile
+      args:
+        APP: central
+        PORT: "8502"
     ports:
       - "8502:8502"
     env_file:

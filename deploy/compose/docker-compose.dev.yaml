@@ -118,7 +118,10 @@ services:
   pluginlake-ui:
     build:
       context: ../../
-      dockerfile: deploy/docker/ui-datastation.dev.Dockerfile
+      dockerfile: deploy/docker/ui.dev.Dockerfile
+      args:
+        APP: datastation
+        PORT: "8501"
     ports:
       - "8501:8501"
     environment:
