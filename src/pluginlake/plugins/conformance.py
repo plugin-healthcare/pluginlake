@@ -16,6 +16,7 @@ The suite stays orchestration-free: Dagster is only imported opportunistically
 to type-check code locations, never required.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from importlib.metadata import PackageNotFoundError, version
 
@@ -25,7 +26,7 @@ from packaging.version import Version
 
 from pluginlake.plugins.base import Connector, ProjectSettings
 from pluginlake.plugins.discovery import discover_manifests
-from pluginlake.plugins.manifest import ProjectManifest
+from pluginlake.plugins.manifest import ImportSpec, ProjectManifest
 
 CORE_PACKAGE = "pluginlake"
 
@@ -115,64 +116,53 @@ def _check_core_compatibility(manifest: ProjectManifest, installed: str) -> list
     return []
 
 
+def _is_subclass_of(base: type) -> Callable[[object], bool]:
+    return lambda obj: isinstance(obj, type) and issubclass(obj, base)
+
+
+def _check_spec(
+    project: str,
+    kind: str,
+    spec: ImportSpec,
+    is_valid: Callable[[object], bool] = lambda _: True,
+    requirement: str = "",
+) -> list[Issue]:
+    """Load ``spec`` and check the loaded object with ``is_valid``."""
+    try:
+        obj = spec.load()
+    except (ImportError, AttributeError) as exc:
+        return [Issue(project, f"{kind} '{spec}' failed to load: {exc}")]
+    if not is_valid(obj):
+        return [Issue(project, f"{kind} '{spec}' {requirement} (got {obj!r:.80}).")]
+    return []
+
+
 def _check_imports(manifest: ProjectManifest) -> list[Issue]:
     issues: list[Issue] = []
-
     for spec in manifest.code_locations:
-        try:
-            spec.load()
-        except (ImportError, AttributeError) as exc:
-            issues.append(Issue(manifest.id, f"code location '{spec.module}:{spec.attribute}' failed to load: {exc}"))
-
+        issues.extend(_check_spec(manifest.id, "code location", spec))
     for spec in manifest.routers:
-        try:
-            router = spec.load()
-        except (ImportError, AttributeError) as exc:
-            issues.append(Issue(manifest.id, f"router '{spec.module}:{spec.attribute}' failed to load: {exc}"))
-            continue
-        if not isinstance(router, APIRouter):
-            issues.append(
-                Issue(
-                    manifest.id,
-                    f"router '{spec.module}:{spec.attribute}' is not an APIRouter (got {type(router).__name__}).",
-                )
-            )
-
+        issues.extend(
+            _check_spec(manifest.id, "router", spec, lambda obj: isinstance(obj, APIRouter), "is not an APIRouter")
+        )
     for spec in manifest.connectors:
-        try:
-            connector = spec.load()
-        except (ImportError, AttributeError) as exc:
-            issues.append(Issue(manifest.id, f"connector '{spec.module}:{spec.attribute}' failed to load: {exc}"))
-            continue
-        if not (isinstance(connector, type) and issubclass(connector, Connector)):
-            issues.append(
-                Issue(manifest.id, f"connector '{spec.module}:{spec.attribute}' must be a Connector subclass.")
-            )
-
+        issues.extend(
+            _check_spec(manifest.id, "connector", spec, _is_subclass_of(Connector), "must be a Connector subclass")
+        )
     return issues
 
 
 def _check_settings(manifest: ProjectManifest) -> list[Issue]:
-    if manifest.settings is None:
+    spec = manifest.settings
+    if spec is None:
         return []
+    issues = _check_spec(
+        manifest.id, "settings", spec, _is_subclass_of(ProjectSettings), "must be a ProjectSettings subclass"
+    )
+    if issues:
+        return issues
     try:
-        settings_cls = manifest.settings.load()
-    except (ImportError, AttributeError) as exc:
-        return [
-            Issue(
-                manifest.id,
-                f"settings '{manifest.settings.module}:{manifest.settings.attribute}' failed to load: {exc}",
-            )
-        ]
-    if not (isinstance(settings_cls, type) and issubclass(settings_cls, ProjectSettings)):
-        return [
-            Issue(
-                manifest.id,
-                f"settings '{manifest.settings.module}:{manifest.settings.attribute}' must be a ProjectSettings subclass.",
-            )
-        ]
-    try:
-        settings_cls()
+        spec.load()()
     except Exception as exc:  # noqa: BLE001 - any settings-load failure is a conformance failure
         return [Issue(manifest.id, f"settings failed to load with defaults: {exc}")]
     return []

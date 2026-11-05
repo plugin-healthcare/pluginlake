@@ -1,0 +1,6 @@
+# Postgres metrics via postgres-exporter. Per-table collectors are disabled on the
+# exporter, so table names (which can derive from uploaded files) never become labels.
+scrape_configs:
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]

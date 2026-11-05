@@ -20,3 +20,8 @@ compute_logs:
 run_launcher:
   module: dagster
   class: DefaultRunLauncher
+
+# No usage data to Dagster Labs. Telemetry also writes to $DAGSTER_HOME/logs, which is
+# not writable for the non-root user in the production images.
+telemetry:
+  enabled: false

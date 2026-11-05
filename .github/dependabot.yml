@@ -20,3 +20,10 @@ updates:
     directory: "/deploy/docker"
     schedule:
       interval: "daily"
+
+  # Pre-built images in the compose stacks (e.g. Prometheus, exporters, cAdvisor).
+  # Updates both tag and pinned digest.
+  - package-ecosystem: "docker-compose"
+    directory: "/deploy/compose"
+    schedule:
+      interval: "daily"

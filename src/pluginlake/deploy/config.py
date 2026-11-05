@@ -13,6 +13,10 @@ Example ``pluginlake.toml``::
     [station]
     endpoint_url = "https://ds1.example.org"
 
+    [monitoring]
+    enabled = true
+    station_id = "ds1"
+
     [[projects]]
     name = "ehds-demo"
     path = "../pluginlake-ehds-demo"  # dev: local checkout
@@ -68,10 +72,38 @@ class StationSettings(BaseModel):
     dashboards: bool = Field(default=True, description="Whether to start the datastation dashboard UI.")
 
 
+class MonitoringSettings(BaseModel):
+    """Prometheus monitoring of the station (compose profile ``monitoring``).
+
+    Remote-write credentials are secrets and therefore not part of this file;
+    they are read from ``deploy/compose/.env.monitoring``.
+    """
+
+    enabled: bool = Field(default=False, description="Start Prometheus and the exporters (compose profile).")
+    cadvisor: bool = Field(
+        default=True,
+        description="Collect container metrics with cAdvisor. Disable when the host already runs one.",
+    )
+    station_id: str = Field(
+        default="pluginlake",
+        pattern=r"^[A-Za-z0-9._-]+$",
+        description="Value of the `station` label added to every metric.",
+    )
+    remote_write_url: str | None = Field(
+        default=None,
+        pattern=r"^https://[^\s\"'\\@]+$",
+        description=(
+            "Central Prometheus remote-write endpoint; unset keeps metrics local. "
+            "Must use https:// and must not contain credentials ('@')."
+        ),
+    )
+
+
 class StationConfig(BaseModel):
     """Parsed ``pluginlake.toml`` station configuration."""
 
     station: StationSettings = Field(default_factory=StationSettings)
+    monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
     projects: list[ProjectSpec] = Field(default_factory=list)
 
     @model_validator(mode="after")

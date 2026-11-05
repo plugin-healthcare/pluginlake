@@ -18,6 +18,14 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command")
 
+    config_parent = argparse.ArgumentParser(add_help=False)
+    config_parent.add_argument(
+        "--config",
+        type=Path,
+        default=_DEFAULT_CONFIG,
+        help="Path to the station config (default: ./pluginlake.toml).",
+    )
+
     init_parser = subparsers.add_parser("init", help="Scaffold a new conformant project package.")
     init_parser.add_argument("name", help="Project name (lowercase, digits, and hyphens; e.g. 'ehds-demo').")
     init_parser.add_argument(
@@ -39,23 +47,13 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Only verify the project with this id (default: all discovered projects).",
     )
 
-    up_parser = subparsers.add_parser("up", help="Deploy the station stack with the configured projects.")
-    up_parser.add_argument(
-        "--config",
-        type=Path,
-        default=_DEFAULT_CONFIG,
-        help="Path to the station config (default: ./pluginlake.toml).",
+    up_parser = subparsers.add_parser(
+        "up", parents=[config_parent], help="Deploy the station stack with the configured projects."
     )
     up_parser.add_argument("-d", "--detach", action="store_true", help="Run containers in the background.")
     up_parser.add_argument("--no-build", action="store_true", help="Do not rebuild images before starting.")
 
-    down_parser = subparsers.add_parser("down", help="Stop the station stack.")
-    down_parser.add_argument(
-        "--config",
-        type=Path,
-        default=_DEFAULT_CONFIG,
-        help="Path to the station config (default: ./pluginlake.toml).",
-    )
+    down_parser = subparsers.add_parser("down", parents=[config_parent], help="Stop the station stack.")
     down_parser.add_argument("-v", "--volumes", action="store_true", help="Also remove named volumes.")
 
     return parser

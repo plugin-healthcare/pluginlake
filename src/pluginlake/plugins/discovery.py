@@ -5,7 +5,6 @@ process (for router wiring) without pulling in the orchestration stack. The
 Dagster code-location loader lives in :mod:`pluginlake.plugins.dagster`.
 """
 
-from importlib import import_module
 from importlib.metadata import entry_points
 
 from fastapi import APIRouter
@@ -58,9 +57,8 @@ def load_router(spec: RouterSpec) -> APIRouter:
     Raises:
         TypeError: If the referenced attribute is not an ``APIRouter``.
     """
-    module = import_module(spec.module)
-    router = getattr(module, spec.attribute)
+    router = spec.load()
     if not isinstance(router, APIRouter):
-        msg = f"'{spec.module}:{spec.attribute}' must be an APIRouter, got {type(router).__name__}."
+        msg = f"'{spec}' must be an APIRouter, got {type(router).__name__}."
         raise TypeError(msg)
     return router

@@ -1,0 +1,21 @@
+# Prometheus for a pluginlake data station (compose profile `monitoring`, ADR-010).
+#
+# Rendered at container start by entrypoint.sh, which:
+#   - drops scrape.d/cadvisor.yml when PROMETHEUS_SCRAPE_CADVISOR=false;
+#   - limits cAdvisor to this compose project's containers;
+#   - appends a `remote_write` block when PROMETHEUS_REMOTE_WRITE_URL is set, so a
+#     central Prometheus (e.g. vantage6-ops on plugin.dhd.nl) receives the metrics
+#     over an outbound connection only.
+#
+# A central Prometheus can alternatively federate from /federate on this instance.
+global:
+  scrape_interval: 30s
+  scrape_timeout: 10s
+  evaluation_interval: 30s
+  # Identifies this station centrally. Expanded from the environment by Prometheus.
+  external_labels:
+    station: ${PROMETHEUS_STATION_ID}
+
+# Relative to this file. One file per scrape job.
+scrape_config_files:
+  - scrape.d/*.yml

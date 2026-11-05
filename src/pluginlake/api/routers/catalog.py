@@ -6,13 +6,13 @@
 """
 
 import re
+from collections import defaultdict
 from typing import Annotated, Any
 
 import duckdb
 from fastapi import APIRouter, HTTPException, Query
 
-from pluginlake.core.config import DuckLakeSettings
-from pluginlake.core.ducklake.setup import create_connection
+from pluginlake.core.ducklake.setup import shared_cursor
 from pluginlake.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -40,16 +40,15 @@ def _validate_identifier(name: str, label: str) -> str:
     return name
 
 
-def _query_ducklake(sql: str) -> list[dict[str, Any]]:
+def _query_ducklake(sql: str, params: list[Any] | dict[str, Any] | None = None) -> list[dict[str, Any]]:
     """Execute a SQL query against DuckLake and return rows as dicts."""
-    settings = DuckLakeSettings()  # type: ignore[missing-argument]
-    conn = create_connection(settings)
+    cursor = shared_cursor()
     try:
-        result = conn.sql(sql)
-        columns = [desc[0] for desc in result.description]
-        return [dict(zip(columns, row, strict=True)) for row in result.fetchall()]
+        cursor.execute(sql, params)
+        columns = [desc[0] for desc in cursor.description or []]
+        return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
     finally:
-        conn.close()
+        cursor.close()
 
 
 @router.get(
@@ -80,8 +79,10 @@ def list_tables(
     schema: Annotated[str | None, Query(description="Filter by schema name")] = None,
 ) -> list[dict[str, Any]]:
     """List tables in the DuckLake catalog with column counts."""
+    if schema:
+        schema = _validate_identifier(schema, "schema")
     try:
-        sql = (
+        return _query_ducklake(
             "SELECT t.table_schema, t.table_name, "
             "COUNT(c.column_name) AS column_count "
             "FROM information_schema.tables t "
@@ -90,13 +91,11 @@ def list_tables(
             "AND t.table_schema = c.table_schema "
             "AND t.table_name = c.table_name "
             "WHERE t.table_catalog = 'ducklake' "
+            "AND ($schema IS NULL OR t.table_schema = $schema) "
+            "GROUP BY t.table_schema, t.table_name "
+            "ORDER BY t.table_schema, t.table_name",
+            {"schema": schema},
         )
-        if schema:
-            schema = _validate_identifier(schema, "schema")
-            sql += f"AND t.table_schema = '{schema}' "
-        sql += "GROUP BY t.table_schema, t.table_name "
-        sql += "ORDER BY t.table_schema, t.table_name"
-        return _query_ducklake(sql)
     except Exception:
         logger.exception("Failed to list DuckLake tables")
         return []
@@ -115,16 +114,14 @@ def list_columns(
     schema = _validate_identifier(schema, "schema")
     table = _validate_identifier(table, "table")
     try:
-        sql = (
+        rows = _query_ducklake(
             "SELECT column_name, data_type, is_nullable, ordinal_position, "
             "column_default "
             "FROM information_schema.columns "
-            f"WHERE table_catalog = 'ducklake' "
-            f"AND table_schema = '{schema}' "
-            f"AND table_name = '{table}' "
-            "ORDER BY ordinal_position"
+            "WHERE table_catalog = 'ducklake' AND table_schema = ? AND table_name = ? "
+            "ORDER BY ordinal_position",
+            [schema, table],
         )
-        rows = _query_ducklake(sql)
     except Exception:
         logger.exception("Failed to list columns for %s.%s", schema, table)
         return []
@@ -166,37 +163,23 @@ def column_stats(
 )
 def layer_summary() -> list[dict[str, Any]]:
     """Return a summary of each schema (layer) in the DuckLake catalog."""
-    settings = DuckLakeSettings()  # type: ignore[missing-argument]
-    conn = create_connection(settings)
-    try:
-        schemas = conn.sql(
-            "SELECT DISTINCT table_schema FROM information_schema.tables "
-            "WHERE table_catalog = 'ducklake' ORDER BY table_schema"
-        ).fetchall()
+    tables = _query_ducklake(
+        "SELECT table_schema, table_name FROM information_schema.tables "
+        "WHERE table_catalog = 'ducklake' ORDER BY table_schema, table_name"
+    )
 
-        result = []
-        for (schema_name,) in schemas:
-            tables = conn.sql(
-                "SELECT table_name FROM information_schema.tables "
-                f"WHERE table_catalog = 'ducklake' AND table_schema = '{schema_name}'"
-            ).fetchall()
+    table_counts: dict[str, int] = defaultdict(int)
+    row_counts: dict[str, int] = defaultdict(int)
+    for row in tables:
+        schema_name, table_name = row["table_schema"], row["table_name"]
+        table_counts[schema_name] += 1
+        try:
+            [count] = _query_ducklake(f'SELECT COUNT(*) AS n FROM ducklake."{schema_name}"."{table_name}"')
+            row_counts[schema_name] += count["n"]
+        except duckdb.Error:
+            logger.warning("Could not count rows in %s.%s", schema_name, table_name)
 
-            total_rows = 0
-            for (table_name,) in tables:
-                try:
-                    cnt = conn.sql(f"SELECT COUNT(*) FROM ducklake.{schema_name}.{table_name}").fetchone()
-                    total_rows += cnt[0] if cnt else 0
-                except (duckdb.Error, IndexError):
-                    logger.warning("Could not count rows in %s.%s", schema_name, table_name)
-
-            result.append(
-                {
-                    "schema_name": schema_name,
-                    "table_count": len(tables),
-                    "total_rows": total_rows,
-                }
-            )
-
-        return result
-    finally:
-        conn.close()
+    return [
+        {"schema_name": schema_name, "table_count": count, "total_rows": row_counts[schema_name]}
+        for schema_name, count in table_counts.items()
+    ]

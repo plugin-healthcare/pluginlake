@@ -5,8 +5,6 @@ This is the merged-``Definitions`` loader referenced by
 from :mod:`pluginlake.plugins.discovery`, which must stay orchestration-free.
 """
 
-from importlib import import_module
-
 from dagster import Definitions
 
 from pluginlake.plugins.discovery import discover_manifests
@@ -28,8 +26,7 @@ def load_merged_definitions() -> Definitions:
     collected: list[Definitions] = []
     for manifest in discover_manifests():
         for spec in manifest.code_locations:
-            module = import_module(spec.module)
-            collected.append(getattr(module, spec.attribute))
+            collected.append(spec.load())
             logger.info("Loaded code location '%s' for project '%s'.", spec.module, manifest.id)
     if not collected:
         return Definitions()

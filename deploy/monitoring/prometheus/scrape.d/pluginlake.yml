@@ -1,0 +1,7 @@
+# pluginlake API metrics, served on the internal metrics port (PLUGINLAKE_METRICS_PORT).
+# This port is only exposed on the compose network, never published on the host.
+scrape_configs:
+  - job_name: pluginlake
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["pluginlake:9464"]
