@@ -10,7 +10,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from pluginlake.api.config import MetricsSettings
 from pluginlake.api.exceptions import register_exception_handlers
+from pluginlake.api.metrics import PrometheusMiddleware, start_metrics_server, stop_metrics_server
 from pluginlake.api.middleware import RequestLoggingMiddleware
 from pluginlake.api.routers import (
     assets,
@@ -29,7 +31,7 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """Application lifespan: setup logging and DuckLake database on startup."""
+    """Application lifespan: setup logging, DuckLake database and metrics server."""
     settings = Settings()
     setup_logging(settings.effective_log_level)
     logger.info("pluginlake API starting")
@@ -37,7 +39,12 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     ducklake_settings = DuckLakeSettings()  # type: ignore[missing-argument]
     ensure_database(ducklake_settings)
 
+    metrics_settings = MetricsSettings()
+    metrics_server = start_metrics_server(metrics_settings) if metrics_settings.enabled else None
+
     yield
+    if metrics_server is not None:
+        stop_metrics_server(metrics_server)
     logger.info("pluginlake API shutting down")
 
 
@@ -79,6 +86,9 @@ def _add_middleware(app: FastAPI, log_settings: LogSettings) -> None:
         RequestLoggingMiddleware,  # type: ignore[invalid-argument-type]
         query_log_dir=log_settings.query_log_dir,
     )
+    if MetricsSettings().enabled:
+        # Added last so it is the outermost middleware and also times the others.
+        app.add_middleware(PrometheusMiddleware)  # type: ignore[invalid-argument-type]
 
 
 def _include_routers(app: FastAPI) -> None:

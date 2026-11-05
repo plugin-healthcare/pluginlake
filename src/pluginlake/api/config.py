@@ -39,3 +39,24 @@ class IngestionSettings(BaseSettings):
     def max_file_size_bytes(self) -> int:
         """Maximum file size in bytes."""
         return self.max_file_size_mb * 1024 * 1024
+
+
+class MetricsSettings(BaseSettings):
+    """Settings for the Prometheus ``/metrics`` endpoint.
+
+    The endpoint is served on a separate port so it is never reachable through
+    the public API port; compose binds it to ``0.0.0.0`` and only ``expose``s it
+    on the internal network. Outside a container it defaults to loopback.
+    Environment variables are prefixed with ``PLUGINLAKE_METRICS_``.
+    """
+
+    model_config = SettingsConfigDict(
+        env_prefix="PLUGINLAKE_METRICS_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    enabled: bool = Field(default=True, description="Collect HTTP metrics and serve them on the metrics port.")
+    host: str = Field(default="127.0.0.1", description="Bind address of the internal metrics server.")
+    port: int = Field(default=9464, ge=1, le=65535, description="Port of the internal metrics server.")

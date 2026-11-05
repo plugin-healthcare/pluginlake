@@ -23,6 +23,7 @@ dependencies = [
     "pydantic-settings>=2.14.2",
     "python-multipart>=0.0.31",
     "packaging>=24.0",
+    "prometheus-client>=0.23",
 ]
 
 [project.scripts]

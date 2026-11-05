@@ -15,6 +15,11 @@ pluginlake uses separate containers for each concern:
 | **pluginlake** | `pluginlake.Dockerfile` | FastAPI service |
 | **pluginlake-ui** | `ui-datastation.Dockerfile` | Datastation Streamlit dashboard |
 | **pluginlake-central** | `ui-central.Dockerfile` | Central aggregation dashboard |
+| **prometheus** | `quay.io/prometheus/prometheus` (pre-built) | Metrics store, profile `monitoring` |
+| **postgres-exporter** | `quay.io/prometheuscommunity/postgres-exporter` (pre-built) | Postgres metrics, profile `monitoring` |
+| **cadvisor** | `ghcr.io/google/cadvisor` (pre-built) | Container metrics, profile `monitoring` |
+
+The monitoring services only start with `--profile monitoring` (or `[monitoring] enabled = true` with `pluginlake up`); see the [monitoring guide](monitoring.md).
 
 In development, `dagster.dev.Dockerfile` replaces the webserver, daemon, and code-server with a single all-in-one container running `dagster dev`. The UI containers use corresponding `.dev.Dockerfile` variants with hot reload.
 
@@ -290,6 +295,8 @@ The application reads the password from the file instead of an environment varia
 | `DAGSTER_PG_USER` | No | Can be in `.env` |
 | `DAGSTER_PG_PASSWORD` | **Yes** | Must be in `.env` / `env_file`, never in compose |
 | `POSTGRES_PASSWORD` | **Yes** | Must be in `.env` / `env_file`, never in compose |
+| `PROMETHEUS_REMOTE_WRITE_PASSWORD` | **Yes** | Only in `.env.monitoring`, read by Prometheus alone |
+| `DATA_SOURCE_PASS` | **Yes** | postgres-exporter password, only in `.env.postgres-exporter`, read by the exporter alone |
 
 ## File layout
 
@@ -300,16 +307,25 @@ deploy/
 │   ├── .env.example                  # Template for dev (committed)
 │   ├── .env.production               # Prod values (gitignored)
 │   ├── .env.production.example       # Template for prod (committed)
+│   ├── .env.monitoring               # Prometheus remote-write secrets (gitignored)
+│   ├── .env.monitoring.example       # Template for monitoring secrets (committed)
+│   ├── .env.postgres-exporter        # postgres-exporter credentials (gitignored)
+│   ├── .env.postgres-exporter.example # Template for exporter credentials (committed)
 │   ├── docker-compose.dev.yaml       # Dev: single dagster container + postgres + pluginlake + UI
 │   ├── docker-compose.central.yaml   # Central dashboard (separate compose)
 │   └── docker-compose.yaml           # Prod: separate webserver, daemon, code-server
-└── docker/
-    ├── dagster.dev.Dockerfile         # Dev all-in-one dagster (single stage)
-    ├── dagster-webserver.Dockerfile   # Prod webserver + daemon (multi-stage)
-    ├── pluginlake.dev.Dockerfile      # Dev FastAPI (single stage)
-    ├── pluginlake.Dockerfile          # Prod FastAPI + code-server (multi-stage)
-    ├── ui-datastation.dev.Dockerfile  # Dev datastation dashboard (hot reload)
-    ├── ui-datastation.Dockerfile      # Prod datastation dashboard (multi-stage)
-    ├── ui-central.dev.Dockerfile      # Dev central dashboard (hot reload)
-    └── ui-central.Dockerfile          # Prod central dashboard (multi-stage)
+├── docker/
+│   ├── dagster.dev.Dockerfile         # Dev all-in-one dagster (single stage)
+│   ├── dagster-webserver.Dockerfile   # Prod webserver + daemon (multi-stage)
+│   ├── pluginlake.dev.Dockerfile      # Dev FastAPI (single stage)
+│   ├── pluginlake.Dockerfile          # Prod FastAPI + code-server (multi-stage)
+│   ├── ui-datastation.dev.Dockerfile  # Dev datastation dashboard (hot reload)
+│   ├── ui-datastation.Dockerfile      # Prod datastation dashboard (multi-stage)
+│   ├── ui-central.dev.Dockerfile      # Dev central dashboard (hot reload)
+│   └── ui-central.Dockerfile          # Prod central dashboard (multi-stage)
+└── monitoring/
+    └── prometheus/
+        ├── entrypoint.sh              # Renders the config (labels, cAdvisor, remote_write)
+        ├── prometheus.yml             # Global config
+        └── scrape.d/                  # One scrape job per file
 ```

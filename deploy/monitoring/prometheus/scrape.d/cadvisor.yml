@@ -1,0 +1,16 @@
+# Container metrics via cAdvisor. Removed by entrypoint.sh when
+# PROMETHEUS_SCRAPE_CADVISOR=false (e.g. the host already runs cAdvisor).
+scrape_configs:
+  - job_name: cadvisor
+    static_configs:
+      - targets: ["cadvisor:8080"]
+    metric_relabel_configs:
+      # Only containers of this compose stack: other containers on the host are not ours
+      # to report. __COMPOSE_PROJECT__ is replaced by entrypoint.sh.
+      - source_labels: [container_label_com_docker_compose_project]
+        regex: "__COMPOSE_PROJECT__"
+        action: keep
+      - source_labels: [container_label_com_docker_compose_service]
+        target_label: service
+      - regex: "container_label_.*"
+        action: labeldrop

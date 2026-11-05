@@ -4,7 +4,8 @@ Reads a ``pluginlake.toml`` station config, generates a compose override that
 mounts local project checkouts and passes ``$PLUGINLAKE_PROJECTS`` to the
 standardized images, and drives the bundled dev compose stack. The images'
 entrypoint installs those projects at start, so discovery wires their code
-locations and routers automatically (ADR-009).
+locations and routers automatically (ADR-009). When ``[monitoring]`` is enabled
+the ``monitoring`` compose profile (Prometheus and exporters) is started too.
 """
 
 import contextlib
@@ -21,6 +22,7 @@ logger = get_logger(__name__)
 
 _DEV_COMPOSE_PARTS = ("deploy", "compose", "docker-compose.dev.yaml")
 _MOUNTED_SERVICES = ("dagster", "pluginlake")
+MONITORING_PROFILE = "monitoring"
 
 
 def _find_compose_dir() -> Path | None:
@@ -46,11 +48,26 @@ def _build_override(config: StationConfig, config_path: Path) -> dict:
         if volumes:
             entry["volumes"] = volumes
         services[service] = entry
+    if config.monitoring.enabled:
+        services["prometheus"] = {"environment": _prometheus_env(config)}
     return {"services": services}
 
 
-def _compose_command(compose_dir: Path, override_path: Path, *, dashboards: bool) -> list[str]:
-    """Assemble the base ``docker compose`` command shared by up and down."""
+def _prometheus_env(config: StationConfig) -> dict[str, str]:
+    """Environment for the Prometheus entrypoint derived from ``[monitoring]``."""
+    monitoring = config.monitoring
+    env = {
+        "PROMETHEUS_STATION_ID": monitoring.station_id,
+        "PROMETHEUS_SCRAPE_CADVISOR": str(monitoring.cadvisor).lower(),
+    }
+    # Unset keeps a URL from .env.monitoring; the override would otherwise blank it.
+    if monitoring.remote_write_url:
+        env["PROMETHEUS_REMOTE_WRITE_URL"] = monitoring.remote_write_url
+    return env
+
+
+def _compose_command(compose_dir: Path, override_path: Path, *, dashboards: bool, monitoring: bool) -> list[str]:
+    """Assemble the base ``docker compose`` command for ``up``."""
     cmd = [
         "docker",
         "compose",
@@ -61,6 +78,8 @@ def _compose_command(compose_dir: Path, override_path: Path, *, dashboards: bool
     ]
     if dashboards:
         cmd += ["--profile", "ui"]
+    if monitoring:
+        cmd += ["--profile", MONITORING_PROFILE]
     return cmd
 
 
@@ -110,12 +129,17 @@ def run_up(config_path: Path, *, detach: bool = False, build: bool = True) -> in
         override_path = Path(handle.name)
 
     print(f"Deploying station with projects: {config.projects_env() or '(none)'}")
-    cmd = _compose_command(compose_dir, override_path, dashboards=config.station.dashboards)
+    monitoring = config.monitoring
+    cmd = _compose_command(
+        compose_dir, override_path, dashboards=config.station.dashboards, monitoring=monitoring.enabled
+    )
     cmd.append("up")
     if build:
         cmd.append("--build")
     if detach:
         cmd.append("-d")
+    if monitoring.enabled and not monitoring.cadvisor:
+        cmd += ["--scale", "cadvisor=0"]
     return _run(cmd, cwd=compose_dir)
 
 
@@ -146,6 +170,8 @@ def run_down(config_path: Path, *, volumes: bool = False) -> int:
     ]
     if dashboards:
         cmd += ["--profile", "ui"]
+    # Always include monitoring so its containers stop even if it was switched off since `up`.
+    cmd += ["--profile", MONITORING_PROFILE]
     cmd.append("down")
     if volumes:
         cmd.append("-v")

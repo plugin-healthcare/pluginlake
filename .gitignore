@@ -166,6 +166,10 @@ activemq-data/
 # Environments
 .env
 .env.production
+.env.monitoring
+.env.postgres-exporter
+*.env*
+!.env*.example
 .envrc
 .venv
 env/
@@ -237,3 +241,4 @@ __marimo__/
 .agents/plan/
 .agents/memory/
 .agents/review/
+.agent/*
