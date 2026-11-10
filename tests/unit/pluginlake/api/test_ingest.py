@@ -11,7 +11,13 @@ from starlette.testclient import TestClient
 
 from pluginlake.api.app import create_app
 from pluginlake.api.config import IngestionSettings
-from pluginlake.api.services.ingestion import IngestionError, IngestionResult, IngestionService
+from pluginlake.api.services.ingestion import (
+    FileTooLargeError,
+    IngestionError,
+    IngestionResult,
+    IngestionService,
+    safe_filename,
+)
 from pluginlake.config import StorageLayer, StorageSettings
 from pluginlake.core.dagster_client import DagsterClient, DagsterClientError, DagsterRunResult
 from pluginlake.core.storage.layers import StorageLayerManager
@@ -91,6 +97,61 @@ async def test_ingest_rejects_oversized_file(ingestion_service):
 
     with pytest.raises(IngestionError, match="exceeds the maximum"):
         await ingestion_service.ingest_file(file=file, dataset="test")
+
+
+@pytest.mark.anyio
+async def test_ingest_rejects_declared_oversized_file_without_storing(ingestion_service, storage_settings):
+    file = UploadFile(filename="big.csv", file=io.BytesIO(b"x"), size=2 * 1024 * 1024)
+
+    with pytest.raises(FileTooLargeError):
+        await ingestion_service.ingest_file(file=file, dataset="test")
+
+    assert not (storage_settings.raw_dir / "test").exists()
+
+
+@pytest.mark.anyio
+async def test_ingest_removes_partial_file_when_too_large(ingestion_service, storage_settings):
+    file = UploadFile(filename="big.csv", file=io.BytesIO(b"x" * (2 * 1024 * 1024)))
+
+    with pytest.raises(FileTooLargeError):
+        await ingestion_service.ingest_file(file=file, dataset="test")
+
+    assert list((storage_settings.raw_dir / "test").iterdir()) == []
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("dataset", ["../escape", "a/b", "..", ".hidden", "a\\b", ""])
+async def test_ingest_rejects_unsafe_dataset(ingestion_service, dataset):
+    file = UploadFile(filename="data.csv", file=io.BytesIO(b"a"))
+
+    with pytest.raises(IngestionError, match="Invalid dataset name"):
+        await ingestion_service.ingest_file(file=file, dataset=dataset)
+
+
+@pytest.mark.parametrize(
+    ("filename", "expected"),
+    [
+        ("data.csv", "data.csv"),
+        ("../../etc/data.csv", "data.csv"),
+        ("..\\..\\data.csv", "data.csv"),
+        ("..", "unnamed"),
+        (None, "unnamed"),
+    ],
+)
+def test_safe_filename_strips_directories(filename, expected):
+    assert safe_filename(filename) == expected
+
+
+@pytest.mark.anyio
+async def test_ingest_stores_traversal_filename_inside_dataset_dir(ingestion_service, storage_settings):
+    file = UploadFile(filename="../../outside.csv", file=io.BytesIO(b"a,b"))
+
+    with patch.object(ingestion_service._dagster, "trigger_job", new_callable=AsyncMock) as mock_trigger:
+        mock_trigger.return_value = DagsterRunResult(run_id="run-1", status="STARTING")
+        result = await ingestion_service.ingest_file(file=file, dataset="patients")
+
+    assert Path(result.file_path).parent == storage_settings.raw_dir / "patients"
+    assert result.filename == "outside.csv"
 
 
 @pytest.mark.anyio
@@ -243,7 +304,7 @@ def test_ingest_endpoint_invalid_extension(client):
 
 def test_ingest_endpoint_file_too_large(client):
     mock_service = _patch_ingestion_service(
-        error=IngestionError("File 'big.csv' (104857600 bytes) exceeds the maximum allowed size of 1 MB."),
+        error=FileTooLargeError("File 'big.csv' exceeds the maximum allowed size of 1 MB."),
     )
 
     with patch("pluginlake.api.routers.ingest._get_ingestion_service", return_value=mock_service):
@@ -254,7 +315,7 @@ def test_ingest_endpoint_file_too_large(client):
         )
 
     assert resp.status_code == HTTPStatus.REQUEST_ENTITY_TOO_LARGE
-    assert "exceeds" in resp.json()["detail"].lower() or "size" in resp.json()["detail"].lower()
+    assert "exceeds" in resp.json()["detail"]
 
 
 def test_ingest_endpoint_dagster_unavailable(client):

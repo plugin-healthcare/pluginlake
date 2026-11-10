@@ -18,6 +18,13 @@ DEFAULT_SCHEMA = "main"
 CATALOG = "ducklake"
 
 
+def _schema_and_table(asset_key_path: list[str]) -> tuple[str, str]:
+    """Split an asset key into its DuckLake schema and table name."""
+    if len(asset_key_path) == 1:
+        return DEFAULT_SCHEMA, asset_key_path[0]
+    return asset_key_path[0], "_".join(asset_key_path[1:])
+
+
 def asset_key_to_table_ref(asset_key_path: list[str]) -> str:
     """Derive a fully qualified DuckLake table reference from an asset key.
 
@@ -32,13 +39,7 @@ def asset_key_to_table_ref(asset_key_path: list[str]) -> str:
     Returns:
         Fully qualified reference like ``ducklake.omop.condition_era``.
     """
-    if len(asset_key_path) == 1:
-        schema = DEFAULT_SCHEMA
-        table = asset_key_path[0]
-    else:
-        schema = asset_key_path[0]
-        table = "_".join(asset_key_path[1:])
-
+    schema, table = _schema_and_table(asset_key_path)
     return f"{CATALOG}.{schema}.{table}"
 
 
@@ -106,16 +107,18 @@ class DuckLakeIOManager(IOManager):
             obj: The Polars DataFrame or LazyFrame to persist.
         """
         path = list(context.asset_key.path)
+        schema, _ = _schema_and_table(path)
         ref = self.table_ref(path)
-        schema = ref.split(".")[1]
 
         self._ensure_schema(schema)
 
         self._conn.register("_data", obj)
-        self._conn.execute(
-            f"CREATE OR REPLACE TABLE {ref} AS SELECT * FROM _data"  # noqa: S608
-        )
-        self._conn.unregister("_data")
+        try:
+            self._conn.execute(
+                f"CREATE OR REPLACE TABLE {ref} AS SELECT * FROM _data"  # noqa: S608
+            )
+        finally:
+            self._conn.unregister("_data")
 
         row_count = self._conn.sql(
             f"SELECT COUNT(*) FROM {ref}"  # noqa: S608

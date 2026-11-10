@@ -1,16 +1,31 @@
+# Credentials are Docker secrets (docs/guides/docker.md#secrets). Compose reads
+# POSTGRES_PASSWORD (and PROMETHEUS_REMOTE_WRITE_PASSWORD with monitoring) from
+# deploy/compose/.env, which is never loaded into a container, and copies them to
+# /run/secrets/. Dev uses the Postgres superuser for every service, so the one
+# secret is mounted under the names pydantic reads (dagster_pg_password,
+# ducklake_pg_password). The root .env is for `just dev-local` only; extra
+# non-secret container settings can go in PLUGINLAKE_ENV_FILE (default .env.containers).
+
+x-env-file: &env-file
+  - path: ${PLUGINLAKE_ENV_FILE:-.env.containers}
+    required: false
+
 services:
   postgres:
     image: dhi.io/postgres:17-alpine3.24
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
       POSTGRES_DB: ${POSTGRES_DB}
+    secrets:
+      - source: postgres_password
+        uid: "70"
+        gid: "70"
+        mode: 0400
     ports:
       - "5432:5432"
     volumes:
       - ${POSTGRES_DATA:-../../.data/postgres}:/var/lib/postgresql/data
-    env_file:
-      - ${PLUGINLAKE_ENV_FILE:-../../.env}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 3s
@@ -28,18 +43,21 @@ services:
       DAGSTER_HOME: /app/config/dagster
       DAGSTER_MODULE: ${DAGSTER_MODULE:-pluginlake.definitions}
       DAGSTER_PG_HOST: postgres
-      DAGSTER_PG_USER: ${DAGSTER_PG_USER:-${POSTGRES_USER}}
-      DAGSTER_PG_PASSWORD: ${DAGSTER_PG_PASSWORD:-${POSTGRES_PASSWORD}}
+      DAGSTER_PG_USER: ${POSTGRES_USER}
       DAGSTER_PG_DB: ${DAGSTER_PG_DB:-dagster}
-      PLUGINLAKE_ENSURE_DB: ${DAGSTER_PG_DB:-dagster}
       DUCKLAKE_PG_HOST: postgres
       DUCKLAKE_PG_PORT: "5432"
-      DUCKLAKE_PG_USER: ${DUCKLAKE_PG_USER:-${POSTGRES_USER}}
-      DUCKLAKE_PG_PASSWORD: ${DUCKLAKE_PG_PASSWORD:-${POSTGRES_PASSWORD}}
+      DUCKLAKE_PG_USER: ${POSTGRES_USER}
       DUCKLAKE_PG_DB: ${DUCKLAKE_PG_DB:-ducklake}
       PLUGINLAKE_STORAGE_BASE_DIR: .data/storage
-    env_file:
-      - ${PLUGINLAKE_ENV_FILE:-../../.env}
+    secrets:
+      - source: postgres_password
+        target: dagster_pg_password
+        mode: 0400
+      - source: postgres_password
+        target: ducklake_pg_password
+        mode: 0400
+    env_file: *env-file
     depends_on:
       postgres:
         condition: service_healthy
@@ -54,8 +72,7 @@ services:
     build:
       context: ../../
       dockerfile: deploy/docker/pluginlake.dev.Dockerfile
-    env_file:
-      - ${PLUGINLAKE_ENV_FILE:-../../.env}
+    env_file: *env-file
     depends_on:
       postgres:
         condition: service_healthy
@@ -67,14 +84,21 @@ services:
       PLUGINLAKE_DEBUG: ${PLUGINLAKE_DEBUG:-True}
       DUCKLAKE_PG_HOST: postgres
       DUCKLAKE_PG_PORT: "5432"
-      DUCKLAKE_PG_USER: ${DUCKLAKE_PG_USER:-${POSTGRES_USER}}
-      DUCKLAKE_PG_PASSWORD: ${DUCKLAKE_PG_PASSWORD:-${POSTGRES_PASSWORD}}
+      DUCKLAKE_PG_USER: ${POSTGRES_USER}
       DUCKLAKE_PG_DB: ${DUCKLAKE_PG_DB:-ducklake}
       PLUGINLAKE_INGEST_DAGSTER_WEBSERVER_URL: http://dagster:3000
       PLUGINLAKE_INGEST_MAX_FILE_SIZE_MB: ${PLUGINLAKE_INGEST_MAX_FILE_SIZE_MB:-2000}
       PLUGINLAKE_STORAGE_BASE_DIR: .data/storage
+      PLUGINLAKE_METRICS_HOST: "0.0.0.0"
+    secrets:
+      - source: postgres_password
+        target: ducklake_pg_password
+        mode: 0400
     ports:
       - "${PLUGINLAKE_SERVER_PORT:-8000}:${PLUGINLAKE_SERVER_PORT:-8000}"
+    expose:
+      # Internal metrics port (PLUGINLAKE_METRICS_PORT): scraped by Prometheus, never published.
+      - "9464"
     healthcheck:
       test:
         [
@@ -94,7 +118,10 @@ services:
   pluginlake-ui:
     build:
       context: ../../
-      dockerfile: deploy/docker/ui-datastation.dev.Dockerfile
+      dockerfile: deploy/docker/ui.dev.Dockerfile
+      args:
+        APP: datastation
+        PORT: "8501"
     ports:
       - "${DASHBOARD_HOST_PORT:-8501}:8501"
     environment:
@@ -118,6 +145,88 @@ services:
     volumes:
       - ../../src/pluginlake-ui/datastation:/app/src/pluginlake-ui/datastation
       - ../../assets:/app/assets:ro
+
+  # ---------------------------------------------------------------------------
+  # Monitoring (profile `monitoring`, ADR-010). Enabled via [monitoring] in
+  # pluginlake.toml, or manually with `--profile monitoring`. Only Prometheus is
+  # published, on loopback; the exporters and the API metrics port stay internal.
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: quay.io/prometheus/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2
+    profiles: [monitoring]
+    entrypoint: ["/bin/sh", "/etc/prometheus/pluginlake/entrypoint.sh"]
+    env_file:
+      # Remote-write URL and username; read by Prometheus only. See .env.monitoring.example.
+      - path: .env.monitoring
+        required: false
+    environment:
+      PROMETHEUS_COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME}
+    secrets:
+      # Referenced directly as basic_auth.password_file; may be empty without remote write.
+      - source: prometheus_remote_write_password
+        uid: "65534"
+        mode: 0400
+    networks: [default, monitoring]
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ../monitoring/prometheus:/etc/prometheus/pluginlake:ro
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1@sha256:ac5ec343104fae0e2d84a27bb8d69b38430a11910c5382cad85d478d2bab713e
+    profiles: [monitoring]
+    command:
+      # Per-table collectors would turn table names into labels; table names can
+      # derive from uploaded files, so they stay off.
+      - --no-collector.stat_user_tables
+      - --no-collector.statio_user_tables
+    environment:
+      DATA_SOURCE_URI: postgres:5432/postgres?sslmode=disable
+      DATA_SOURCE_USER: ${POSTGRES_USER}
+      DATA_SOURCE_PASS_FILE: /run/secrets/postgres_password
+    secrets:
+      - source: postgres_password
+        uid: "65534"
+        mode: 0400
+    expose:
+      - "9187"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  cadvisor:
+    image: ghcr.io/google/cadvisor:v0.60.6@sha256:b8e7d1093144fd088f425ff003d75a4aa405de075db78dae3bc563730b1bd07a
+    profiles: [monitoring]
+    command:
+      - --docker_only=true
+      - --housekeeping_interval=30s
+      # Container labels can hold anything; only keep the compose ones Prometheus filters on.
+      - --store_container_labels=false
+      - --whitelisted_container_labels=com.docker.compose.project,com.docker.compose.service
+      - --disable_metrics=advtcp,cpu_topology,cpuset,hugetlb,memory_numa,percpu,process,referenced_memory,resctrl,sched,tcp,udp
+    # Read access to /dev/kmsg only, instead of `privileged` (same as vantage6-ops).
+    # If container metrics are missing on a host, see docs/guides/monitoring.md.
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    expose:
+      - "8080"
+    # cAdvisor can reach the Docker socket; keep its unauthenticated API off the app network.
+    networks: [monitoring]
+    restart: unless-stopped
 
   # --- Lineage (profile `lineage`, ADR-007) ---
   # OpenLineage endpoint inside the compose network: http://marquez:5000/api/v1/lineage
@@ -185,5 +294,17 @@ services:
       retries: 10
       start_period: 5s
 
+networks:
+  # Only Prometheus and cAdvisor; app containers cannot reach cadvisor:8080.
+  monitoring:
+
+secrets:
+  # Values come from the compose environment (deploy/compose/.env), never from a container env file.
+  postgres_password:
+    environment: POSTGRES_PASSWORD
+  prometheus_remote_write_password:
+    environment: PROMETHEUS_REMOTE_WRITE_PASSWORD
+
 volumes:
   marquez-db-data:
+  prometheus-data:

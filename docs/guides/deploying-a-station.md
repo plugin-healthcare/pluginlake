@@ -31,6 +31,10 @@ Because wiring happens at install time through the entry point, the platform ima
 [station]
 endpoint_url = "http://localhost:8000"
 
+[monitoring]
+enabled = true          # start Prometheus and exporters (compose profile `monitoring`)
+station_id = "ds-001"
+
 [[projects]]
 name = "ehds-demo"
 # Dev: a local sibling checkout, mounted and editable-installed into the images.
@@ -43,6 +47,7 @@ path = "../pluginlake-ehds-demo"
 ```
 
 Exactly one of `path` or `source` must be set per project. See `src/pluginlake/deploy/config.py` for the full schema.
+The `[monitoring]` section is optional and described in the [monitoring guide](monitoring.md).
 
 ## Bring the station up
 
@@ -60,6 +65,7 @@ This builds the images, starts the stack, installs the configured projects, and 
 | Dagster (pipelines and assets) | <http://localhost:3000> |
 | API docs (Swagger) | <http://localhost:8000/docs> |
 | API health | <http://localhost:8000/health> |
+| Prometheus (only with `[monitoring] enabled = true`, loopback only) | <http://127.0.0.1:9090> |
 
 Verify that the configured projects conform to the plugin contract and are wired correctly:
 

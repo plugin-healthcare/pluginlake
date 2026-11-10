@@ -5,6 +5,8 @@ uploads, validates them, stores them in the raw storage layer, and triggers
 a Dagster job for downstream processing.
 """
 
+from dataclasses import asdict
+from functools import cache
 from http import HTTPStatus
 from typing import Annotated
 
@@ -74,8 +76,9 @@ class IngestionInfoResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+@cache
 def _get_ingestion_service() -> IngestionService:
-    """Build the ingestion service from settings."""
+    """Build the ingestion service from settings once per process."""
     storage_settings = StorageSettings()
     ingest_settings = IngestionSettings()
 
@@ -144,20 +147,9 @@ async def ingest_file(
     try:
         result = await service.ingest_file(file=file, dataset=dataset)
     except IngestionError as exc:
-        detail = str(exc)
-        status = HTTPStatus.REQUEST_ENTITY_TOO_LARGE if "size" in detail.lower() else HTTPStatus.UNPROCESSABLE_ENTITY
-        raise HTTPException(status_code=status, detail=detail) from exc
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
-    return IngestionResponse(
-        file_id=result.file_id,
-        filename=result.filename,
-        dataset=result.dataset,
-        file_path=result.file_path,
-        size_bytes=result.size_bytes,
-        dagster_run_id=result.dagster_run_id,
-        status=result.status,
-        message=result.message,
-    )
+    return IngestionResponse(**asdict(result))
 
 
 @router.get(

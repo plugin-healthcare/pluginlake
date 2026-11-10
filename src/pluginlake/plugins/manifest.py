@@ -25,6 +25,10 @@ class ImportSpec(BaseModel):
     module: str
     attribute: str
 
+    def __str__(self) -> str:
+        """Render the spec as ``module:attribute``."""
+        return f"{self.module}:{self.attribute}"
+
     def load(self) -> Any:  # noqa: ANN401 - returns the referenced object, type varies by spec
         """Import the module and return the referenced attribute.
 

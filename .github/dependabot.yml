@@ -31,7 +31,8 @@ updates:
       interval: "daily"
     open-pull-requests-limit: 10
 
-  # Service images in compose files (postgres, marquez)
+  # Service images in compose files (postgres, marquez, prometheus, exporters, cAdvisor).
+  # Updates both tag and pinned digest.
   - package-ecosystem: "docker-compose"
     directory: "/deploy/compose"
     schedule:

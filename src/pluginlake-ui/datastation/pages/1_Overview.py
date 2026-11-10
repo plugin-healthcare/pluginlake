@@ -15,11 +15,7 @@ client = get_client()
 
 assets = fetch_assets(client)
 runs = fetch_runs(client)
-
-try:
-    tables = fetch_catalog_tables(client)
-except (ConnectionError, TimeoutError, ValueError):
-    tables = []
+tables = fetch_catalog_tables(client)
 
 # -- KPI cards ----------------------------------------------------------------
 
@@ -148,7 +144,6 @@ st.caption(
     "Each materialization replaces the table content (full refresh)."
 )
 
-tables = fetch_catalog_tables(client)
 layer_summary = fetch_layer_summary(client)
 rows_by_schema = {s["schema_name"]: s["total_rows"] for s in layer_summary}
 

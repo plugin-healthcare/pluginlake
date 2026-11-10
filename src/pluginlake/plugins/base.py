@@ -19,6 +19,8 @@ from abc import ABC, abstractmethod
 import duckdb
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from pluginlake.config import settings_config
+
 
 class ProjectSettings(BaseSettings):
     """Base settings for a project plugin.
@@ -36,11 +38,7 @@ class ProjectSettings(BaseSettings):
     validate it uniformly.
     """
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
+    model_config = settings_config()
 
 
 def project_settings_config(env_prefix: str) -> SettingsConfigDict:
@@ -53,12 +51,7 @@ def project_settings_config(env_prefix: str) -> SettingsConfigDict:
     Returns:
         A config dict combining the shared project defaults with ``env_prefix``.
     """
-    return SettingsConfigDict(
-        env_prefix=env_prefix,
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
+    return settings_config(env_prefix)
 
 
 class Connector(ABC):

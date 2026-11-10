@@ -13,6 +13,7 @@ nav = [
         { "Getting Started" = "guides/getting-started.md" },
         { "Docker" = "guides/docker.md" },
         { "Deploying a Station" = "guides/deploying-a-station.md" },
+        { "Monitoring" = "guides/monitoring.md" },
         { "Dashboard" = "guides/dashboard.md" },
         { "Using as Package" = "guides/using-as-package.md" },
         { "GitHub Flow" = "guides/github-flow.md" },
@@ -42,6 +43,7 @@ nav = [
         { "ADR-007: Column-Level Lineage" = "decisions/adr-007-column-level-lineage.md" },
         { "ADR-008: DSP Authorization" = "decisions/adr-008-dataspace-protocol-authz-authc-rbac.md" },
         { "ADR-009: Core + Project Plugin Architecture" = "decisions/adr-009-core-project-plugin-architecture.md" },
+        { "ADR-010: Station Monitoring" = "decisions/adr-010-station-monitoring-prometheus.md" },
     ]},
     { "Development" = [
         { "Development" = "development/index.md" },

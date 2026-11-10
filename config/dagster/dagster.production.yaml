@@ -1,0 +1,32 @@
+# Dagster instance config of the production webserver/daemon image, copied there as
+# $DAGSTER_HOME/dagster.yaml. The daemon passes it to runs in the code server.
+# Differs from dagster.yaml (dev) only in compute_logs.
+
+storage:
+  postgres:
+    postgres_db:
+      hostname:
+        env: DAGSTER_PG_HOST
+      username:
+        env: DAGSTER_PG_USER
+      password:
+        env: DAGSTER_PG_PASSWORD
+      db_name:
+        env: DAGSTER_PG_DB
+      port: 5432
+
+# No stdout/stderr capture: it needs `tail`, which the hardened runtime images lack.
+# Step output goes to the code-server container log (docker logs); context.log
+# messages are stored in Postgres and shown in the UI.
+compute_logs:
+  module: dagster._core.storage.noop_compute_log_manager
+  class: NoOpComputeLogManager
+
+run_launcher:
+  module: dagster
+  class: DefaultRunLauncher
+
+# No usage data to Dagster Labs. Telemetry also writes to $DAGSTER_HOME/logs, which is
+# not writable for the non-root user in the production images.
+telemetry:
+  enabled: false

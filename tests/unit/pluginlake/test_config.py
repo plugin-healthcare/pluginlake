@@ -7,13 +7,12 @@ import pytest
 from pydantic import ValidationError
 
 from pluginlake.config import (
-    DagsterSettings,
     LogLevel,
-    PostgresSettings,
     ServerSettings,
     Settings,
     StorageLayer,
     StorageSettings,
+    secrets_dir,
 )
 
 
@@ -133,47 +132,9 @@ def test_server_settings_from_env(monkeypatch: pytest.MonkeyPatch):
     assert s.port == 9090
 
 
-def test_postgres_settings_missing_required_fields():
-    with pytest.raises(ValidationError):
-        PostgresSettings()  # type: ignore[missing-argument]
-
-
-def test_postgres_settings_from_env(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("PLUGINLAKE_POSTGRES_USER", "admin")
-    monkeypatch.setenv("PLUGINLAKE_POSTGRES_PASSWORD", "secret")
-    s = PostgresSettings()  # type: ignore[missing-argument]
-    assert s.user.get_secret_value() == "admin"
-    assert s.password.get_secret_value() == "secret"
-
-
-def test_postgres_settings_error_lists_missing_fields():
-    with pytest.raises(ValidationError) as exc_info:
-        PostgresSettings()  # type: ignore[missing-argument]
-    errors = exc_info.value.errors()
-    missing_fields = {e["loc"][0] for e in errors}
-    assert "user" in missing_fields
-    assert "password" in missing_fields
-
-
-def test_dagster_settings_missing_required_fields():
-    with pytest.raises(ValidationError):
-        DagsterSettings()  # type: ignore[missing-argument]
-
-
-def test_dagster_settings_from_env(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("PLUGINLAKE_DAGSTER_PG_USER", "dagster")
-    monkeypatch.setenv("PLUGINLAKE_DAGSTER_PG_PASSWORD", "secret")
-    s = DagsterSettings()  # type: ignore[missing-argument]
-    assert s.pg_user.get_secret_value() == "dagster"
-
-
-def test_dagster_settings_error_lists_missing_fields():
-    with pytest.raises(ValidationError) as exc_info:
-        DagsterSettings()  # type: ignore[missing-argument]
-    errors = exc_info.value.errors()
-    missing_fields = {e["loc"][0] for e in errors}
-    assert "pg_user" in missing_fields
-    assert "pg_password" in missing_fields
+def test_secrets_dir_is_none_without_run_secrets(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    monkeypatch.setattr("pluginlake.config.SECRETS_DIR", tmp_path / "missing")
+    assert secrets_dir() is None
 
 
 def test_all_default_configs_load():

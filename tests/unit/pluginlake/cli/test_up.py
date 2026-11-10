@@ -1,5 +1,6 @@
-"""Tests for ``pluginlake up`` / ``pluginlake down`` and the lineage compose profile."""
+"""Tests for ``pluginlake up`` / ``pluginlake down``: compose profiles, lineage and monitoring."""
 
+import json
 import re
 from pathlib import Path
 
@@ -17,7 +18,7 @@ _LINEAGE_SERVICES = ("marquez-db", "marquez", "marquez-web")
 def captured_cmd(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
     calls: list[list[str]] = []
 
-    def fake_run(cmd: list[str], cwd: Path) -> int:
+    def fake_run(cmd: list[str], cwd: Path, env: dict[str, str] | None = None) -> int:
         calls.append(cmd)
         return 0
 
@@ -71,7 +72,7 @@ def test_run_up_invalid_config_returns_error(tmp_path: Path, captured_cmd: list[
 
 def test_run_down_stops_all_profiles(captured_cmd: list[list[str]]):
     assert up.run_down(volumes=True) == 0
-    assert _profiles_in(captured_cmd[0]) == ["ui", "lineage"]
+    assert _profiles_in(captured_cmd[0]) == ["ui", "lineage", "monitoring"]
     assert captured_cmd[0][-2:] == ["down", "-v"]
 
 
@@ -116,3 +117,100 @@ def test_marquez_ui_bound_to_loopback_only(dev_compose: dict):
     assert "ports" not in services["marquez-db"]
     for port in services["marquez-web"]["ports"]:
         assert port.startswith("127.0.0.1:")
+
+
+@pytest.fixture
+def override_calls(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
+    """Capture compose invocations (command and override contents) instead of running them."""
+    captured: list[dict] = []
+
+    def _fake_run(cmd: list[str], cwd: Path, env: dict[str, str] | None = None) -> int:
+        files = [cmd[i + 1] for i, arg in enumerate(cmd) if arg == "-f"]
+        override = json.loads(Path(files[1]).read_text(encoding="utf-8")) if len(files) > 1 else None
+        captured.append({"cmd": cmd, "override": override, "env": env})
+        return 0
+
+    monkeypatch.setattr(up, "_run", _fake_run)
+    return captured
+
+
+def _config(tmp_path: Path, body: str) -> Path:
+    path = tmp_path / "pluginlake.toml"
+    path.write_text(body, encoding="utf-8")
+    return path
+
+
+def test_up_without_monitoring(tmp_path: Path, override_calls: list[dict]):
+    assert up.run_up(_config(tmp_path, "[station]\n")) == 0
+    cmd, override = override_calls[0]["cmd"], override_calls[0]["override"]
+    assert "monitoring" not in _profiles_in(cmd)
+    assert "prometheus" not in override["services"]
+
+
+def test_up_with_monitoring(tmp_path: Path, override_calls: list[dict]):
+    config = _config(tmp_path, '[monitoring]\nenabled = true\nstation_id = "ds-001"\n')
+    assert up.run_up(config, detach=True) == 0
+    cmd, override = override_calls[0]["cmd"], override_calls[0]["override"]
+    assert "monitoring" in _profiles_in(cmd)
+    assert "--scale" not in cmd
+    assert override["services"]["prometheus"]["environment"] == {
+        "PROMETHEUS_STATION_ID": "ds-001",
+        "PROMETHEUS_SCRAPE_CADVISOR": "true",
+    }
+
+
+def test_up_with_remote_write(tmp_path: Path, override_calls: list[dict]):
+    url = "https://central.example.org/api/v1/write"
+    config = _config(tmp_path, f'[monitoring]\nenabled = true\nremote_write_url = "{url}"\n')
+    up.run_up(config)
+    env = override_calls[0]["override"]["services"]["prometheus"]["environment"]
+    assert env["PROMETHEUS_REMOTE_WRITE_URL"] == url
+    assert not any("PASSWORD" in key for key in env)
+
+
+def test_up_without_cadvisor_scales_it_to_zero(tmp_path: Path, override_calls: list[dict]):
+    config = _config(tmp_path, "[monitoring]\nenabled = true\ncadvisor = false\n")
+    up.run_up(config)
+    cmd, override = override_calls[0]["cmd"], override_calls[0]["override"]
+    assert cmd[cmd.index("--scale") + 1] == "cadvisor=0"
+    assert cmd.index("--scale") > cmd.index("up")
+    assert override["services"]["prometheus"]["environment"]["PROMETHEUS_SCRAPE_CADVISOR"] == "false"
+
+
+def test_up_invalid_monitoring_config(tmp_path: Path, override_calls: list[dict], capsys: pytest.CaptureFixture[str]):
+    config = _config(tmp_path, '[monitoring]\nremote_write_url = "not-a-url"\n')
+    assert up.run_up(config) == 1
+    assert not override_calls
+    assert "Invalid station config" in capsys.readouterr().err
+
+
+def test_down_always_includes_monitoring(override_calls: list[dict]):
+    assert up.run_down() == 0
+    cmd = override_calls[0]["cmd"]
+    assert "monitoring" in _profiles_in(cmd)
+    assert cmd[-1] == "down"
+
+
+def test_compose_env_untouched_without_monitoring(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv(up.REMOTE_WRITE_SECRET_VAR, raising=False)
+    assert up._compose_env(tmp_path, monitoring=False) is None
+
+
+def test_compose_env_defaults_remote_write_password_to_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv(up.REMOTE_WRITE_SECRET_VAR, raising=False)
+    (tmp_path / ".env").write_text("POSTGRES_PASSWORD=x\n", encoding="utf-8")
+    env = up._compose_env(tmp_path, monitoring=True)
+    assert env is not None
+    assert env[up.REMOTE_WRITE_SECRET_VAR] == ""
+
+
+@pytest.mark.parametrize("line", ["PROMETHEUS_REMOTE_WRITE_PASSWORD=s3cret", "PROMETHEUS_REMOTE_WRITE_PASSWORD="])
+def test_compose_env_keeps_password_from_dotenv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, line: str):
+    monkeypatch.delenv(up.REMOTE_WRITE_SECRET_VAR, raising=False)
+    (tmp_path / ".env").write_text(f"{line}\n", encoding="utf-8")
+    assert up._compose_env(tmp_path, monitoring=True) is None
+
+
+def test_compose_env_keeps_password_from_shell(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv(up.REMOTE_WRITE_SECRET_VAR, "s3cret")
+    assert up._compose_env(tmp_path, monitoring=True) is None

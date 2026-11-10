@@ -4,10 +4,13 @@ Reads a ``pluginlake.toml`` station config, generates a compose override that
 mounts local project checkouts and passes ``$PLUGINLAKE_PROJECTS`` to the
 standardized images, and drives the bundled dev compose stack. The images'
 entrypoint installs those projects at start, so discovery wires their code
-locations and routers automatically (ADR-009).
+locations and routers automatically (ADR-009). When ``[monitoring]`` is enabled
+the ``monitoring`` compose profile (Prometheus and exporters) is started too.
 """
 
 import json
+import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -22,7 +25,9 @@ _DEV_COMPOSE_PARTS = ("deploy", "compose", "docker-compose.dev.yaml")
 _MOUNTED_SERVICES = ("dagster", "pluginlake")
 _UI_PROFILE = "ui"
 _LINEAGE_PROFILE = "lineage"
-_ALL_PROFILES = (_UI_PROFILE, _LINEAGE_PROFILE)
+MONITORING_PROFILE = "monitoring"
+_ALL_PROFILES = (_UI_PROFILE, _LINEAGE_PROFILE, MONITORING_PROFILE)
+REMOTE_WRITE_SECRET_VAR = "PROMETHEUS_REMOTE_WRITE_PASSWORD"  # noqa: S105 (variable name, not a value)
 # Marquez API inside the compose network; the bridge appends /api/v1/lineage.
 _MARQUEZ_URL = "http://marquez:5000"
 
@@ -53,16 +58,33 @@ def _build_override(config: StationConfig, config_path: Path) -> dict:
     if config.station.lineage:
         services["dagster"]["environment"]["OPENLINEAGE_URL"] = _MARQUEZ_URL
         services["dagster"]["environment"]["OPENLINEAGE_NAMESPACE"] = config.station.lineage_namespace
+    if config.monitoring.enabled:
+        services["prometheus"] = {"environment": _prometheus_env(config)}
     return {"services": services}
 
 
-def _compose_profiles(settings: StationSettings) -> list[str]:
+def _prometheus_env(config: StationConfig) -> dict[str, str]:
+    """Environment for the Prometheus entrypoint derived from ``[monitoring]``."""
+    monitoring = config.monitoring
+    env = {
+        "PROMETHEUS_STATION_ID": monitoring.station_id,
+        "PROMETHEUS_SCRAPE_CADVISOR": str(monitoring.cadvisor).lower(),
+    }
+    # Unset keeps a URL from .env.monitoring; the override would otherwise blank it.
+    if monitoring.remote_write_url:
+        env["PROMETHEUS_REMOTE_WRITE_URL"] = monitoring.remote_write_url
+    return env
+
+
+def _compose_profiles(settings: StationSettings, *, monitoring: bool = False) -> list[str]:
     """Return the optional compose profiles enabled in the station settings."""
     profiles: list[str] = []
     if settings.dashboards:
         profiles.append(_UI_PROFILE)
     if settings.lineage:
         profiles.append(_LINEAGE_PROFILE)
+    if monitoring:
+        profiles.append(MONITORING_PROFILE)
     return profiles
 
 
@@ -76,9 +98,32 @@ def _compose_command(compose_dir: Path, override_path: Path | None, profiles: li
     return cmd
 
 
-def _run(cmd: list[str], cwd: Path) -> int:
+def _defines(env_file: Path, name: str) -> bool:
+    """Whether the dotenv file ``env_file`` assigns ``name`` (to any value, also empty)."""
+    if not env_file.is_file():
+        return False
+    pattern = re.compile(rf"^\s*(?:export\s+)?{re.escape(name)}\s*=", re.MULTILINE)
+    return bool(pattern.search(env_file.read_text(encoding="utf-8")))
+
+
+def _compose_env(compose_dir: Path, *, monitoring: bool) -> dict[str, str] | None:
+    """Environment for ``docker compose up``; ``None`` keeps the current one.
+
+    The remote-write password is a compose secret, so it must be defined whenever
+    Prometheus starts. Without remote write it may be empty: an undefined value is
+    passed as empty instead of failing. A value from the shell or the compose
+    ``.env`` always wins.
+    """
+    if not monitoring or REMOTE_WRITE_SECRET_VAR in os.environ:
+        return None
+    if _defines(compose_dir / ".env", REMOTE_WRITE_SECRET_VAR):
+        return None
+    return {**os.environ, REMOTE_WRITE_SECRET_VAR: ""}
+
+
+def _run(cmd: list[str], cwd: Path, env: dict[str, str] | None = None) -> int:
     logger.info("Running: %s", " ".join(cmd))
-    return subprocess.run(cmd, cwd=cwd, check=False).returncode  # noqa: S603
+    return subprocess.run(cmd, cwd=cwd, env=env, check=False).returncode  # noqa: S603
 
 
 def run_up(config_path: Path, *, detach: bool = False, build: bool = True) -> int:
@@ -121,16 +166,22 @@ def run_up(config_path: Path, *, detach: bool = False, build: bool = True) -> in
         json.dump(override, handle)
         override_path = Path(handle.name)
 
-    profiles = _compose_profiles(config.station)
+    profiles = _compose_profiles(config.station, monitoring=config.monitoring.enabled)
     print(f"Deploying station with projects: {config.projects_env() or '(none)'}")
     logger.info("Enabled compose profiles: %s", ", ".join(profiles) or "(none)")
+    monitoring = config.monitoring
     cmd = _compose_command(compose_dir, override_path, profiles)
     cmd.append("up")
     if build:
         cmd.append("--build")
     if detach:
         cmd.append("-d")
-    return _run(cmd, cwd=compose_dir)
+    if monitoring.enabled and not monitoring.cadvisor:
+        cmd += ["--scale", "cadvisor=0"]
+    try:
+        return _run(cmd, cwd=compose_dir, env=_compose_env(compose_dir, monitoring=monitoring.enabled))
+    finally:
+        override_path.unlink(missing_ok=True)
 
 
 def run_down(*, volumes: bool = False) -> int:
