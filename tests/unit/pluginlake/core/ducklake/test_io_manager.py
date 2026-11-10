@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import polars as pl
 import pytest
-from dagster import AssetKey
+from dagster import AssetKey, TableColumn, TableSchema
 
 from pluginlake.core.ducklake.io_manager import (
     CATALOG,
@@ -95,6 +95,22 @@ def test_handle_output_accepts_lazyframe(mock_conn, io_mgr):
 
     # Same row count query for lazy frames
     mock_conn.sql.assert_called_once_with(f"SELECT COUNT(*) FROM {CATALOG}.omop.condition_era")
+
+
+def test_handle_output_attaches_row_count_and_schema(mock_conn, io_mgr):
+    context = MagicMock()
+    context.asset_key = AssetKey(["omop", "condition_era"])
+    mock_conn.sql.return_value.fetchone.return_value = (2,)
+    mock_conn.execute.return_value.fetchall.return_value = [("id", "BIGINT"), ("name", "VARCHAR")]
+
+    io_mgr.handle_output(context, pl.DataFrame({"id": [1, 2], "name": ["a", "b"]}))
+
+    mock_conn.execute.assert_any_call(f"DESCRIBE {CATALOG}.omop.condition_era")
+    metadata = context.add_output_metadata.call_args.args[0]
+    assert metadata["dagster/row_count"] == 2
+    assert metadata["dagster/column_schema"] == TableSchema(
+        columns=[TableColumn(name="id", type="BIGINT"), TableColumn(name="name", type="VARCHAR")],
+    )
 
 
 # --- load_input ---

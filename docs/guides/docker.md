@@ -8,7 +8,7 @@ pluginlake uses separate containers for each concern:
 
 | Container | Dockerfile | Purpose |
 |-----------|-----------|---------|
-| **postgres** | `dhi.io/postgres:17-alpine3.22` (pre-built) | Dagster metadata + DuckLake catalog |
+| **postgres** | `dhi.io/postgres:17-alpine3.24` (pre-built) | Dagster metadata + DuckLake catalog |
 | **dagster-webserver** | `dagster-webserver.Dockerfile` | Dagster web UI |
 | **dagster-daemon** | `dagster-webserver.Dockerfile` | Schedules, sensors, run queue |
 | **dagster-code-server** | `pluginlake.Dockerfile` | Asset definitions served via gRPC |
@@ -18,6 +18,9 @@ pluginlake uses separate containers for each concern:
 | **prometheus** | `quay.io/prometheus/prometheus` (pre-built) | Metrics store, profile `monitoring` |
 | **postgres-exporter** | `quay.io/prometheuscommunity/postgres-exporter` (pre-built) | Postgres metrics, profile `monitoring` |
 | **cadvisor** | `ghcr.io/google/cadvisor` (pre-built) | Container metrics, profile `monitoring` |
+| **marquez-db** | `dhi.io/postgres:17-alpine3.24` (pre-built) | Marquez database (profile `lineage`) |
+| **marquez** | `marquezproject/marquez:0.51.1` (pre-built) | OpenLineage receiver API (profile `lineage`) |
+| **marquez-web** | `marquezproject/marquez-web:0.51.1` (pre-built) | Lineage web UI, host loopback only (profile `lineage`) |
 
 The monitoring services only start with `--profile monitoring` (or `[monitoring] enabled = true` with `pluginlake up`); see the [monitoring guide](monitoring.md).
 
@@ -101,7 +104,7 @@ All Dockerfiles use hardened images from `dhi.io/` instead of the default Docker
 ```dockerfile
 FROM dhi.io/python:3.13-debian13-dev AS builder    # Build stage
 FROM dhi.io/python:3.13-debian13                    # Runtime stage
-FROM dhi.io/postgres:17-alpine3.22                  # Database
+FROM dhi.io/postgres:17-alpine3.24                  # Database
 ```
 
 **Why hardened images?**

@@ -112,19 +112,15 @@ class DagsterClient:
             DagsterClientError: If the launch request fails or Dagster
                 returns an error response.
         """
-        variables: dict[str, Any] = {
-            "executionParams": {
-                "selector": {
-                    "repositoryLocationName": repository_location_name,
-                    "repositoryName": repository_name,
-                    "jobName": job_name,
-                },
-                "runConfigData": run_config or {},
-            },
+        selector: dict[str, Any] = {
+            "repositoryLocationName": repository_location_name,
+            "repositoryName": repository_name,
+            "jobName": job_name,
         }
-
         if asset_selection:
-            variables["executionParams"]["selector"]["assetSelection"] = [{"path": path} for path in asset_selection]
+            selector["assetSelection"] = [{"path": path} for path in asset_selection]
+
+        variables = {"executionParams": {"selector": selector, "runConfigData": run_config or {}}}
 
         logger.info("Triggering Dagster job %r", job_name)
 

@@ -165,15 +165,7 @@ activemq-data/
 
 # Environments
 .env
-.env.*
-*.env
-!.env*.example
-!*.env.example
-# Throwaway credentials for the isolated smoke-test stack
-!deploy/compose/smoke.env
-!deploy/compose/smoke.secrets.env
-# Host-specific compose overrides
-deploy/compose/docker-compose.local.yaml
+.env.production
 .envrc
 .venv
 env/
@@ -245,4 +237,4 @@ __marimo__/
 .agents/plan/
 .agents/memory/
 .agents/review/
-.agent/*
+.agent/

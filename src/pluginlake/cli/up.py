@@ -8,7 +8,6 @@ locations and routers automatically (ADR-009). When ``[monitoring]`` is enabled
 the ``monitoring`` compose profile (Prometheus and exporters) is started too.
 """
 
-import contextlib
 import json
 import os
 import re
@@ -17,15 +16,20 @@ import sys
 import tempfile
 from pathlib import Path
 
-from pluginlake.deploy.config import CONTAINER_PROJECTS_DIR, StationConfig, load_station_config
+from pluginlake.deploy.config import CONTAINER_PROJECTS_DIR, StationConfig, StationSettings, load_station_config
 from pluginlake.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 _DEV_COMPOSE_PARTS = ("deploy", "compose", "docker-compose.dev.yaml")
 _MOUNTED_SERVICES = ("dagster", "pluginlake")
+_UI_PROFILE = "ui"
+_LINEAGE_PROFILE = "lineage"
 MONITORING_PROFILE = "monitoring"
+_ALL_PROFILES = (_UI_PROFILE, _LINEAGE_PROFILE, MONITORING_PROFILE)
 REMOTE_WRITE_SECRET_VAR = "PROMETHEUS_REMOTE_WRITE_PASSWORD"  # noqa: S105 (variable name, not a value)
+# Marquez API inside the compose network; the bridge appends /api/v1/lineage.
+_MARQUEZ_URL = "http://marquez:5000"
 
 
 def _find_compose_dir() -> Path | None:
@@ -42,8 +46,8 @@ def _build_override(config: StationConfig, config_path: Path) -> dict:
     specs = config.projects_env()
     volumes: list[str] = []
     for project in config.local_projects:
-        host = (config_path.parent / project.path).resolve()  # type: ignore[operator]
-        volumes.append(f"{host}:{CONTAINER_PROJECTS_DIR}/{project.path.name}")  # type: ignore[union-attr]
+        host = (config_path.parent / project.path).resolve()  # ty: ignore[unsupported-operator]
+        volumes.append(f"{host}:{CONTAINER_PROJECTS_DIR}/{project.path.name}")  # ty: ignore[unresolved-attribute]
 
     services: dict[str, dict] = {}
     for service in _MOUNTED_SERVICES:
@@ -51,6 +55,9 @@ def _build_override(config: StationConfig, config_path: Path) -> dict:
         if volumes:
             entry["volumes"] = volumes
         services[service] = entry
+    if config.station.lineage:
+        services["dagster"]["environment"]["OPENLINEAGE_URL"] = _MARQUEZ_URL
+        services["dagster"]["environment"]["OPENLINEAGE_NAMESPACE"] = config.station.lineage_namespace
     if config.monitoring.enabled:
         services["prometheus"] = {"environment": _prometheus_env(config)}
     return {"services": services}
@@ -69,17 +76,25 @@ def _prometheus_env(config: StationConfig) -> dict[str, str]:
     return env
 
 
-def _compose_command(
-    compose_dir: Path, *, override_path: Path | None = None, dashboards: bool, monitoring: bool
-) -> list[str]:
-    """Assemble the base ``docker compose`` command (files and profiles)."""
+def _compose_profiles(settings: StationSettings, *, monitoring: bool = False) -> list[str]:
+    """Return the optional compose profiles enabled in the station settings."""
+    profiles: list[str] = []
+    if settings.dashboards:
+        profiles.append(_UI_PROFILE)
+    if settings.lineage:
+        profiles.append(_LINEAGE_PROFILE)
+    if monitoring:
+        profiles.append(MONITORING_PROFILE)
+    return profiles
+
+
+def _compose_command(compose_dir: Path, override_path: Path | None, profiles: list[str] | tuple[str, ...]) -> list[str]:
+    """Assemble the base ``docker compose`` command shared by up and down."""
     cmd = ["docker", "compose", "-f", str(compose_dir / _DEV_COMPOSE_PARTS[-1])]
     if override_path is not None:
         cmd += ["-f", str(override_path)]
-    if dashboards:
-        cmd += ["--profile", "ui"]
-    if monitoring:
-        cmd += ["--profile", MONITORING_PROFILE]
+    for profile in profiles:
+        cmd += ["--profile", profile]
     return cmd
 
 
@@ -151,14 +166,11 @@ def run_up(config_path: Path, *, detach: bool = False, build: bool = True) -> in
         json.dump(override, handle)
         override_path = Path(handle.name)
 
+    profiles = _compose_profiles(config.station, monitoring=config.monitoring.enabled)
     print(f"Deploying station with projects: {config.projects_env() or '(none)'}")
+    logger.info("Enabled compose profiles: %s", ", ".join(profiles) or "(none)")
     monitoring = config.monitoring
-    cmd = _compose_command(
-        compose_dir,
-        override_path=override_path,
-        dashboards=config.station.dashboards,
-        monitoring=monitoring.enabled,
-    )
+    cmd = _compose_command(compose_dir, override_path, profiles)
     cmd.append("up")
     if build:
         cmd.append("--build")
@@ -172,11 +184,14 @@ def run_up(config_path: Path, *, detach: bool = False, build: bool = True) -> in
         override_path.unlink(missing_ok=True)
 
 
-def run_down(config_path: Path, *, volumes: bool = False) -> int:
+def run_down(*, volumes: bool = False) -> int:
     """Stop the station stack.
 
+    All optional profiles are activated, so services stay stoppable after they
+    are switched off in ``pluginlake.toml``. Bind-mounted data under ``.data/``
+    (including the Marquez database) is kept, also with ``volumes``.
+
     Args:
-        config_path: Path to the ``pluginlake.toml`` station config.
         volumes: Also remove named volumes.
 
     Returns:
@@ -187,12 +202,7 @@ def run_down(config_path: Path, *, volumes: bool = False) -> int:
         print("Could not locate the bundled deploy/compose stack.", file=sys.stderr)
         return 1
 
-    dashboards = True
-    with contextlib.suppress(FileNotFoundError, ValueError):
-        dashboards = load_station_config(config_path).station.dashboards
-
-    # Always include monitoring so its containers stop even if it was switched off since `up`.
-    cmd = _compose_command(compose_dir, dashboards=dashboards, monitoring=True)
+    cmd = _compose_command(compose_dir, None, _ALL_PROFILES)
     cmd.append("down")
     if volumes:
         cmd.append("-v")
