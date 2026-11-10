@@ -4,7 +4,7 @@ Creates the pluginlake FastAPI application with middleware, routers,
 exception handlers, and authentication placeholders.
 """
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -28,7 +28,7 @@ logger = get_logger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     """Application lifespan: setup logging and DuckLake database on startup."""
     settings = Settings()
     setup_logging(settings.effective_log_level)

@@ -1646,6 +1646,22 @@ wheels = [
 ]
 
 [[package]]
+name = "openlineage-python"
+version = "1.55.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "attrs" },
+    { name = "httpx2" },
+    { name = "packaging" },
+    { name = "python-dateutil" },
+    { name = "pyyaml" },
+    { name = "requests" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/09/a3/6a2c400405a648fa305651a38b6a588fabf92d852e9d6f655a4c1e6bae6d/openlineage_python-1.55.0-py3-none-any.whl", hash = "sha256:fc26969dc8c379109f148d27ddd6525527ad9e811052c9943f98721f85638bf8", size = 130784, upload-time = "2026-10-29T15:08:39.917Z" },
+]
+
+[[package]]
 name = "orjson"
 version = "3.11.7"
 source = { registry = "https://pypi.org/simple" }
@@ -1861,6 +1877,7 @@ dependencies = [
     { name = "duckdb" },
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "openlineage-python" },
     { name = "packaging" },
     { name = "polars" },
     { name = "psycopg2-binary" },
@@ -1868,6 +1885,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "python-multipart" },
+    { name = "requests" },
 ]
 
 [package.optional-dependencies]
@@ -1935,6 +1953,7 @@ requires-dist = [
     { name = "duckdb", specifier = ">=1.4.4" },
     { name = "fastapi", specifier = ">=0.139.0" },
     { name = "httpx", specifier = ">=0.28.0" },
+    { name = "openlineage-python", specifier = ">=1.53.0" },
     { name = "packaging", specifier = ">=24.0" },
     { name = "polars", specifier = ">=1.42.1" },
     { name = "psycopg2-binary", specifier = ">=2.9.11" },
@@ -1942,6 +1961,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.12.5" },
     { name = "pydantic-settings", specifier = ">=2.14.2" },
     { name = "python-multipart", specifier = ">=0.0.31" },
+    { name = "requests", specifier = ">=2.32.0" },
 ]
 provides-extras = ["infra", "azure"]
 

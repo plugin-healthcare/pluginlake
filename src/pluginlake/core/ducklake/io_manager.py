@@ -3,7 +3,7 @@
 from typing import TYPE_CHECKING
 
 import polars as pl
-from dagster import IOManager, io_manager
+from dagster import IOManager, TableColumn, TableSchema, io_manager
 
 from pluginlake.core.ducklake.setup import setup_ducklake
 from pluginlake.utils.logger import get_logger
@@ -16,6 +16,30 @@ logger = get_logger(__name__)
 
 DEFAULT_SCHEMA = "main"
 CATALOG = "ducklake"
+
+
+def asset_key_to_table_ref(asset_key_path: list[str]) -> str:
+    """Derive a fully qualified DuckLake table reference from an asset key.
+
+    First segment becomes the schema, remaining segments are joined
+    with ``_`` to form the table name. Single-segment keys use the
+    default schema.
+
+    Args:
+        asset_key_path: The asset key path segments,
+            e.g. ``["condition_era"]`` or ``["omop", "condition_era"]``.
+
+    Returns:
+        Fully qualified reference like ``ducklake.omop.condition_era``.
+    """
+    if len(asset_key_path) == 1:
+        schema = DEFAULT_SCHEMA
+        table = asset_key_path[0]
+    else:
+        schema = asset_key_path[0]
+        table = "_".join(asset_key_path[1:])
+
+    return f"{CATALOG}.{schema}.{table}"
 
 
 class DuckLakeIOManager(IOManager):
@@ -55,14 +79,7 @@ class DuckLakeIOManager(IOManager):
         Returns:
             Fully qualified reference like ``ducklake.omop.condition_era``.
         """
-        if len(asset_key_path) == 1:
-            schema = DEFAULT_SCHEMA
-            table = asset_key_path[0]
-        else:
-            schema = asset_key_path[0]
-            table = "_".join(asset_key_path[1:])
-
-        return f"{CATALOG}.{schema}.{table}"
+        return asset_key_to_table_ref(asset_key_path)
 
     def _ensure_schema(self, schema: str) -> None:
         """Create the DuckLake schema if it does not exist.
@@ -80,7 +97,9 @@ class DuckLakeIOManager(IOManager):
         native Polars plugin, so data never materializes in Python.
 
         Ensures the target schema exists, registers the frame with
-        DuckDB, and creates or replaces the table.
+        DuckDB, and creates or replaces the table. Attaches the row count
+        and column schema as output metadata, which the Dagster UI shows
+        and the OpenLineage bridge turns into dataset facets.
 
         Args:
             context: Dagster output context containing the asset key.
@@ -101,7 +120,18 @@ class DuckLakeIOManager(IOManager):
         row_count = self._conn.sql(
             f"SELECT COUNT(*) FROM {ref}"  # noqa: S608
         ).fetchone()
-        logger.info("Wrote %d rows to %s.", row_count[0] if row_count else 0, ref)
+        rows = row_count[0] if row_count else 0
+        logger.info("Wrote %d rows to %s.", rows, ref)
+
+        columns = self._conn.execute(f"DESCRIBE {ref}").fetchall()
+        context.add_output_metadata(
+            {
+                "dagster/row_count": rows,
+                "dagster/column_schema": TableSchema(
+                    columns=[TableColumn(name=column[0], type=column[1]) for column in columns],
+                ),
+            },
+        )
 
     def load_input(self, context: "InputContext") -> pl.LazyFrame:
         """Load a DuckLake table as a Polars LazyFrame.

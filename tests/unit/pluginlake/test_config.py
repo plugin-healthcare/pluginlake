@@ -190,7 +190,7 @@ def test_invalid_log_level_gives_clear_error():
 
 def test_invalid_storage_backend_gives_clear_error():
     with pytest.raises(ValidationError, match="backend"):
-        StorageSettings(backend="s3")  # type: ignore[invalid-argument-type]
+        StorageSettings(backend="s3")  # ty: ignore[invalid-argument-type]
 
 
 def test_storage_layers_writable_after_ensure(tmp_path: Path):
