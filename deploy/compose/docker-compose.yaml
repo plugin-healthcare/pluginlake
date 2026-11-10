@@ -1,12 +1,27 @@
-# Credentials are Docker secrets (docs/guides/docker.md#secrets). Compose reads them
-# from deploy/compose/.env.production.secrets, which is never loaded into a container,
-# and copies each to /run/secrets/<name> (mode 0400, owned by the service user).
-# pluginlake reads them through its pydantic settings (secrets_dir); postgres and
-# postgres-exporter through <VAR>_FILE; Dagster through the dagster_env launcher.
-# Start with: just up  (passes --env-file .env.production --env-file .env.production.secrets)
+# Credentials are Docker secrets (docs/guides/docker.md#secrets). `just up` has pluginlake-init write one file per
+# secret to ${PLUGINLAKE_HOME}/secrets, owned by the host user with mode 0400, and compose mounts each
+# file read-only at /run/secrets/<name>. No secret value passes through compose interpolation.
+# pluginlake reads them through its pydantic settings (secrets_dir); postgres and postgres-exporter
+# through <VAR>_FILE; Dagster through the dagster_env launcher.
+# Zitadel, its login UI and Marquez can only read environment variables: they get an env_file from the same folder.
+# Start with: just up  (generates the secrets with pluginlake-init, then starts the stack)
+#
+# Edge: Traefik is the only service that publishes ports. Every web UI sits behind
+# oauth2-proxy forward auth with Zitadel as identity provider (docs/guides/docker.md#edge).
+# Networks: edge-net (proxy, identity provider), app-net (applications, reachable via the proxy),
+# db-net (internal, databases only), monitoring (Prometheus and cAdvisor).
+# Containers run as the host user (PLUGINLAKE_UID/GID) and keep their data below PLUGINLAKE_HOME,
+# so the data survives `docker compose down -v` and `docker volume prune`.
 
 # Rotate container logs: the default json-file driver keeps them unbounded on the host.
 # Step stdout/stderr (dagster-code-server) can contain data, so keep the retention small.
+x-zitadel-database: &zitadel-database
+  ZITADEL_DATABASE_POSTGRES_HOST: postgres
+  ZITADEL_DATABASE_POSTGRES_PORT: "5432"
+  ZITADEL_DATABASE_POSTGRES_DATABASE: ${ZITADEL_DB:?set in .env.production}
+  ZITADEL_DATABASE_POSTGRES_USER_USERNAME: ${ZITADEL_DB_USER:?set in .env.production}
+  ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+
 x-logging: &default-logging
   driver: json-file
   options:
@@ -16,43 +31,74 @@ x-logging: &default-logging
 services:
   postgres:
     logging: *default-logging
+    user: "${PLUGINLAKE_UID:?run just init-env}:${PLUGINLAKE_GID:?run just init-env}"
     image: dhi.io/postgres:17-alpine3.24
     env_file: .env.production
     environment:
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
     secrets:
-      - source: postgres_password
-        uid: "70"
-        gid: "70"
-        mode: 0400
-    ports:
-      - "5432:5432"
+      - postgres_password
     volumes:
-      - dagster-postgres:/var/lib/postgresql/data
+      # The image keeps PGDATA in /var/lib/postgresql/17/data, so mount the parent.
+      - ${PLUGINLAKE_HOME:?run just init-env}/postgres:/var/lib/postgresql
+      # initdb needs a passwd entry for the host user.
+      - ${PLUGINLAKE_HOME:?run just init-env}/passwd:/etc/passwd:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
       interval: 3s
       timeout: 3s
       retries: 10
       start_period: 5s
+    networks: [db-net]
+
+  # Creates one role and database per service with the Postgres superuser, so every other service
+  # only gets the credentials of its own role.
+  pluginlake-db-init:
+    logging: *default-logging
+    user: "${PLUGINLAKE_UID:?run just init-env}:${PLUGINLAKE_GID:?run just init-env}"
+    build:
+      context: ../../
+      dockerfile: deploy/docker/pluginlake.Dockerfile
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: "no"
+    secrets:
+      - postgres_password
+      - dagster_pg_password
+      - ducklake_pg_password
+      - zitadel_db_password
+      - postgres_exporter_password
+    command:
+      - python
+      - -m
+      - pluginlake.deploy.init_databases
+      - --host=postgres
+      - --port=5432
+      - --admin-user=${POSTGRES_USER:?set in .env.production}
+      - --admin-password-file=/run/secrets/postgres_password
+      - --role=${DAGSTER_PG_USER:?set in .env.production}:${DAGSTER_PG_DB:?set in .env.production}:/run/secrets/dagster_pg_password
+      - --role=${DUCKLAKE_PG_USER:?set in .env.production}:${DUCKLAKE_PG_DB:?set in .env.production}:/run/secrets/ducklake_pg_password
+      - --role=${ZITADEL_DB_USER:?set in .env.production}:${ZITADEL_DB:?set in .env.production}:/run/secrets/zitadel_db_password
+      - --role=${POSTGRES_EXPORTER_USER:?set in .env.production}::/run/secrets/postgres_exporter_password
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [db-net]
 
   dagster-webserver:
     logging: *default-logging
+    user: "${PLUGINLAKE_UID:?run just init-env}:${PLUGINLAKE_GID:?run just init-env}"
     build:
       context: ../../
       dockerfile: deploy/docker/dagster-webserver.Dockerfile
-    ports:
-      - "3000:3000"
     env_file: .env.production
     environment:
       DAGSTER_HOME: /app/config/dagster
     secrets:
-      - source: dagster_pg_password
-        uid: "65532"
-        mode: 0400
+      - dagster_pg_password
     depends_on:
-      postgres:
-        condition: service_healthy
+      pluginlake-db-init:
+        condition: service_completed_successfully
       dagster-code-server:
         condition: service_healthy
     command:
@@ -62,9 +108,11 @@ services:
         "-p", "3000",
         "-w", "/app/config/dagster/workspace.yaml",
       ]
+    networks: [app-net, db-net]
 
   dagster-daemon:
     logging: *default-logging
+    user: "${PLUGINLAKE_UID:?run just init-env}:${PLUGINLAKE_GID:?run just init-env}"
     build:
       context: ../../
       dockerfile: deploy/docker/dagster-webserver.Dockerfile
@@ -72,39 +120,33 @@ services:
     environment:
       DAGSTER_HOME: /app/config/dagster
     secrets:
-      - source: dagster_pg_password
-        uid: "65532"
-        mode: 0400
+      - dagster_pg_password
     depends_on:
-      postgres:
-        condition: service_healthy
+      pluginlake-db-init:
+        condition: service_completed_successfully
       dagster-code-server:
         condition: service_healthy
     command: ["dagster-daemon", "run", "-w", "/app/config/dagster/workspace.yaml"]
+    networks: [app-net, db-net]
 
   dagster-code-server:
     logging: *default-logging
+    user: "${PLUGINLAKE_UID:?run just init-env}:${PLUGINLAKE_GID:?run just init-env}"
     build:
       context: ../../
       dockerfile: deploy/docker/pluginlake.Dockerfile
-    ports:
-      - "4000:4000"
     env_file: .env.production
     environment:
       DUCKLAKE_PG_HOST: postgres
       DUCKLAKE_PG_PORT: "5432"
-      DUCKLAKE_PG_DB: ${DUCKLAKE_PG_DB:-ducklake}
+      DUCKLAKE_PG_DB: ${DUCKLAKE_PG_DB:?set in .env.production}
       PLUGINLAKE_STORAGE_BASE_DIR: .data/storage
     secrets:
-      - source: ducklake_pg_password
-        uid: "65532"
-        mode: 0400
+      - ducklake_pg_password
       # Runs execute in this container and write their events to the Dagster instance.
-      - source: dagster_pg_password
-        uid: "65532"
-        mode: 0400
+      - dagster_pg_password
     volumes:
-      - pluginlake-data:/app/.data
+      - ${PLUGINLAKE_HOME:?run just init-env}/data:/app/.data
     healthcheck:
       test: ["CMD", "dagster", "api", "grpc-health-check", "-p", "4000"]
       interval: 3s
@@ -112,8 +154,8 @@ services:
       start_period: 3s
       retries: 10
     depends_on:
-      postgres:
-        condition: service_healthy
+      pluginlake-db-init:
+        condition: service_completed_successfully
     command:
       [
         "python", "-m", "pluginlake.deploy.dagster_env",
@@ -122,51 +164,49 @@ services:
         "-p", "4000",
         "-m", "pluginlake.definitions",
       ]
+    networks: [app-net, db-net]
 
   pluginlake:
     logging: *default-logging
+    user: "${PLUGINLAKE_UID:?run just init-env}:${PLUGINLAKE_GID:?run just init-env}"
     build:
       context: ../../
       dockerfile: deploy/docker/pluginlake.Dockerfile
     env_file: .env.production
     environment:
-      PLUGINLAKE_SERVER_HOST: ${PLUGINLAKE_SERVER_HOST:-0.0.0.0}
-      PLUGINLAKE_SERVER_PORT: ${PLUGINLAKE_SERVER_PORT:-8000}
+      PLUGINLAKE_SERVER_HOST: ${PLUGINLAKE_SERVER_HOST:?set in .env.production}
+      PLUGINLAKE_SERVER_PORT: ${PLUGINLAKE_SERVER_PORT:?set in .env.production}
       DUCKLAKE_PG_HOST: postgres
       DUCKLAKE_PG_PORT: "5432"
-      DUCKLAKE_PG_DB: ${DUCKLAKE_PG_DB:-ducklake}
+      DUCKLAKE_PG_DB: ${DUCKLAKE_PG_DB:?set in .env.production}
       PLUGINLAKE_INGEST_DAGSTER_WEBSERVER_URL: http://dagster-webserver:3000
       PLUGINLAKE_STORAGE_BASE_DIR: .data/storage
       PLUGINLAKE_METRICS_HOST: "0.0.0.0"
     secrets:
-      - source: ducklake_pg_password
-        uid: "65532"
-        mode: 0400
-    ports:
-      - "${PLUGINLAKE_SERVER_PORT:-8000}:${PLUGINLAKE_SERVER_PORT:-8000}"
+      - ducklake_pg_password
     expose:
       # Internal metrics port (PLUGINLAKE_METRICS_PORT): scraped by Prometheus, never published.
       - "9464"
     volumes:
-      - pluginlake-data:/app/.data
+      - ${PLUGINLAKE_HOME:?run just init-env}/data:/app/.data
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${PLUGINLAKE_SERVER_PORT:-8000}/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${PLUGINLAKE_SERVER_PORT:?set in .env.production}/health')"]
       interval: 5s
       timeout: 3s
       retries: 10
       start_period: 5s
     depends_on:
-      postgres:
-        condition: service_healthy
+      pluginlake-db-init:
+        condition: service_completed_successfully
     command: ["python", "-m", "pluginlake"]
+    networks: [app-net, db-net]
 
   dashboard-datastation:
     logging: *default-logging
+    user: "${PLUGINLAKE_UID:?run just init-env}:${PLUGINLAKE_GID:?run just init-env}"
     build:
       context: ../../
-      dockerfile: deploy/docker/dashboard-datastation.Dockerfile
-    ports:
-      - "${DASHBOARD_HOST_PORT:-8501}:8501"
+      dockerfile: deploy/docker/ui.Dockerfile
     environment:
       DASHBOARD_API_URL: http://pluginlake:8000
     depends_on:
@@ -177,17 +217,18 @@ services:
       interval: 10s
       timeout: 3s
       retries: 3
-
+    networks: [app-net]
 
   # ---------------------------------------------------------------------------
   # Monitoring (profile `monitoring`, ADR-010). Enabled via [monitoring] in
-  # pluginlake.toml, or manually with `--profile monitoring`. Only Prometheus is
-  # published, on loopback; the exporters and the API metrics port stay internal.
+  # pluginlake.toml, or manually with `--profile monitoring`. Prometheus is
+  # reached at prometheus.<domain> behind the proxy; the exporters and the API metrics port stay internal.
   # ---------------------------------------------------------------------------
   prometheus:
     logging: *default-logging
     image: quay.io/prometheus/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2
     profiles: [monitoring]
+    user: "${PLUGINLAKE_UID:?run just init-env}:${PLUGINLAKE_GID:?run just init-env}"
     entrypoint: ["/bin/sh", "/etc/prometheus/pluginlake/entrypoint.sh"]
     env_file:
       # Remote-write URL and username; read by Prometheus only. See .env.monitoring.example.
@@ -197,15 +238,11 @@ services:
       PROMETHEUS_COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME}
     secrets:
       # Referenced directly as basic_auth.password_file; may be empty without remote write.
-      - source: prometheus_remote_write_password
-        uid: "65534"
-        mode: 0400
-    networks: [default, monitoring]
-    ports:
-      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+      - prometheus_remote_write_password
+    networks: [app-net, monitoring]
     volumes:
       - ../monitoring/prometheus:/etc/prometheus/pluginlake:ro
-      - prometheus-data:/prometheus
+      - ${PLUGINLAKE_HOME:?run just init-env}/prometheus:/prometheus
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/ready"]
       interval: 10s
@@ -215,6 +252,7 @@ services:
 
   postgres-exporter:
     logging: *default-logging
+    user: "${PLUGINLAKE_UID:?run just init-env}:${PLUGINLAKE_GID:?run just init-env}"
     image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1@sha256:ac5ec343104fae0e2d84a27bb8d69b38430a11910c5382cad85d478d2bab713e
     profiles: [monitoring]
     command:
@@ -225,17 +263,16 @@ services:
     environment:
       DATA_SOURCE_URI: postgres:5432/postgres?sslmode=disable
       # Prefer a dedicated user with the pg_monitor role (docs/guides/monitoring.md).
-      DATA_SOURCE_USER: ${POSTGRES_EXPORTER_USER:-monitoring}
+      DATA_SOURCE_USER: ${POSTGRES_EXPORTER_USER:?set in .env.production}
       DATA_SOURCE_PASS_FILE: /run/secrets/postgres_exporter_password
     secrets:
-      - source: postgres_exporter_password
-        uid: "65534"
-        mode: 0400
+      - postgres_exporter_password
     expose:
       - "9187"
     depends_on:
-      postgres:
-        condition: service_healthy
+      pluginlake-db-init:
+        condition: service_completed_successfully
+    networks: [db-net, app-net]
     restart: unless-stopped
 
   cadvisor:
@@ -265,24 +302,293 @@ services:
     networks: [monitoring]
     restart: unless-stopped
 
+  # ---------------------------------------------------------------------------
+  # Lineage (profile `lineage`, ADR-007). Marquez has no authentication of its own,
+  # so the web UI is only reachable at marquez.<domain> behind the proxy.
+  # OpenLineage endpoint inside the compose network: http://marquez:5000/api/v1/lineage
+  # ---------------------------------------------------------------------------
+  marquez-db:
+    logging: *default-logging
+    user: "${PLUGINLAKE_UID:?run just init-env}:${PLUGINLAKE_GID:?run just init-env}"
+    image: dhi.io/postgres:17-alpine3.24
+    profiles: [lineage]
+    environment:
+      POSTGRES_USER: ${MARQUEZ_DB_USER:?set in .env.production}
+      POSTGRES_DB: ${MARQUEZ_DB:?set in .env.production}
+      POSTGRES_PASSWORD_FILE: /run/secrets/marquez_db_password
+    secrets:
+      - marquez_db_password
+    volumes:
+      - ${PLUGINLAKE_HOME:?run just init-env}/marquez-db:/var/lib/postgresql
+      - ${PLUGINLAKE_HOME:?run just init-env}/passwd:/etc/passwd:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks: [db-net]
+
+  marquez:
+    logging: *default-logging
+    user: "${PLUGINLAKE_UID:?run just init-env}:${PLUGINLAKE_GID:?run just init-env}"
+    image: marquezproject/marquez:0.51.1
+    profiles: [lineage]
+    # POSTGRES_PASSWORD: Marquez cannot read secret files.
+    env_file:
+      - path: ${PLUGINLAKE_HOME:?run just init-env}/secrets/marquez.env
+        required: false
+    environment:
+      MARQUEZ_CONFIG: /opt/marquez/marquez.yml
+      MARQUEZ_PORT: "5000"
+      MARQUEZ_ADMIN_PORT: "5001"
+      POSTGRES_HOST: marquez-db
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${MARQUEZ_DB:?set in .env.production}
+      POSTGRES_USER: ${MARQUEZ_DB_USER:?set in .env.production}
+    volumes:
+      - ../../config/marquez/marquez.yml:/opt/marquez/marquez.yml:ro
+    depends_on:
+      marquez-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:5001/healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+    networks: [app-net, db-net]
+
+  marquez-web:
+    logging: *default-logging
+    user: "${PLUGINLAKE_UID:?run just init-env}:${PLUGINLAKE_GID:?run just init-env}"
+    image: marquezproject/marquez-web:0.51.1
+    profiles: [lineage]
+    environment:
+      MARQUEZ_HOST: marquez
+      MARQUEZ_PORT: "5000"
+      WEB_PORT: "3000"
+    depends_on:
+      marquez:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks: [app-net]
+
+  # ---------------------------------------------------------------------------
+  # Edge: the only service that publishes ports (docs/guides/docker.md#edge).
+  # ---------------------------------------------------------------------------
+  traefik:
+    logging: *default-logging
+    user: "${PLUGINLAKE_UID:?run just init-env}:${PLUGINLAKE_GID:?run just init-env}"
+    image: traefik:v3.7@sha256:f4bb143d1135a579b630ed491e17ec50f6f7c9c6a30585ff3d385471d2a86f5a
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      PLUGINLAKE_DOMAIN: ${PLUGINLAKE_DOMAIN:?set in .env.production}
+    volumes:
+      - ./traefik/traefik.yaml:/etc/traefik/traefik.yaml:ro
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      edge-net:
+        # Lets oauth2-proxy reach the identity provider on its public hostname.
+        aliases:
+          - auth.${PLUGINLAKE_DOMAIN:?set in .env.production}
+      app-net:
+    restart: unless-stopped
+
+  # Creates the Zitadel schemas with the zitadel role (the role and database come from pluginlake-db-init).
+  zitadel-init:
+    logging: *default-logging
+    user: "${PLUGINLAKE_UID:?run just init-env}:${PLUGINLAKE_GID:?run just init-env}"
+    image: ghcr.io/zitadel/zitadel:v4.20.2@sha256:d7ffdecfe037940beeae24c8bb32a420b2adc67fab7bc51554bdae58f9624ef3
+    command: init zitadel
+    env_file:
+      - path: ${PLUGINLAKE_HOME:?run just init-env}/secrets/zitadel-api.env
+        required: false
+    environment:
+      <<: *zitadel-database
+    restart: "no"
+    depends_on:
+      pluginlake-db-init:
+        condition: service_completed_successfully
+    networks: [db-net]
+
+  zitadel-api:
+    logging: *default-logging
+    user: "${PLUGINLAKE_UID:?run just init-env}:${PLUGINLAKE_GID:?run just init-env}"
+    image: ghcr.io/zitadel/zitadel:v4.20.2@sha256:d7ffdecfe037940beeae24c8bb32a420b2adc67fab7bc51554bdae58f9624ef3
+    command: start-from-setup --masterkeyFile /run/secrets/zitadel_masterkey
+    # Database password and admin password: Zitadel reads these only from its environment.
+    env_file:
+      - path: ${PLUGINLAKE_HOME:?run just init-env}/secrets/zitadel-api.env
+        required: false
+    secrets:
+      - zitadel_masterkey
+    environment:
+      ZITADEL_PORT: "8080"
+      ZITADEL_EXTERNALDOMAIN: auth.${PLUGINLAKE_DOMAIN:?set in .env.production}
+      ZITADEL_EXTERNALPORT: "443"
+      ZITADEL_EXTERNALSECURE: "true"
+      ZITADEL_TLS_ENABLED: "false"
+      <<: *zitadel-database
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: ${ZITADEL_ADMIN_USERNAME:?set in .env.production}
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: "false"
+      # Token for the login UI.
+      ZITADEL_FIRSTINSTANCE_LOGINCLIENTPATPATH: /bootstrap/login-client.pat
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_USERNAME: login-client
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_NAME: Login client
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_PAT_EXPIRATIONDATE: "2099-01-01T00:00:00Z"
+      # Token for pluginlake-init, which provisions the OIDC application.
+      ZITADEL_FIRSTINSTANCE_PATPATH: /bootstrap/admin.pat
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: pluginlake-init
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: pluginlake-init
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: "2099-01-01T00:00:00Z"
+      # oauth2-proxy accepts any verified email, so nobody may register themselves.
+      ZITADEL_DEFAULTINSTANCE_LOGINPOLICY_ALLOWREGISTER: "false"
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "true"
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI: https://auth.${PLUGINLAKE_DOMAIN:?set in .env.production}/ui/v2/login/
+      ZITADEL_OIDC_DEFAULTLOGINURLV2: https://auth.${PLUGINLAKE_DOMAIN:?set in .env.production}/ui/v2/login/login?authRequest=
+      ZITADEL_OIDC_DEFAULTLOGOUTURLV2: https://auth.${PLUGINLAKE_DOMAIN:?set in .env.production}/ui/v2/login/logout?post_logout_redirect=
+    volumes:
+      - ${PLUGINLAKE_HOME:?run just init-env}/bootstrap:/bootstrap
+    healthcheck:
+      test: ["CMD", "/app/zitadel", "ready"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+    depends_on:
+      zitadel-init:
+        condition: service_completed_successfully
+    networks: [edge-net, db-net]
+    restart: unless-stopped
+
+  zitadel-login:
+    logging: *default-logging
+    user: "${PLUGINLAKE_UID:?run just init-env}:${PLUGINLAKE_GID:?run just init-env}"
+    image: ghcr.io/zitadel/zitadel-login:v4.20.2@sha256:09c1a6ea523818401f0740cca0991fc09166e5c2f15c6999f2806d2b5f4845eb
+    # ZITADEL_SESSION_COOKIE_SECRET: the login UI reads this only from its environment.
+    env_file:
+      - path: ${PLUGINLAKE_HOME:?run just init-env}/secrets/zitadel-login.env
+        required: false
+    environment:
+      ZITADEL_API_URL: http://zitadel-api:8080
+      NEXT_PUBLIC_BASE_PATH: /ui/v2/login
+      ZITADEL_SERVICE_USER_TOKEN_FILE: /bootstrap/login-client.pat
+      CUSTOM_REQUEST_HEADERS: Host:auth.${PLUGINLAKE_DOMAIN:?set in .env.production},X-Forwarded-Proto:https
+    volumes:
+      - ${PLUGINLAKE_HOME:?run just init-env}/bootstrap:/bootstrap:ro
+    healthcheck:
+      test: ["CMD", "/bin/sh", "-c", "node /app/healthcheck.mjs http://localhost:3000/ui/v2/login/healthy"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+    depends_on:
+      zitadel-api:
+        condition: service_healthy
+    networks: [edge-net]
+    restart: unless-stopped
+
+  # Runs once after Zitadel is up: creates the OIDC application and writes the oauth2-proxy config.
+  # `just up` first runs it with --no-deps to generate the secrets (init_secrets).
+  pluginlake-init:
+    logging: *default-logging
+    user: "${PLUGINLAKE_UID:?run just init-env}:${PLUGINLAKE_GID:?run just init-env}"
+    build:
+      context: ../../
+      dockerfile: deploy/docker/pluginlake.Dockerfile
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: "no"
+    environment:
+      PLUGINLAKE_BOOTSTRAP_DOMAIN: ${PLUGINLAKE_DOMAIN:?set in .env.production}
+    volumes:
+      - ${PLUGINLAKE_HOME:?run just init-env}/bootstrap:/bootstrap
+      # Whole data folder: only used by `just up` for `python -m pluginlake.deploy.init_secrets`.
+      - ${PLUGINLAKE_HOME:?run just init-env}:/pluginlake-home
+    depends_on:
+      zitadel-api:
+        condition: service_healthy
+    command: ["python", "-m", "pluginlake.deploy.bootstrap"]
+    networks: [edge-net]
+
+  oauth2-proxy:
+    logging: *default-logging
+    user: "${PLUGINLAKE_UID:?run just init-env}:${PLUGINLAKE_GID:?run just init-env}"
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.6@sha256:c3415e8660af553f5e18f5d90db050614c02493c0ac6260ac59442f6d9b12048
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    command:
+      - --config=/bootstrap/oauth2-proxy.cfg
+      - --provider=oidc
+      - --oidc-issuer-url=https://auth.${PLUGINLAKE_DOMAIN:?set in .env.production}
+      - --http-address=0.0.0.0:4180
+      - --upstream=static://202
+      - --email-domain=*
+      - --reverse-proxy=true
+      - --set-xauthrequest=true
+      - --pass-access-token=true
+      - --skip-provider-button=true
+      - --skip-jwt-bearer-tokens=true
+      - --code-challenge-method=S256
+      - --cookie-name=_pluginlake_oauth2
+      - --cookie-domain=.${PLUGINLAKE_DOMAIN:?set in .env.production}
+      - --cookie-secure=true
+      - --cookie-samesite=lax
+      - --whitelist-domain=.${PLUGINLAKE_DOMAIN:?set in .env.production}
+      - --ssl-insecure-skip-verify=${OAUTH2_PROXY_INSECURE_TLS:?set in .env.production}
+    volumes:
+      - ${PLUGINLAKE_HOME:?run just init-env}/bootstrap:/bootstrap:ro
+    depends_on:
+      pluginlake-init:
+        condition: service_completed_successfully
+      traefik:
+        condition: service_healthy
+    networks: [edge-net]
+    restart: unless-stopped
+
 networks:
+  # Proxy and identity provider.
+  edge-net:
+  # Applications, reachable from outside only through the proxy.
+  app-net:
+  # Databases. Internal, so nothing on it can reach the outside world.
+  db-net:
+    internal: true
   # Only Prometheus and cAdvisor; app containers cannot reach cadvisor:8080.
   monitoring:
 
 secrets:
-  # Values come from the compose environment (.env.production.secrets), never from a container env file.
   postgres_password:
-    environment: POSTGRES_PASSWORD
+    file: ${PLUGINLAKE_HOME:?run just init-env}/secrets/postgres_password
   dagster_pg_password:
-    environment: DAGSTER_PG_PASSWORD
+    file: ${PLUGINLAKE_HOME:?run just init-env}/secrets/dagster_pg_password
   ducklake_pg_password:
-    environment: DUCKLAKE_PG_PASSWORD
+    file: ${PLUGINLAKE_HOME:?run just init-env}/secrets/ducklake_pg_password
   postgres_exporter_password:
-    environment: POSTGRES_EXPORTER_PASSWORD
+    file: ${PLUGINLAKE_HOME:?run just init-env}/secrets/postgres_exporter_password
   prometheus_remote_write_password:
-    environment: PROMETHEUS_REMOTE_WRITE_PASSWORD
-
-volumes:
-  dagster-postgres:
-  pluginlake-data:
-  prometheus-data:
+    file: ${PLUGINLAKE_HOME:?run just init-env}/secrets/prometheus_remote_write_password
+  marquez_db_password:
+    file: ${PLUGINLAKE_HOME:?run just init-env}/secrets/marquez_db_password
+  zitadel_db_password:
+    file: ${PLUGINLAKE_HOME:?run just init-env}/secrets/zitadel_db_password
+  zitadel_masterkey:
+    file: ${PLUGINLAKE_HOME:?run just init-env}/secrets/zitadel_masterkey

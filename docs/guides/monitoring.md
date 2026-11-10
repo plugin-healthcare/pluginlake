@@ -30,7 +30,8 @@ station_id = "ds-001"          # value of the `station` label on every metric
 `pluginlake up` then starts the compose profile `monitoring` (Prometheus, postgres-exporter, cAdvisor).
 `pluginlake down` always stops it.
 
-Prometheus is published on loopback only: <http://127.0.0.1:9090> (change the host port with `PROMETHEUS_PORT`).
+In the dev compose Prometheus is published on loopback only: <http://127.0.0.1:9090> (change the host port with `PROMETHEUS_PORT`).
+The production compose publishes no port: open `https://prometheus.<domain>` behind the sign-in (see [Edge](docker.md#edge)).
 Check that all targets are up under *Status > Targets* or with:
 
 ```bash
@@ -51,7 +52,7 @@ Metrics are pushed outbound with Prometheus `remote_write`, the same model vanta
     PROMETHEUS_REMOTE_WRITE_USERNAME=...
     ```
 
-   The password is a Docker secret, not part of `.env.monitoring`: set `PROMETHEUS_REMOTE_WRITE_PASSWORD` in `deploy/compose/.env` (dev, `pluginlake up`) or `deploy/compose/.env.production.secrets` (production).
+   The password is a Docker secret, not part of `.env.monitoring`: set `PROMETHEUS_REMOTE_WRITE_PASSWORD` in `deploy/compose/.env` (dev, `pluginlake up`) or the file `secrets/prometheus_remote_write_password` in the production data folder (`PLUGINLAKE_HOME`).
    Prometheus reads it from `/run/secrets/prometheus_remote_write_password` and refuses to start if the password is found in its environment.
 3. Run `pluginlake up` again. The Prometheus log shows `remote_write enabled to <scheme>://<host>` (path and query are not logged).
 
@@ -69,7 +70,7 @@ COMPOSE_PROFILES=monitoring just up -d
 ```
 
 Set `PROMETHEUS_STATION_ID` in `deploy/compose/.env.monitoring`.
-The exporter logs in as `POSTGRES_EXPORTER_USER` (`.env.production`, default `monitoring`) with the secret `POSTGRES_EXPORTER_PASSWORD` from `.env.production.secrets`; see [secrets](docker.md#secrets).
+The exporter logs in as `POSTGRES_EXPORTER_USER` (`.env.production`) with the secret `postgres_exporter_password`, which `pluginlake-db-init` creates as a `pg_monitor` role; see [secrets](docker.md#secrets).
 Compose refuses to start the profile when `POSTGRES_EXPORTER_PASSWORD` or `PROMETHEUS_REMOTE_WRITE_PASSWORD` is not set (the latter may be empty).
 Use a dedicated read-only database user for the exporter:
 
@@ -92,7 +93,7 @@ services:
 ```
 
 ```bash
-docker compose --env-file deploy/compose/.env.production --env-file deploy/compose/.env.production.secrets \
+docker compose --env-file deploy/compose/.env.production \
   -f deploy/compose/docker-compose.yaml -f deploy/compose/docker-compose.local.yaml --profile monitoring up -d
 ```
 

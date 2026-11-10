@@ -64,7 +64,7 @@ def test_metrics_not_published(compose_file: str):
     assert not any(port in str(p) for p in services["pluginlake"].get("ports", []))
     for name in MONITORING_SERVICES - {"prometheus"}:
         assert "ports" not in services[name]
-    assert all(str(p).startswith("127.0.0.1:") for p in services["prometheus"]["ports"])
+    assert all(str(p).startswith("127.0.0.1:") for p in services["prometheus"].get("ports", []))
 
 
 @pytest.mark.parametrize("compose_file", COMPOSE_FILES)

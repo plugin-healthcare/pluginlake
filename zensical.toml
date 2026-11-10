@@ -44,6 +44,7 @@ nav = [
         { "ADR-008: DSP Authorization" = "decisions/adr-008-dataspace-protocol-authz-authc-rbac.md" },
         { "ADR-009: Core + Project Plugin Architecture" = "decisions/adr-009-core-project-plugin-architecture.md" },
         { "ADR-010: Station Monitoring" = "decisions/adr-010-station-monitoring-prometheus.md" },
+        { "ADR-011: Identity Provider" = "decisions/adr-011-identity-provider.md" },
     ]},
     { "Development" = [
         { "Development" = "development/index.md" },

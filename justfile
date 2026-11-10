@@ -84,11 +84,29 @@ smoke-test-full:
 dev-local:
     uv run dg dev -f examples/titanic.py
 
-# Production compose: config from .env.production, passwords (Docker secrets) from .env.production.secrets
-_compose_prod := "docker compose --env-file deploy/compose/.env.production --env-file deploy/compose/.env.production.secrets -f deploy/compose/docker-compose.yaml"
+# Production compose: configuration from .env.production (secrets are files in PLUGINLAKE_HOME/secrets)
+_compose_prod := "docker compose --env-file deploy/compose/.env.production -f deploy/compose/docker-compose.yaml"
 
-# Start production environment
+# Create .env.production for the current user (never overwrites) and the data folder
+init-env:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd deploy/compose
+    [ ! -e .env.production ] || { echo ".env.production already exists"; exit 1; }
+    { grep -v '^PLUGINLAKE_[UG]ID=' .env.production.example; echo "PLUGINLAKE_UID=$(id -u)"; echo "PLUGINLAKE_GID=$(id -g)"; } > .env.production
+    chmod 600 .env.production
+    echo "Wrote deploy/compose/.env.production. Review it, then run: just up"
+
+# Start production environment (generates missing secrets first)
 up *args='':
+    #!/usr/bin/env bash
+    set -euo pipefail
+    home="deploy/compose/$(sed -n 's/^PLUGINLAKE_HOME=//p' deploy/compose/.env.production)"
+    # Created here so docker does not create the mount sources as root.
+    mkdir -p "$home"/{postgres,data,bootstrap,prometheus,marquez-db,secrets}
+    chmod 700 "$home" "$home/bootstrap" "$home/secrets"
+    {{ _compose_prod }} build pluginlake-init
+    {{ _compose_prod }} run --rm --no-deps pluginlake-init python -m pluginlake.deploy.init_secrets /pluginlake-home
     {{ _compose_prod }} up --build {{ args }}
 
 # Stop production environment

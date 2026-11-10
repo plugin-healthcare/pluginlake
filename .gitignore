@@ -238,3 +238,6 @@ __marimo__/
 .agents/memory/
 .agents/review/
 .agent/
+
+# Data of the production compose (bind mounts)
+.pluginlake/

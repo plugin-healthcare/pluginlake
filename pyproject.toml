@@ -27,6 +27,7 @@ dependencies = [
     "openlineage-python>=1.53.0",
     "prometheus-client>=0.23",
     "requests>=2.32.0",
+    "uvicorn>=0.30",
 ]
 
 [project.scripts]
