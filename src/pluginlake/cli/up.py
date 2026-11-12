@@ -47,7 +47,7 @@ def _build_override(config: StationConfig, config_path: Path) -> dict:
     volumes: list[str] = []
     for project in config.local_projects:
         host = (config_path.parent / project.path).resolve()  # ty: ignore[unsupported-operator]
-        volumes.append(f"{host}:{CONTAINER_PROJECTS_DIR}/{project.path.name}")  # ty: ignore[unresolved-attribute]
+        volumes.append(f"{host}:{CONTAINER_PROJECTS_DIR}/{project.path.name}")  # ty: ignore[missing-union-attribute]
 
     services: dict[str, dict] = {}
     for service in _MOUNTED_SERVICES:
