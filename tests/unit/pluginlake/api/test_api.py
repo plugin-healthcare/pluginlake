@@ -158,3 +158,11 @@ def test_user_custom():
     user = User(id="u1", name="Admin", roles={"admin", "viewer"})
     assert user.id == "u1"
     assert "admin" in user.roles
+
+
+def test_hub_links_to_each_configured_app(client, monkeypatch):
+    monkeypatch.setenv("PLUGINLAKE_HUB_DOMAIN", "node.example.org")
+    resp = client.get("/hub", headers={"X-Auth-Request-Groups": "dagster,api"})
+    assert resp.status_code == HTTPStatus.OK
+    assert 'href="https://dagster.node.example.org/"' in resp.text
+    assert "dashboard.node.example.org" not in resp.text

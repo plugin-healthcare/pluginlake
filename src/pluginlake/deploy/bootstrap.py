@@ -5,7 +5,9 @@ Runs once after Zitadel is healthy and removes the manual setup steps:
 1. Waits for the admin machine token that Zitadel writes on first start.
 2. Creates (or finds) the Zitadel project and the OIDC application for oauth2-proxy.
 3. Makes sure every protected hostname has a redirect URI.
-4. Writes the oauth2-proxy config file with the client credentials and cookie secret.
+4. Creates a project role per application, a webhook target that exposes the roles of a user
+   as ``groups`` claim, and grants the first admin all roles.
+5. Writes the oauth2-proxy config file with the client credentials and cookie secret.
 
 The run is idempotent: existing credentials in the config file are reused, and a new client
 secret is only generated when the file is missing or belongs to another client.
@@ -25,6 +27,10 @@ from pluginlake.utils.logger import get_logger, setup_logging
 logger = get_logger(__name__)
 
 _API = "/management/v1"
+_ACTIONS = "/v2/actions"
+_GROUPS_TARGET = "groups-claim"
+# Token functions in which the target adds the ``groups`` claim.
+_GROUPS_FUNCTIONS = ("preuserinfo", "preaccesstoken")
 
 
 def wait_for_file(path: Path, timeout: int) -> str:
@@ -149,6 +155,96 @@ def sync_redirect_uris(client: httpx.Client, project_id: str, app_id: str, hosts
     logger.info("Updated redirect URIs: %s", ", ".join(uris))
 
 
+def assert_project_roles(client: httpx.Client, project_id: str, name: str) -> None:
+    """Make Zitadel add the roles of the user to the tokens of this project."""
+    response = client.get(f"{_API}/projects/{project_id}")
+    response.raise_for_status()
+    if response.json()["project"].get("projectRoleAssertion"):
+        return
+    client.put(f"{_API}/projects/{project_id}", json={"name": name, "projectRoleAssertion": True}).raise_for_status()
+    logger.info("Enabled role assertion for project %r", name)
+
+
+def ensure_roles(client: httpx.Client, project_id: str, roles: list[str]) -> None:
+    """Create the project roles that do not exist yet."""
+    response = client.post(f"{_API}/projects/{project_id}/roles/_search", json={})
+    response.raise_for_status()
+    existing = {role["key"] for role in response.json().get("result") or []}
+    for role in roles:
+        if role in existing:
+            continue
+        client.post(
+            f"{_API}/projects/{project_id}/roles", json={"roleKey": role, "displayName": role}
+        ).raise_for_status()
+        logger.info("Created role %r", role)
+
+
+def ensure_groups_target(client: httpx.Client, endpoint: str, key_file: Path) -> str:
+    """Return the id of the call target that adds the ``groups`` claim, creating it when needed.
+
+    The target is created with ``interruptOnError`` so that Zitadel refuses to issue a token when
+    the webhook fails. The signing key is written to ``key_file`` for the webhook service.
+    """
+    search = {"filters": [{"targetNameFilter": {"targetName": _GROUPS_TARGET}}]}
+    response = client.post(f"{_ACTIONS}/targets/search", json=search)
+    response.raise_for_status()
+    found = (response.json().get("targets") or [None])[0]
+    if found is None:
+        body = {
+            "name": _GROUPS_TARGET,
+            "endpoint": endpoint,
+            "timeout": "5s",
+            "restCall": {"interruptOnError": True},
+        }
+        created = client.post(f"{_ACTIONS}/targets", json=body)
+        created.raise_for_status()
+        target_id, key = created.json()["id"], created.json()["signingKey"]
+        logger.info("Created target %r", _GROUPS_TARGET)
+    else:
+        target_id, key = found["id"], found["signingKey"]
+        if found["endpoint"] != endpoint:
+            client.patch(f"{_ACTIONS}/targets/{target_id}", json={"endpoint": endpoint}).raise_for_status()
+            logger.info("Updated endpoint of target %r", _GROUPS_TARGET)
+    if not key_file.is_file() or key_file.read_text().strip() != key:
+        key_file.parent.mkdir(parents=True, exist_ok=True)
+        key_file.write_text(key + "\n")
+        key_file.chmod(0o644)  # read by the non-root webhook user, the volume is not shared with other services
+        logger.info("Wrote %s", key_file)
+    return target_id
+
+
+def ensure_groups_executions(client: httpx.Client, target_id: str) -> None:
+    """Call the target in the token functions that carry the ``groups`` claim."""
+    for function in _GROUPS_FUNCTIONS:
+        client.put(
+            f"{_ACTIONS}/executions",
+            json={"condition": {"function": {"name": function}}, "targets": [target_id]},
+        ).raise_for_status()
+
+
+def grant_admin_roles(client: httpx.Client, project_id: str, admin_username: str, roles: list[str]) -> None:
+    """Give the first admin all roles, unless the admin already has a grant on the project."""
+    query = {
+        "queries": [{"userNameQuery": {"userName": f"{admin_username}@", "method": "TEXT_QUERY_METHOD_STARTS_WITH"}}]
+    }
+    response = client.post(f"{_API}/users/_search", json=query)
+    response.raise_for_status()
+    users = [user for user in response.json().get("result") or [] if "human" in user]
+    if not users:
+        logger.warning("Admin user %r not found, no roles granted", admin_username)
+        return
+    user_id = users[0]["id"]
+    grants = client.post(
+        f"{_API}/users/grants/_search",
+        json={"queries": [{"userIdQuery": {"userId": user_id}}, {"projectIdQuery": {"projectId": project_id}}]},
+    )
+    grants.raise_for_status()
+    if grants.json().get("result"):
+        return
+    client.post(f"{_API}/users/{user_id}/grants", json={"projectId": project_id, "roleKeys": roles}).raise_for_status()
+    logger.info("Granted roles %s to %r", ", ".join(roles), admin_username)
+
+
 def new_client_secret(client: httpx.Client, project_id: str, app_id: str) -> str:
     """Generate a fresh client secret for an existing app."""
     response = client.post(f"{_API}/projects/{project_id}/apps/{app_id}/oidc_config/_generate_client_secret", json={})
@@ -186,6 +282,11 @@ def bootstrap(client: httpx.Client, settings: BootstrapSettings) -> None:
     project_id = ensure_project(client, settings.project_name)
     app_id, client_id, client_secret = ensure_app(client, project_id, settings.app_name, hosts)
     sync_redirect_uris(client, project_id, app_id, hosts)
+    assert_project_roles(client, project_id, settings.project_name)
+    ensure_roles(client, project_id, settings.protected_subdomains)
+    target_id = ensure_groups_target(client, settings.groups_hook_url, settings.groups_hook_key_file)
+    ensure_groups_executions(client, target_id)
+    grant_admin_roles(client, project_id, settings.admin_username, settings.protected_subdomains)
 
     existing = read_proxy_config(settings.proxy_config_file)
     cookie_secret = existing.get("cookie_secret") or secrets.token_hex(16)

@@ -21,6 +21,11 @@ station_id = "ds-local-001"
 # cadvisor = false  # when the host already runs cAdvisor (e.g. a vantage6 host stack)
 # remote_write_url = "https://plugin.dhd.nl/prometheus/api/v1/write"
 
+# Production node (`just up`, see docs/guides/docker.md). `just up-dev` fills in pluginlake.localhost.
+[node]
+# domain = "pluginlake.example.org"
+# admin_username = "admin"
+
 [[projects]]
 name = "ehds-demo"
 # Dev: local sibling checkout, mounted and editable-installed into the images.

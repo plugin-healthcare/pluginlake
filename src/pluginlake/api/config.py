@@ -52,3 +52,24 @@ class MetricsSettings(BaseSettings):
     enabled: bool = Field(default=True, description="Collect HTTP metrics and serve them on the metrics port.")
     host: str = Field(default="127.0.0.1", description="Bind address of the internal metrics server.")
     port: int = Field(default=9464, ge=1, le=65535, description="Port of the internal metrics server.")
+
+
+class HubSettings(BaseSettings):
+    """Settings for the start page that links to the web interfaces of the node.
+
+    Environment variables are prefixed with ``PLUGINLAKE_HUB_``.
+    """
+
+    model_config = settings_config("PLUGINLAKE_HUB_")
+
+    domain: str = Field(default="pluginlake.localhost", description="Public domain of the node.")
+    apps: dict[str, str] = Field(
+        default={
+            "dagster": "Dagster: pipelines and runs",
+            "dashboard": "Dashboard: data station overview",
+            "api": "API: pluginlake endpoints",
+            "marquez": "Marquez: data lineage (profile lineage)",
+            "prometheus": "Prometheus: metrics (profile monitoring)",
+        },
+        description="Subdomain and description of each linked web interface.",
+    )

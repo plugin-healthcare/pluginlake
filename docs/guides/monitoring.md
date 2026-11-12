@@ -70,7 +70,7 @@ COMPOSE_PROFILES=monitoring just up -d
 ```
 
 Set `PROMETHEUS_STATION_ID` in `deploy/compose/.env.monitoring`.
-The exporter logs in as `POSTGRES_EXPORTER_USER` (`.env.production`) with the secret `postgres_exporter_password`, which `pluginlake-db-init` creates as a `pg_monitor` role; see [secrets](docker.md#secrets).
+The exporter logs in as the fixed role `monitoring` with the secret `postgres_exporter_password`, which `pluginlake-db-init` creates as a `pg_monitor` role; see [secrets](docker.md#secrets).
 Compose refuses to start the profile when `POSTGRES_EXPORTER_PASSWORD` or `PROMETHEUS_REMOTE_WRITE_PASSWORD` is not set (the latter may be empty).
 Use a dedicated read-only database user for the exporter:
 
@@ -93,7 +93,7 @@ services:
 ```
 
 ```bash
-docker compose --env-file deploy/compose/.env.production \
+docker compose --env-file .pluginlake/compose.env \
   -f deploy/compose/docker-compose.yaml -f deploy/compose/docker-compose.local.yaml --profile monitoring up -d
 ```
 

@@ -62,9 +62,10 @@ The spike shows that it works with the same oauth2-proxy and Traefik setup.
 To keep switching cheap, the rest of the stack only depends on standard OIDC:
 
 - Applications and oauth2-proxy know an issuer URL, a client id and a client secret, nothing provider-specific.
-- Access is based on a `groups` claim, not on Zitadel project roles or Actions.
+- Access is based on a `groups` claim that oauth2-proxy checks per application with `allowed_groups`.
+  Zitadel produces the claim from project roles by calling the small service `zitadel-groups-hook` (Actions v2, fail closed), whose target `pluginlake-init` creates.
 - Provisioning of the client, redirect URIs and first admin is limited to `pluginlake-init`, which is the only code that changes when the provider changes.
-- No code of ours calls the Zitadel API after the bootstrap.
+- No code of ours calls the Zitadel API after the bootstrap. Zitadel only calls the groups hook.
 
 The setup is described in the [Edge](../guides/docker.md#edge) section of the Docker guide.
 
@@ -91,7 +92,11 @@ If a hospital or a policy rejects AGPL software, we also switch.
 - Smallest footprint of the options (about 174 MiB against about 510 MiB for Keycloak), which leaves the RAM for compute.
 - AGPL-3.0 is acceptable while we run it unmodified, but a customer or auditor may still reject it, and then we switch to Keycloak.
 - Switching means a new provisioning step in `pluginlake-init` (a realm import for Keycloak), new compose services and users re-created in the new provider.
-- Zitadel reads its database and admin passwords only from the environment, so these come through an `env_file`.
+- Zitadel reads its database and admin passwords from YAML files (`--config`, `--steps`), so they are mounted as secrets like the rest of the stack, and the login UI sets its cookie secret from a file in its entrypoint.
+- Users, their passwords and their access live in Zitadel, and later also in contracts. Our configuration holds no user data.
+- The only user we create is the first admin, with a generated password that Zitadel always forces to change at the first login.
+- Machine users of Zitadel (`pluginlake-init` and the login client) authenticate the bootstrap.
+  Machine users can also serve as a first trust between a hub and a data station, until the Nuts decision is made.
 - Fine-grained access follows the data contracts in our own layer (DSP, ODRL), with the provider supplying identities, groups and claims.
 - Access starts per service or application, and profiles follow later on top of that.
 
@@ -130,7 +135,7 @@ Authentik was not run.
 | Provisioning | Realm import: realm, clients, users, groups and the groups mapper from 1 JSON file, no own code | Management API calls from `pluginlake-init` |
 | Secrets | Database and bootstrap admin password from a mounted `keycloak.conf` (0400), no environment variables | Only as environment variables (`env_file`) |
 | Federation | Login through a second OIDC provider worked, the user is created on first login | Not tested |
-| Groups | `groups` claim in the token per user, usable with `--allowed-group` | Not tested |
+| Groups | `groups` claim in the token per user, usable with `--allowed-group` | Project roles plus the Actions v2 call target `groups-claim` (project role assertion on) give a `groups` claim. A user with only the role `dagster` opens Dagster and gets 403 on the other applications |
 | Machine tokens | Client credentials work, tokens last 300 s, new client secret invalidates the old one, adding a signing key publishes it in the JWKS next to the old key | Not tested |
 | Audit | Login events with user, IP and time are free, retention is configurable, the admin API lists them | Event store (not tested) |
 | Clustering | 2 replicas without sticky sessions: a refresh token from replica 1 works on replica 2, and logins keep working after stopping replica 1 | Not tested |

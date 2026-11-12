@@ -84,32 +84,33 @@ smoke-test-full:
 dev-local:
     uv run dg dev -f examples/titanic.py
 
-# Production compose: configuration from .env.production (secrets are files in PLUGINLAKE_HOME/secrets)
-_compose_prod := "docker compose --env-file deploy/compose/.env.production -f deploy/compose/docker-compose.yaml"
+# Production compose: the node data folder (secrets, compose.env) is prepared by `pluginlake setup`
+home := env("PLUGINLAKE_HOME", justfile_directory() / ".pluginlake")
+_compose_prod := "docker compose --env-file " + home + "/compose.env -f deploy/compose/docker-compose.yaml"
 
-# Create .env.production for the current user (never overwrites) and the data folder
-init-env:
+# Prepare the node from pluginlake.toml (folders, secrets, compose.env) in a container as the host user. Pass --dev for development defaults
+setup *args='':
     #!/usr/bin/env bash
     set -euo pipefail
-    cd deploy/compose
-    [ ! -e .env.production ] || { echo ".env.production already exists"; exit 1; }
-    { grep -v '^PLUGINLAKE_[UG]ID=' .env.production.example; echo "PLUGINLAKE_UID=$(id -u)"; echo "PLUGINLAKE_GID=$(id -g)"; } > .env.production
-    chmod 600 .env.production
-    echo "Wrote deploy/compose/.env.production. Review it, then run: just up"
+    # Created here so docker does not create the mount source as root.
+    mkdir -p "{{ home }}"
+    chmod 700 "{{ home }}"
+    docker build --quiet -f deploy/docker/pluginlake.Dockerfile -t pluginlake-setup .
+    docker run --rm --user "$(id -u):$(id -g)" --network none --cap-drop ALL --read-only \
+        -v "{{ home }}:/pluginlake-home" -v "{{ justfile_directory() }}/pluginlake.toml:/pluginlake.toml:ro" \
+        pluginlake-setup pluginlake setup --config /pluginlake.toml --home /pluginlake-home --host-home "{{ home }}" {{ args }}
 
-# Start production environment (generates missing secrets first)
+# Start the production stack
 up *args='':
-    #!/usr/bin/env bash
-    set -euo pipefail
-    home="deploy/compose/$(sed -n 's/^PLUGINLAKE_HOME=//p' deploy/compose/.env.production)"
-    # Created here so docker does not create the mount sources as root.
-    mkdir -p "$home"/{postgres,data,bootstrap,prometheus,marquez-db,secrets}
-    chmod 700 "$home" "$home/bootstrap" "$home/secrets"
-    {{ _compose_prod }} build pluginlake-init
-    {{ _compose_prod }} run --rm --no-deps pluginlake-init python -m pluginlake.deploy.init_secrets /pluginlake-home
+    just setup
     {{ _compose_prod }} up --build {{ args }}
 
-# Stop production environment
+# Start the stack with development defaults (pluginlake.localhost, secrets also in secrets.env)
+up-dev *args='':
+    just setup --dev
+    {{ _compose_prod }} up --build {{ args }}
+
+# Stop the production stack
 down *args='':
     {{ _compose_prod }} down {{ args }}
 
