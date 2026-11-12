@@ -8,6 +8,7 @@ For the Titanic example without Docker, see [Getting started](getting-started.md
 - [Docker](https://docs.docker.com/get-docker/) with Compose, for example Docker Desktop, Colima or Docker Engine
 - [just](https://github.com/casey/just)
 - [mkcert](https://github.com/FiloSottile/mkcert), only for the development start, to get a locally trusted certificate
+- A Docker Hub account with `docker login dhi.io` done once, because the images are built on hardened base images (see [Docker](docker.md#hardened-base-images))
 
 On macOS with Colima, keep the checkout under your home folder, because Colima only shares that folder with the containers.
 
