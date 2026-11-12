@@ -2,6 +2,7 @@
 
 from unittest.mock import MagicMock
 
+import duckdb
 import polars as pl
 import pytest
 from dagster import AssetKey, TableColumn, TableSchema
@@ -49,7 +50,7 @@ def test_three_segment_key_joins_remaining_with_underscore(io_mgr):
 def test_handle_output_creates_schema_and_table(mock_conn, io_mgr):
     context = MagicMock()
     context.asset_key = AssetKey(["omop", "condition_era"])
-    mock_conn.sql.return_value.fetchone.return_value = (2,)
+    mock_conn.execute.return_value.fetchone.return_value = (2,)
 
     df = pl.DataFrame({"id": [1, 2], "name": ["a", "b"]})
     io_mgr.handle_output(context, df)
@@ -63,13 +64,13 @@ def test_handle_output_creates_schema_and_table(mock_conn, io_mgr):
     mock_conn.unregister.assert_called_once_with("_data")
 
     # Row count query after write
-    mock_conn.sql.assert_called_once_with(f"SELECT COUNT(*) FROM {CATALOG}.omop.condition_era")
+    mock_conn.execute.assert_any_call(f"SELECT COUNT(*) FROM {CATALOG}.omop.condition_era")
 
 
 def test_handle_output_single_segment_uses_main(mock_conn, io_mgr):
     context = MagicMock()
     context.asset_key = AssetKey(["titanic_raw"])
-    mock_conn.sql.return_value.fetchone.return_value = (2,)
+    mock_conn.execute.return_value.fetchone.return_value = (2,)
 
     df = pl.DataFrame({"survived": [True, False]})
     io_mgr.handle_output(context, df)
@@ -83,7 +84,7 @@ def test_handle_output_single_segment_uses_main(mock_conn, io_mgr):
 def test_handle_output_accepts_lazyframe(mock_conn, io_mgr):
     context = MagicMock()
     context.asset_key = AssetKey(["omop", "condition_era"])
-    mock_conn.sql.return_value.fetchone.return_value = (2,)
+    mock_conn.execute.return_value.fetchone.return_value = (2,)
 
     lf = pl.DataFrame({"id": [1, 2], "name": ["a", "b"]}).lazy()
     io_mgr.handle_output(context, lf)
@@ -94,13 +95,25 @@ def test_handle_output_accepts_lazyframe(mock_conn, io_mgr):
     mock_conn.unregister.assert_called_once_with("_data")
 
     # Same row count query for lazy frames
-    mock_conn.sql.assert_called_once_with(f"SELECT COUNT(*) FROM {CATALOG}.omop.condition_era")
+    mock_conn.execute.assert_any_call(f"SELECT COUNT(*) FROM {CATALOG}.omop.condition_era")
+
+
+def test_handle_output_records_row_count_with_real_connection():
+    conn = duckdb.connect()
+    conn.execute(f"ATTACH ':memory:' AS {CATALOG}")
+    context = MagicMock()
+    context.asset_key = AssetKey(["omop", "condition_era"])
+
+    DuckLakeIOManager(conn).handle_output(context, pl.DataFrame({"id": [1, 2, 3]}))
+
+    metadata = context.add_output_metadata.call_args.args[0]
+    assert metadata["dagster/row_count"] == 3
 
 
 def test_handle_output_attaches_row_count_and_schema(mock_conn, io_mgr):
     context = MagicMock()
     context.asset_key = AssetKey(["omop", "condition_era"])
-    mock_conn.sql.return_value.fetchone.return_value = (2,)
+    mock_conn.execute.return_value.fetchone.return_value = (2,)
     mock_conn.execute.return_value.fetchall.return_value = [("id", "BIGINT"), ("name", "VARCHAR")]
 
     io_mgr.handle_output(context, pl.DataFrame({"id": [1, 2], "name": ["a", "b"]}))
