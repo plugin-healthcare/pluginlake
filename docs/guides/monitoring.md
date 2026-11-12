@@ -63,15 +63,10 @@ A central Prometheus that can reach the station can alternatively federate from 
 
 ## Production compose
 
-The production compose (`deploy/compose/docker-compose.yaml`) has the same profile, started manually:
-
-```bash
-COMPOSE_PROFILES=monitoring just up -d
-```
-
-Set `PROMETHEUS_STATION_ID` in `deploy/compose/.env.monitoring`.
+In the production compose (`deploy/compose/docker-compose.yaml`) monitoring is a core component and starts with `just up`.
+`pluginlake setup` writes the station label, the cAdvisor switch and the remote-write URL from `[monitoring]` in `pluginlake.toml` to `compose.env`.
 The exporter logs in as the fixed role `monitoring` with the secret `postgres_exporter_password`, which `pluginlake-db-init` creates as a `pg_monitor` role; see [secrets](docker.md#secrets).
-Compose refuses to start the profile when `POSTGRES_EXPORTER_PASSWORD` or `PROMETHEUS_REMOTE_WRITE_PASSWORD` is not set (the latter may be empty).
+Compose refuses to start when `POSTGRES_EXPORTER_PASSWORD` or `PROMETHEUS_REMOTE_WRITE_PASSWORD` is not set (the latter may be empty).
 Use a dedicated read-only database user for the exporter:
 
 ```sql
@@ -94,7 +89,7 @@ services:
 
 ```bash
 docker compose --env-file .pluginlake/compose.env \
-  -f deploy/compose/docker-compose.yaml -f deploy/compose/docker-compose.local.yaml --profile monitoring up -d
+  -f deploy/compose/docker-compose.yaml -f deploy/compose/docker-compose.local.yaml up -d
 ```
 
 `privileged` gives the container full access to the host devices.
@@ -105,7 +100,7 @@ cAdvisor already has root-equivalent access through the Docker socket, so this a
 
 | Setting | Where | Default | Description |
 |---------|-------|---------|-------------|
-| `enabled` | `[monitoring]` | `false` | Start the `monitoring` compose profile. |
+| `enabled` | `[monitoring]` | `false` | Only for the development flow `pluginlake up`: start the `monitoring` profile. The production compose always runs it. |
 | `station_id` | `[monitoring]` | `pluginlake` | `station` label on every metric (`[A-Za-z0-9._-]`). |
 | `cadvisor` | `[monitoring]` | `true` | Collect container metrics with cAdvisor. |
 | `remote_write_url` | `[monitoring]` | unset | Central remote-write endpoint. |

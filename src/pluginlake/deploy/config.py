@@ -123,10 +123,6 @@ class NodeSettings(BaseModel):
         pattern=r"^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$",
         description="Base domain: services live on api., dagster., dashboard., marquez., prometheus. and auth. below it.",
     )
-    insecure_tls: bool = Field(
-        default=False,
-        description="Skip verification of Traefik's self-signed certificate in oauth2-proxy (local use only).",
-    )
     admin_username: str = Field(
         default="admin",
         pattern=r"^[A-Za-z0-9._-]+$",

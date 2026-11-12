@@ -16,7 +16,7 @@ from pluginlake.deploy.bootstrap import (
     redirect_uris,
     write_proxy_config,
 )
-from pluginlake.deploy.config import NodeSettings, load_init_config
+from pluginlake.deploy.config import NodeSettings, StationConfig, load_init_config
 from pluginlake.deploy.config_bootstrap import BootstrapSettings
 from pluginlake.deploy.setup import compose_env
 
@@ -59,10 +59,12 @@ def test_no_service_mounts_the_docker_socket():
 
 def test_every_required_compose_variable_is_written_by_setup():
     text = (COMPOSE_DIR / "docker-compose.yaml").read_text(encoding="utf-8")
-    required = set(re.findall(r"\$\{([A-Z_0-9]+):\?", text))
+    required = set(re.findall(r"\$\{([A-Z_0-9]+):?\?", text))
     written = {
         line.split("=")[0]
-        for line in compose_env(NodeSettings(domain="x.nl"), uid=1, gid=1, host_home=Path("/h")).splitlines()
+        for line in compose_env(
+            NodeSettings(domain="x.nl"), StationConfig(), owner=(1, 1), host_home=Path("/h")
+        ).splitlines()
     }
     assert required <= written
 

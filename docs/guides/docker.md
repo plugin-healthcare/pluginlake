@@ -15,14 +15,14 @@ pluginlake uses separate containers for each concern:
 | **pluginlake** | `pluginlake.Dockerfile` | FastAPI service |
 | **pluginlake-ui** | `ui.Dockerfile` (`APP=datastation`) | Datastation Streamlit dashboard |
 | **pluginlake-central** | `ui.Dockerfile` (`APP=central`) | Central aggregation dashboard |
-| **prometheus** | `quay.io/prometheus/prometheus` (pre-built) | Metrics store, profile `monitoring` |
-| **postgres-exporter** | `quay.io/prometheuscommunity/postgres-exporter` (pre-built) | Postgres metrics, profile `monitoring` |
-| **cadvisor** | `ghcr.io/google/cadvisor` (pre-built) | Container metrics, profile `monitoring` |
-| **marquez-db** | `dhi.io/postgres:17-alpine3.24` (pre-built) | Marquez database (profile `lineage`) |
-| **marquez** | `marquezproject/marquez:0.51.1` (pre-built) | OpenLineage receiver API (profile `lineage`) |
-| **marquez-web** | `marquezproject/marquez-web:0.51.1` (pre-built) | Lineage web UI, host loopback only (profile `lineage`) |
+| **prometheus** | `quay.io/prometheus/prometheus` (pre-built) | Metrics store |
+| **postgres-exporter** | `quay.io/prometheuscommunity/postgres-exporter` (pre-built) | Postgres metrics |
+| **cadvisor** | `ghcr.io/google/cadvisor` (pre-built) | Container metrics |
+| **marquez-db** | `dhi.io/postgres:17-alpine3.24` (pre-built) | Marquez database |
+| **marquez** | `marquezproject/marquez:0.51.1` (pre-built) | OpenLineage receiver API |
+| **marquez-web** | `marquezproject/marquez-web:0.51.1` (pre-built) | Lineage web UI, host loopback only |
 
-The monitoring services only start with `--profile monitoring` (or `[monitoring] enabled = true` with `pluginlake up`); see the [monitoring guide](monitoring.md).
+Prometheus and Marquez are core components and always start with the production compose; `[station]` and `[monitoring]` in `pluginlake.toml` set the lineage namespace, the station label, cAdvisor and remote write, see the [monitoring guide](monitoring.md).
 
 In development, `dagster.dev.Dockerfile` replaces the webserver, daemon, and code-server with a single all-in-one container running `dagster dev`. The UI containers use `ui.dev.Dockerfile` with hot reload. Both dashboards share one Dockerfile; the build arguments `APP` (`datastation` or `central`) and `PORT` (8501 or 8502) select the dashboard.
 
@@ -220,11 +220,15 @@ flowchart LR
 | `api.<domain>` | pluginlake API | Yes |
 | `dagster.<domain>` | Dagster webserver | Yes |
 | `dashboard.<domain>` | Streamlit dashboard | Yes |
-| `marquez.<domain>` | Marquez web (profile `lineage`) | Yes |
-| `prometheus.<domain>` | Prometheus (profile `monitoring`) | Yes |
+| `marquez.<domain>` | Marquez web | Yes |
+| `prometheus.<domain>` | Prometheus | Yes |
 
-`PLUGINLAKE_DOMAIN` sets the domain; the default `pluginlake.localhost` resolves to the local machine in browsers and uses the self-signed certificate of Traefik.
-Set `OAUTH2_PROXY_INSECURE_TLS=true` only for that case.
+`[node] domain` in `pluginlake.toml` sets the domain.
+`just setup --dev` uses `pluginlake.localhost`, which resolves to the local machine in browsers, and creates a certificate for it with [mkcert](https://github.com/FiloSottile/mkcert) in `tls/` of the data folder.
+Install mkcert first; setup runs `mkcert -install` once so browsers trust it, and oauth2-proxy trusts the same root CA.
+
+Traefik reads its certificate from `tls/tls.yaml` in the data folder.
+For a real domain, put your own `tls.yaml` with `certFile` and `keyFile` entries (paths below `/tls`) and the certificate files there; setup does not overwrite it.
 
 On first start `pluginlake-init` waits for Zitadel, creates the project and the OIDC application with the Management API and writes the oauth2-proxy configuration to the `bootstrap` folder, so there are no manual steps.
 The first admin is `ZITADEL_ADMIN_USERNAME` with the generated password in `secrets/zitadel_admin_password`.
@@ -349,8 +353,8 @@ All containers run as the host user (`PLUGINLAKE_UID`, `PLUGINLAKE_GID`) and kee
 ├── secrets/       # secrets written by pluginlake setup, mode 0700
 ├── bootstrap/     # tokens and oauth2-proxy config written by Zitadel and pluginlake-init, mode 0700
 ├── postgres/      # database cluster
-├── marquez-db/    # lineage database (profile lineage)
-├── prometheus/    # metrics (profile monitoring)
+├── marquez-db/    # lineage database
+├── prometheus/    # metrics
 ├── data/          # DuckLake storage and Dagster state
 └── passwd         # passwd entry for the host user, mounted into the Postgres containers
 ```

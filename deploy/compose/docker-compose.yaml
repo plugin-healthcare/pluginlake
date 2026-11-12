@@ -1,14 +1,3 @@
-# Secrets are files in ${PLUGINLAKE_HOME}/secrets, written by `pluginlake setup` before compose starts, and mounted at
-# /run/secrets/<name> (docs/guides/docker.md#secrets). The uid, gid, home and domain come from its compose.env.
-# Start with: just up
-#
-# Edge: Traefik is the only service that publishes ports. Every web UI sits behind
-# oauth2-proxy forward auth with Zitadel as identity provider (docs/guides/docker.md#edge).
-# Networks: edge-net (proxy, identity provider), app-net (applications, reachable via the proxy),
-# db-net (internal, databases only), monitoring (Prometheus and cAdvisor).
-# Containers run as the host user (PLUGINLAKE_UID/GID) and keep their data below PLUGINLAKE_HOME,
-# so the data survives `docker compose down -v` and `docker volume prune`.
-
 x-zitadel-database: &zitadel-database
   ZITADEL_DATABASE_POSTGRES_HOST: postgres
   ZITADEL_DATABASE_POSTGRES_PORT: "5432"
@@ -147,6 +136,9 @@ services:
       DUCKLAKE_PG_PORT: "5432"
       DUCKLAKE_PG_DB: ducklake
       PLUGINLAKE_STORAGE_BASE_DIR: .data/storage
+      # The lineage sensor sends an OpenLineage event per run to Marquez, which is part of every node.
+      OPENLINEAGE_URL: http://marquez:5000
+      OPENLINEAGE_NAMESPACE: ${PLUGINLAKE_LINEAGE_NAMESPACE:?set by just setup}
     secrets:
       - ducklake_pg_password
       # Runs execute in this container and write their events to the Dagster instance.
@@ -227,14 +219,12 @@ services:
     networks: [app-net]
 
   # ---------------------------------------------------------------------------
-  # Monitoring (profile `monitoring`, ADR-010). Enabled via [monitoring] in
-  # pluginlake.toml, or manually with `--profile monitoring`. Prometheus is
-  # reached at prometheus.<domain> behind the proxy; the exporters and the API metrics port stay internal.
+  # Monitoring (ADR-010), part of every node and configured by [monitoring] in pluginlake.toml.
+  # Prometheus is reached at prometheus.<domain> behind the proxy; the exporters and the API metrics port stay internal.
   # ---------------------------------------------------------------------------
   prometheus:
     logging: *default-logging
     image: quay.io/prometheus/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2
-    profiles: [monitoring]
     user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
     entrypoint: ["/bin/sh", "/etc/prometheus/pluginlake/entrypoint.sh"]
     env_file:
@@ -243,6 +233,9 @@ services:
         required: false
     environment:
       PROMETHEUS_COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME}
+      PROMETHEUS_STATION_ID: ${PROMETHEUS_STATION_ID:?set by just setup}
+      PROMETHEUS_SCRAPE_CADVISOR: ${PROMETHEUS_SCRAPE_CADVISOR:?set by just setup}
+      PROMETHEUS_REMOTE_WRITE_URL: ${PROMETHEUS_REMOTE_WRITE_URL?set by just setup}
     secrets:
       # Referenced directly as basic_auth.password_file; may be empty without remote write.
       - prometheus_remote_write_password
@@ -261,7 +254,6 @@ services:
     logging: *default-logging
     user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
     image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1@sha256:ac5ec343104fae0e2d84a27bb8d69b38430a11910c5382cad85d478d2bab713e
-    profiles: [monitoring]
     command:
       # Per-table collectors would turn table names into labels; table names can
       # derive from uploaded files, so they stay off.
@@ -285,7 +277,6 @@ services:
   cadvisor:
     logging: *default-logging
     image: ghcr.io/google/cadvisor:v0.60.6@sha256:b8e7d1093144fd088f425ff003d75a4aa405de075db78dae3bc563730b1bd07a
-    profiles: [monitoring]
     command:
       - --docker_only=true
       - --housekeeping_interval=30s
@@ -310,7 +301,7 @@ services:
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
-  # Lineage (profile `lineage`, ADR-007). Marquez has no authentication of its own,
+  # Lineage (ADR-007), part of every node. Marquez has no authentication of its own,
   # so the web UI is only reachable at marquez.<domain> behind the proxy.
   # OpenLineage endpoint inside the compose network: http://marquez:5000/api/v1/lineage
   # ---------------------------------------------------------------------------
@@ -318,7 +309,6 @@ services:
     logging: *default-logging
     user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
     image: dhi.io/postgres:17-alpine3.24
-    profiles: [lineage]
     environment:
       POSTGRES_USER: marquez
       POSTGRES_DB: marquez
@@ -342,7 +332,6 @@ services:
     logging: *default-logging
     user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
     image: marquezproject/marquez:0.51.1
-    profiles: [lineage]
     # Marquez reads the password only from the environment: the entrypoint exports it from the secret file.
     entrypoint:
       - bash
@@ -375,7 +364,6 @@ services:
     logging: *default-logging
     user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
     image: marquezproject/marquez-web:0.51.1
-    profiles: [lineage]
     environment:
       MARQUEZ_HOST: marquez
       MARQUEZ_PORT: "5000"
@@ -409,7 +397,10 @@ services:
       PLUGINLAKE_DOMAIN: ${PLUGINLAKE_DOMAIN:?set by just setup}
     volumes:
       - ./traefik/traefik.yaml:/etc/traefik/traefik.yaml:ro
-      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      # Single files: the file provider does not read subfolders.
+      - ./traefik/dynamic/routes.yaml:/etc/traefik/dynamic/routes.yaml:ro
+      - ${PLUGINLAKE_HOME:?run just setup}/tls/tls.yaml:/etc/traefik/dynamic/tls.yaml:ro
+      - ${PLUGINLAKE_HOME:?run just setup}/tls:/tls:ro
     healthcheck:
       test: ["CMD", "traefik", "healthcheck", "--ping"]
       interval: 5s
@@ -593,8 +584,11 @@ services:
       - --cookie-secure=true
       - --cookie-samesite=lax
       - --whitelist-domain=.${PLUGINLAKE_DOMAIN:?set by just setup}
-      - --ssl-insecure-skip-verify=${OAUTH2_PROXY_INSECURE_TLS:?set by just setup}
+    environment:
+      # The mkcert root CA in development, empty for the system roots.
+      SSL_CERT_FILE: ${OAUTH2_PROXY_SSL_CERT_FILE?set by just setup}
     volumes:
+      - ${PLUGINLAKE_HOME:?run just setup}/tls:/tls:ro
       - ${PLUGINLAKE_HOME:?run just setup}/bootstrap:/bootstrap:ro
     depends_on:
       pluginlake-init:

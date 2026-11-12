@@ -10,7 +10,7 @@ readable ``secrets.env``.
 import os
 from pathlib import Path
 
-from pluginlake.deploy.config import NodeSettings, load_init_config, load_station_config
+from pluginlake.deploy.config import NodeSettings, StationConfig, load_init_config, load_station_config
 from pluginlake.deploy.init_secrets import init_home
 from pluginlake.utils.logger import get_logger
 
@@ -18,6 +18,10 @@ logger = get_logger(__name__)
 
 DEV_DOMAIN = "pluginlake.localhost"
 COMPOSE_ENV = "compose.env"
+TLS_DIR = "tls"
+TLS_CERT, TLS_KEY, TLS_CA = "cert.pem", "key.pem", "ca.pem"
+TLS_FILE_CONFIG = "tls.yaml"
+CONTAINER_TLS_DIR = "/tls"
 DEV_SECRETS_ENV = "secrets.env"
 
 
@@ -35,34 +39,87 @@ def resolve_node(node: NodeSettings, *, dev: bool) -> NodeSettings:
         ValueError: If no domain is configured outside development.
     """
     if dev:
-        return node.model_copy(update={"domain": node.domain or DEV_DOMAIN, "insecure_tls": True})
+        return node.model_copy(update={"domain": node.domain or DEV_DOMAIN})
     if node.domain is None:
         msg = "[node] domain is required in pluginlake.toml (use --dev for pluginlake.localhost)."
         raise ValueError(msg)
     return node
 
 
-def compose_env(node: NodeSettings, *, uid: int, gid: int, host_home: Path) -> str:
+def tls_file_config(*, dev: bool) -> str:
+    """Render the Traefik file-provider config for the node certificate.
+
+    Args:
+        dev: Whether the node is a development node, which serves the mkcert certificate.
+
+    Returns:
+        YAML for ``tls/tls.yaml``. Outside development it is empty, so Traefik uses what the operator
+        configures in its static config.
+    """
+    if not dev:
+        return "{}\n"
+    return f"tls:\n  certificates:\n    - certFile: {CONTAINER_TLS_DIR}/{TLS_CERT}\n      keyFile: {CONTAINER_TLS_DIR}/{TLS_KEY}\n"
+
+
+def compose_env(
+    node: NodeSettings,
+    config: StationConfig,
+    *,
+    owner: tuple[int, int],
+    host_home: Path,
+    dev: bool = False,
+) -> str:
     """Render the values compose needs at parse time as a dotenv file.
 
     Args:
         node: Resolved node settings.
-        uid: User id the containers run as.
-        gid: Group id the containers run as.
+        config: The station config, for the lineage namespace and Prometheus settings.
+        owner: User id and group id the containers run as.
         host_home: The data folder as the Docker host sees it.
+        dev: Trust the mkcert root CA in oauth2-proxy.
 
     Returns:
         Content of ``compose.env``.
     """
     values = {
-        "PLUGINLAKE_UID": str(uid),
-        "PLUGINLAKE_GID": str(gid),
+        "PLUGINLAKE_UID": str(owner[0]),
+        "PLUGINLAKE_GID": str(owner[1]),
         "PLUGINLAKE_HOME": str(host_home),
         "PLUGINLAKE_DOMAIN": node.domain,
-        "OAUTH2_PROXY_INSECURE_TLS": str(node.insecure_tls).lower(),
+        "OAUTH2_PROXY_SSL_CERT_FILE": f"{CONTAINER_TLS_DIR}/{TLS_CA}" if dev else "",
         "ZITADEL_ADMIN_USERNAME": node.admin_username,
+        "PLUGINLAKE_LINEAGE_NAMESPACE": config.station.lineage_namespace,
+        "PROMETHEUS_STATION_ID": config.monitoring.station_id,
+        "PROMETHEUS_SCRAPE_CADVISOR": str(config.monitoring.cadvisor).lower(),
+        "PROMETHEUS_REMOTE_WRITE_URL": config.monitoring.remote_write_url or "",
     }
     return "".join(f"{key}='{value}'\n" for key, value in values.items())
+
+
+def prepare_tls(home: Path, *, dev: bool) -> bool:
+    """Create the ``tls`` folder and its Traefik config.
+
+    In development the mkcert files (``cert.pem``, ``key.pem``, ``ca.pem``, written by ``just setup --dev``) must exist.
+    Outside development an existing ``tls.yaml`` is the operator's own and stays as it is.
+
+    Args:
+        home: The data folder.
+        dev: Whether the node is a development node.
+
+    Returns:
+        False if a development certificate is missing.
+    """
+    tls_dir = home / TLS_DIR
+    tls_dir.mkdir(mode=0o700, exist_ok=True)
+    if dev:
+        missing = [name for name in (TLS_CERT, TLS_KEY, TLS_CA) if not (tls_dir / name).is_file()]
+        if missing:
+            logger.error("Missing %s in %s: run `just setup --dev`, which creates them with mkcert.", missing, tls_dir)
+            return False
+    config_file = tls_dir / TLS_FILE_CONFIG
+    if dev or not config_file.exists():
+        config_file.write_text(tls_file_config(dev=dev), encoding="utf-8")
+    return True
 
 
 def _dev_secrets_env(secrets_dir: Path) -> str:
@@ -89,7 +146,8 @@ def run_setup(config_path: Path, home: Path, host_home: Path | None = None, *, d
         Process exit code.
     """
     try:
-        node = resolve_node(load_station_config(config_path).node, dev=dev)
+        station = load_station_config(config_path)
+        node = resolve_node(station.node, dev=dev)
     except (FileNotFoundError, ValueError) as exc:
         logger.error("Invalid station config: %s", exc)  # noqa: TRY400 (a traceback adds nothing)
         return 1
@@ -98,8 +156,18 @@ def run_setup(config_path: Path, home: Path, host_home: Path | None = None, *, d
     created = init_home(home, uid, gid)
     logger.info("Created %d secrets in %s: %s", len(created), home, ", ".join(created) or "none")
 
+    if not prepare_tls(home, dev=dev):
+        return 1
+
     env_file = home / COMPOSE_ENV
-    env_file.write_text(compose_env(node, uid=uid, gid=gid, host_home=host_home or home.resolve()), encoding="utf-8")
+    env = compose_env(
+        node,
+        station,
+        owner=(uid, gid),
+        host_home=host_home or home.resolve(),
+        dev=dev,
+    )
+    env_file.write_text(env, encoding="utf-8")
     env_file.chmod(0o600)
     logger.info("Wrote %s", env_file)
 

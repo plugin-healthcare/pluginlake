@@ -1,7 +1,8 @@
 # Traefik static configuration for the production compose.
 # Routing lives in dynamic/ and is loaded by the file provider, so Traefik never needs the Docker socket.
-# Without a configured certificate Traefik serves its self-signed default, which is fine for *.localhost.
-# For real domains, add a certificatesResolvers block (Let's Encrypt) or a tls.certificates entry.
+# The node certificate comes from ${PLUGINLAKE_HOME}/tls/tls.yaml (certFile and keyFile below /tls).
+# `just setup --dev` creates a trusted mkcert certificate. For a real domain put your own tls.yaml there
+# or add a certificatesResolvers block (Let's Encrypt). Without any, Traefik serves its self-signed default.
 
 log:
   level: INFO

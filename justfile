@@ -95,7 +95,17 @@ setup *args='':
     # Created here so docker does not create the mount source as root.
     mkdir -p "{{ home }}"
     chmod 700 "{{ home }}"
-    docker build --quiet -f deploy/docker/pluginlake.Dockerfile -t pluginlake-setup .
+    docker build --quiet -f deploy/docker/pluginlake.Dockerfile -t pluginlake-setup . > /dev/null
+    if [[ " {{ args }} " == *" --dev "* ]]; then
+        command -v mkcert > /dev/null || { echo "mkcert is required for --dev: https://github.com/FiloSottile/mkcert" >&2; exit 1; }
+        mkdir -p "{{ home }}/tls"
+        chmod 700 "{{ home }}/tls"
+        if [[ ! -f "{{ home }}/tls/cert.pem" ]]; then
+            mkcert -install
+            mkcert -cert-file "{{ home }}/tls/cert.pem" -key-file "{{ home }}/tls/key.pem" pluginlake.localhost "*.pluginlake.localhost"
+            cp "$(mkcert -CAROOT)/rootCA.pem" "{{ home }}/tls/ca.pem"
+        fi
+    fi
     docker run --rm --user "$(id -u):$(id -g)" --network none --cap-drop ALL --read-only \
         -v "{{ home }}:/pluginlake-home" -v "{{ justfile_directory() }}/pluginlake.toml:/pluginlake.toml:ro" \
         pluginlake-setup pluginlake setup --config /pluginlake.toml --home /pluginlake-home --host-home "{{ home }}" {{ args }}

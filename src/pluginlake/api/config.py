@@ -68,7 +68,7 @@ class HubSettings(BaseSettings):
             "dagster": "Dagster: pipelines and runs",
             "dashboard": "Dashboard: data station overview",
             "api": "API: pluginlake endpoints",
-            "marquez": "Marquez: data lineage (profile lineage)",
+            "marquez": "Marquez: data lineage",
             "prometheus": "Prometheus: metrics (profile monitoring)",
         },
         description="Subdomain and description of each linked web interface.",
