@@ -120,7 +120,7 @@ class DuckLakeIOManager(IOManager):
         finally:
             self._conn.unregister("_data")
 
-        row_count = self._conn.sql(
+        row_count = self._conn.execute(
             f"SELECT COUNT(*) FROM {ref}"  # noqa: S608
         ).fetchone()
         rows = row_count[0] if row_count else 0
