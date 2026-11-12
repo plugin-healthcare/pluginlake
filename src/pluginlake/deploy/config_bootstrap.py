@@ -15,7 +15,7 @@ class BootstrapSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="PLUGINLAKE_BOOTSTRAP_", extra="ignore")
 
     domain: str = "pluginlake.localhost"
-    protected_subdomains: list[str] = ["api", "dagster", "dashboard", "marquez", "prometheus"]
+    protected_subdomains: list[str] = ["api", "console", "dagster", "marquez", "prometheus"]
     zitadel_url: str = "http://zitadel-api:8080"
     admin_pat_file: Path = Path("/bootstrap/admin.pat")
     proxy_config_file: Path = Path("/bootstrap/oauth2-proxy.cfg")

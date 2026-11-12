@@ -10,6 +10,7 @@ nav = [
     { "Home" = "index.md" },
     { "Guides" = [
         { "Guides" = "guides/index.md" },
+        { "Quick Start" = "guides/quick-start.md" },
         { "Getting Started" = "guides/getting-started.md" },
         { "Docker" = "guides/docker.md" },
         { "Deploying a Station" = "guides/deploying-a-station.md" },
@@ -49,7 +50,6 @@ nav = [
     { "Development" = [
         { "Development" = "development/index.md" },
         { "Guidelines" = "development/develop-guidelines.md" },
-        { "Future Features" = "development/future-features.md" },
         { "Release Notes" = "development/release-notes.md" },
     ]},
 ]

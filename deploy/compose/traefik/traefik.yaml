@@ -4,6 +4,10 @@
 # `just setup --dev` creates a trusted mkcert certificate. For a real domain put your own tls.yaml there
 # or add a certificatesResolvers block (Let's Encrypt). Without any, Traefik serves its self-signed default.
 
+# Backends trust the X-Auth-Request-* headers, so drop client headers that alias them (X_Auth_Request_Groups).
+global:
+  aliasHeadersStrategy: delete
+
 log:
   level: INFO
 accessLog: {}

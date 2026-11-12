@@ -19,7 +19,6 @@ from pluginlake.api.routers import (
     assets,
     catalog,
     health,
-    hub,
     ingest,
 )
 from pluginlake.config import LogSettings, Settings
@@ -104,7 +103,6 @@ def _include_routers(app: FastAPI) -> None:
     uniformly, so no project code is imported here (ADR-009).
     """
     app.include_router(health.router)
-    app.include_router(hub.router)
     app.include_router(ingest.router)
     app.include_router(catalog.router)
     app.include_router(assets.router)

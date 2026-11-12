@@ -165,18 +165,18 @@ def assert_project_roles(client: httpx.Client, project_id: str, name: str) -> No
     logger.info("Enabled role assertion for project %r", name)
 
 
-def ensure_roles(client: httpx.Client, project_id: str, roles: list[str]) -> None:
-    """Create the project roles that do not exist yet."""
+def ensure_roles(client: httpx.Client, project_id: str, roles: list[str]) -> list[str]:
+    """Create the project roles that do not exist yet and return the created ones."""
     response = client.post(f"{_API}/projects/{project_id}/roles/_search", json={})
     response.raise_for_status()
     existing = {role["key"] for role in response.json().get("result") or []}
-    for role in roles:
-        if role in existing:
-            continue
+    created = [role for role in roles if role not in existing]
+    for role in created:
         client.post(
             f"{_API}/projects/{project_id}/roles", json={"roleKey": role, "displayName": role}
         ).raise_for_status()
         logger.info("Created role %r", role)
+    return created
 
 
 def ensure_groups_target(client: httpx.Client, endpoint: str, key_file: Path) -> str:
@@ -222,8 +222,13 @@ def ensure_groups_executions(client: httpx.Client, target_id: str) -> None:
         ).raise_for_status()
 
 
-def grant_admin_roles(client: httpx.Client, project_id: str, admin_username: str, roles: list[str]) -> None:
-    """Give the first admin all roles, unless the admin already has a grant on the project."""
+def grant_admin_roles(
+    client: httpx.Client, project_id: str, admin_username: str, roles: list[str], new_roles: list[str]
+) -> None:
+    """Give the first admin all roles, or only the newly created roles when the admin already has a grant.
+
+    Roles the admin has since given up are not granted again.
+    """
     query = {
         "queries": [{"userNameQuery": {"userName": f"{admin_username}@", "method": "TEXT_QUERY_METHOD_STARTS_WITH"}}]
     }
@@ -239,7 +244,13 @@ def grant_admin_roles(client: httpx.Client, project_id: str, admin_username: str
         json={"queries": [{"userIdQuery": {"userId": user_id}}, {"projectIdQuery": {"projectId": project_id}}]},
     )
     grants.raise_for_status()
-    if grants.json().get("result"):
+    existing = grants.json().get("result")
+    if existing:
+        missing = [role for role in new_roles if role not in existing[0].get("roleKeys", [])]
+        if missing:
+            keys = [*existing[0].get("roleKeys", []), *missing]
+            client.put(f"{_API}/users/{user_id}/grants/{existing[0]['id']}", json={"roleKeys": keys}).raise_for_status()
+            logger.info("Granted new roles %s to %r", ", ".join(missing), admin_username)
         return
     client.post(f"{_API}/users/{user_id}/grants", json={"projectId": project_id, "roleKeys": roles}).raise_for_status()
     logger.info("Granted roles %s to %r", ", ".join(roles), admin_username)
@@ -283,10 +294,10 @@ def bootstrap(client: httpx.Client, settings: BootstrapSettings) -> None:
     app_id, client_id, client_secret = ensure_app(client, project_id, settings.app_name, hosts)
     sync_redirect_uris(client, project_id, app_id, hosts)
     assert_project_roles(client, project_id, settings.project_name)
-    ensure_roles(client, project_id, settings.protected_subdomains)
+    new_roles = ensure_roles(client, project_id, settings.protected_subdomains)
     target_id = ensure_groups_target(client, settings.groups_hook_url, settings.groups_hook_key_file)
     ensure_groups_executions(client, target_id)
-    grant_admin_roles(client, project_id, settings.admin_username, settings.protected_subdomains)
+    grant_admin_roles(client, project_id, settings.admin_username, settings.protected_subdomains, new_roles)
 
     existing = read_proxy_config(settings.proxy_config_file)
     cookie_secret = existing.get("cookie_secret") or secrets.token_hex(16)

@@ -1,7 +1,7 @@
 # Routing for the pluginlake edge stack.
 # Hostnames come from PLUGINLAKE_DOMAIN through the file provider templating.
 # Every application host sits behind oauth2-proxy forward auth. Only the identity provider is public.
-# Each application requires the Zitadel project role with its own name (allowed_groups); the start page is open to every signed-in user.
+# Each application requires the Zitadel project role with its own name (allowed_groups); the bare domain redirects to the console, which is the start page.
 # Marquez and Prometheus answer 502 while their compose profile is not running.
 
 http:
@@ -24,14 +24,14 @@ http:
       priority: 100
     oauth2-proxy:
       entryPoints: [websecure]
-      rule: '(Host(`{{ env "PLUGINLAKE_DOMAIN" }}`) || Host(`api.{{ env "PLUGINLAKE_DOMAIN" }}`) || Host(`dagster.{{ env "PLUGINLAKE_DOMAIN" }}`) || Host(`dashboard.{{ env "PLUGINLAKE_DOMAIN" }}`) || Host(`marquez.{{ env "PLUGINLAKE_DOMAIN" }}`) || Host(`prometheus.{{ env "PLUGINLAKE_DOMAIN" }}`)) && PathPrefix(`/oauth2/`)'
+      rule: '(Host(`{{ env "PLUGINLAKE_DOMAIN" }}`) || Host(`api.{{ env "PLUGINLAKE_DOMAIN" }}`) || Host(`dagster.{{ env "PLUGINLAKE_DOMAIN" }}`) || Host(`console.{{ env "PLUGINLAKE_DOMAIN" }}`) || Host(`marquez.{{ env "PLUGINLAKE_DOMAIN" }}`) || Host(`prometheus.{{ env "PLUGINLAKE_DOMAIN" }}`)) && PathPrefix(`/oauth2/`)'
       service: oauth2-proxy
       priority: 300
-    hub:
+    root:
       entryPoints: [websecure]
       rule: 'Host(`{{ env "PLUGINLAKE_DOMAIN" }}`)'
-      service: api
-      middlewares: [hub-rewrite, sso-errors, sso-auth]
+      service: console
+      middlewares: [root-redirect]
     api:
       entryPoints: [websecure]
       rule: 'Host(`api.{{ env "PLUGINLAKE_DOMAIN" }}`)'
@@ -41,22 +41,22 @@ http:
       entryPoints: [websecure]
       rule: 'Host(`dagster.{{ env "PLUGINLAKE_DOMAIN" }}`)'
       service: dagster
-      middlewares: [sso-errors, sso-auth-dagster]
-    dashboard:
+      middlewares: [sso-starting, sso-errors, sso-forbidden, sso-auth-dagster]
+    console:
       entryPoints: [websecure]
-      rule: 'Host(`dashboard.{{ env "PLUGINLAKE_DOMAIN" }}`)'
-      service: dashboard
-      middlewares: [sso-errors, sso-auth-dashboard]
+      rule: 'Host(`console.{{ env "PLUGINLAKE_DOMAIN" }}`)'
+      service: console
+      middlewares: [sso-starting, sso-errors, sso-forbidden, sso-auth-console]
     marquez:
       entryPoints: [websecure]
       rule: 'Host(`marquez.{{ env "PLUGINLAKE_DOMAIN" }}`)'
       service: marquez
-      middlewares: [sso-errors, sso-auth-marquez]
+      middlewares: [sso-starting, sso-errors, sso-forbidden, sso-auth-marquez]
     prometheus:
       entryPoints: [websecure]
       rule: 'Host(`prometheus.{{ env "PLUGINLAKE_DOMAIN" }}`)'
       service: prometheus
-      middlewares: [sso-errors, sso-auth-prometheus]
+      middlewares: [sso-starting, sso-errors, sso-forbidden, sso-auth-prometheus]
 
   services:
     zitadel-api:
@@ -71,6 +71,10 @@ http:
       loadBalancer:
         servers:
           - url: "http://oauth2-proxy:4180"
+    starting-page:
+      loadBalancer:
+        servers:
+          - url: "http://starting-page:8080"
     api:
       loadBalancer:
         servers:
@@ -79,7 +83,7 @@ http:
       loadBalancer:
         servers:
           - url: "http://dagster-webserver:3000"
-    dashboard:
+    console:
       loadBalancer:
         servers:
           - url: "http://dashboard-datastation:8501"
@@ -93,9 +97,10 @@ http:
           - url: "http://prometheus:9090"
 
   middlewares:
-    hub-rewrite:
-      replacePath:
-        path: /hub
+    root-redirect:
+      redirectRegex:
+        regex: '^https://[^/]+/.*'
+        replacement: 'https://console.{{ env "PLUGINLAKE_DOMAIN" }}/'
     zitadel-root-rewrite:
       replacePath:
         path: /ui/v2/login/
@@ -103,6 +108,7 @@ http:
       forwardAuth:
         address: "http://oauth2-proxy:4180/oauth2/auth"
         trustForwardHeader: true
+        maxResponseBodySize: 65536
         authResponseHeaders:
           - X-Auth-Request-User
           - X-Auth-Request-Email
@@ -112,6 +118,7 @@ http:
       forwardAuth:
         address: "http://oauth2-proxy:4180/oauth2/auth?allowed_groups=api"
         trustForwardHeader: true
+        maxResponseBodySize: 65536
         authResponseHeaders:
           - X-Auth-Request-User
           - X-Auth-Request-Email
@@ -121,15 +128,17 @@ http:
       forwardAuth:
         address: "http://oauth2-proxy:4180/oauth2/auth?allowed_groups=dagster"
         trustForwardHeader: true
+        maxResponseBodySize: 65536
         authResponseHeaders:
           - X-Auth-Request-User
           - X-Auth-Request-Email
           - X-Auth-Request-Groups
           - X-Auth-Request-Access-Token
-    sso-auth-dashboard:
+    sso-auth-console:
       forwardAuth:
-        address: "http://oauth2-proxy:4180/oauth2/auth?allowed_groups=dashboard"
+        address: "http://oauth2-proxy:4180/oauth2/auth?allowed_groups=console"
         trustForwardHeader: true
+        maxResponseBodySize: 65536
         authResponseHeaders:
           - X-Auth-Request-User
           - X-Auth-Request-Email
@@ -139,6 +148,7 @@ http:
       forwardAuth:
         address: "http://oauth2-proxy:4180/oauth2/auth?allowed_groups=marquez"
         trustForwardHeader: true
+        maxResponseBodySize: 65536
         authResponseHeaders:
           - X-Auth-Request-User
           - X-Auth-Request-Email
@@ -148,6 +158,7 @@ http:
       forwardAuth:
         address: "http://oauth2-proxy:4180/oauth2/auth?allowed_groups=prometheus"
         trustForwardHeader: true
+        maxResponseBodySize: 65536
         authResponseHeaders:
           - X-Auth-Request-User
           - X-Auth-Request-Email
@@ -160,3 +171,17 @@ http:
           "401": 302
         service: oauth2-proxy
         query: "/oauth2/sign_in"
+    # Shown while the stack is still starting: Traefik is reachable before oauth2-proxy and the applications are.
+    sso-starting:
+      errors:
+        status: ["500-599"]
+        service: starting-page
+        query: "/"
+    # A signed-in user without the role is signed out, also at the identity provider, and lands on the login page.
+    sso-forbidden:
+      errors:
+        status: ["403"]
+        statusRewrites:
+          "403": 302
+        service: oauth2-proxy
+        query: '/oauth2/sign_out?rd=https%3A%2F%2Fauth.{{ env "PLUGINLAKE_DOMAIN" }}%2Foidc%2Fv1%2Fend_session'

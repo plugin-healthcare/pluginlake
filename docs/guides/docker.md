@@ -206,7 +206,7 @@ flowchart LR
     proxy -- OIDC --> zitadel[Zitadel + login UI]
     traefik --> api[api. pluginlake]
     traefik --> dagster[dagster.]
-    traefik --> dash[dashboard.]
+    traefik --> dash[console.]
     traefik --> marquez[marquez.]
     traefik --> prom[prometheus.]
     zitadel --> pg[(Postgres)]
@@ -215,11 +215,11 @@ flowchart LR
 
 | Host | Service | Protected |
 |------|---------|-----------|
-| `<domain>` | Start page with links to the web interfaces below | Yes |
+| `<domain>` | Redirects to `console.<domain>` | No |
 | `auth.<domain>` | Zitadel and its login UI | No (it is the sign-in) |
 | `api.<domain>` | pluginlake API | Yes |
 | `dagster.<domain>` | Dagster webserver | Yes |
-| `dashboard.<domain>` | Streamlit dashboard | Yes |
+| `console.<domain>` | Start page: Streamlit console with the links to the other applications | Yes |
 | `marquez.<domain>` | Marquez web | Yes |
 | `prometheus.<domain>` | Prometheus | Yes |
 
@@ -236,12 +236,12 @@ Zitadel always forces a new password at the first login.
 All other users, passwords and access are managed in Zitadel.
 The choice of Zitadel, with Keycloak as the fallback, is described in [ADR-011](../decisions/adr-011-identity-provider.md).
 
-All protected hosts share one oauth2-proxy and one session cookie on `.<domain>`, so you sign in once, for example on the start page, and open every application without signing in again.
+All protected hosts share one oauth2-proxy and one session cookie on `.<domain>`, so you sign in once, for example on the console, and open every application without signing in again.
 All applications behind the proxy therefore trust the same session.
 
 Access is per application.
-`pluginlake-init` creates a Zitadel project role for each application (`api`, `dagster`, `dashboard`, `marquez`, `prometheus`) and gives the first admin all of them.
-A user only opens an application when they have the role with that name, otherwise Traefik answers 403, and the start page only shows the links the user has a role for.
+`pluginlake-init` creates a Zitadel project role for each application (`api`, `console`, `dagster`, `marquez`, `prometheus`) and gives the first admin all of them.
+A user only opens an application when they have the role with that name, otherwise Traefik answers 403, and the sidebar of the console, which is the start page, only shows the links the user has a role for.
 Grant roles to other users as user grants on the project `pluginlake` in the Zitadel console.
 The roles reach oauth2-proxy as a `groups` claim.
 Zitadel calls the service `zitadel-groups-hook` (a Zitadel Actions v2 call target that `pluginlake-init` creates) while it builds the token and the userinfo, and the service answers with the roles as a list.

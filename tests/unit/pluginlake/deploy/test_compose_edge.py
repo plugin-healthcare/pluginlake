@@ -7,11 +7,11 @@ from pathlib import Path
 import httpx
 import yaml
 
-from pluginlake.api.config import HubSettings
 from pluginlake.deploy.bootstrap import (
     ensure_groups_executions,
     ensure_groups_target,
     ensure_roles,
+    grant_admin_roles,
     read_proxy_config,
     redirect_uris,
     write_proxy_config,
@@ -21,7 +21,7 @@ from pluginlake.deploy.config_bootstrap import BootstrapSettings
 from pluginlake.deploy.setup import compose_env
 
 COMPOSE_DIR = Path(__file__).resolve().parents[4] / "deploy" / "compose"
-PUBLIC_ROUTERS = {"zitadel", "zitadel-login", "zitadel-root", "oauth2-proxy"}
+PUBLIC_ROUTERS = {"zitadel", "zitadel-login", "zitadel-root", "oauth2-proxy", "root"}
 
 
 def _load(path: Path) -> dict:
@@ -140,11 +140,40 @@ def test_proxy_config_round_trip(tmp_path: Path):
     assert read_proxy_config(path) == {"client_id": "client", "client_secret": 'se"cret', "cookie_secret": "cookie"}
 
 
-def test_hub_is_served_on_the_bare_domain_behind_forward_auth():
-    routers = _load(COMPOSE_DIR / "traefik" / "dynamic" / "routes.yaml")["http"]["routers"]
-    assert routers["hub"]["rule"] == 'Host(`{{ env "PLUGINLAKE_DOMAIN" }}`)'
-    assert "sso-auth" in routers["hub"]["middlewares"]
+def test_bare_domain_redirects_to_the_console():
+    http = _load(COMPOSE_DIR / "traefik" / "dynamic" / "routes.yaml")["http"]
+    assert http["routers"]["root"]["rule"] == 'Host(`{{ env "PLUGINLAKE_DOMAIN" }}`)'
+    assert (
+        http["middlewares"]["root-redirect"]["redirectRegex"]["replacement"]
+        == 'https://console.{{ env "PLUGINLAKE_DOMAIN" }}/'
+    )
     assert BootstrapSettings(domain="example.org").protected_hosts[0] == "example.org"
+
+
+def test_traefik_drops_headers_that_alias_the_identity_headers():
+    static = _load(COMPOSE_DIR / "traefik" / "traefik.yaml")
+    assert static["global"]["aliasHeadersStrategy"] == "delete"
+
+
+def test_forward_auth_limits_the_response_body_size():
+    middlewares = _load(COMPOSE_DIR / "traefik" / "dynamic" / "routes.yaml")["http"]["middlewares"]
+    for name, middleware in middlewares.items():
+        if "forwardAuth" in middleware:
+            assert middleware["forwardAuth"]["maxResponseBodySize"] > 0, name
+
+
+def test_browser_applications_sign_out_a_user_without_the_role():
+    http = _load(COMPOSE_DIR / "traefik" / "dynamic" / "routes.yaml")["http"]
+    assert http["middlewares"]["sso-forbidden"]["errors"]["statusRewrites"] == {"403": 302}
+    for app in ("console", "dagster", "marquez", "prometheus"):
+        assert "sso-forbidden" in http["routers"][app]["middlewares"], app
+
+
+def test_browser_applications_show_the_starting_page_on_server_errors():
+    http = _load(COMPOSE_DIR / "traefik" / "dynamic" / "routes.yaml")["http"]
+    assert http["middlewares"]["sso-starting"]["errors"]["service"] in http["services"]
+    for app in ("console", "dagster", "marquez", "prometheus"):
+        assert http["routers"][app]["middlewares"][0] == "sso-starting", app
 
 
 def test_each_application_requires_the_role_with_its_own_name():
@@ -152,10 +181,6 @@ def test_each_application_requires_the_role_with_its_own_name():
     for app in BootstrapSettings().protected_subdomains:
         assert f"sso-auth-{app}" in http["routers"][app]["middlewares"], app
         assert http["middlewares"][f"sso-auth-{app}"]["forwardAuth"]["address"].endswith(f"?allowed_groups={app}"), app
-
-
-def test_hub_lists_exactly_the_protected_applications():
-    assert set(HubSettings().apps) == set(BootstrapSettings().protected_subdomains)
 
 
 def _recording_client(responses: dict[str, dict]) -> tuple[httpx.Client, list[tuple[str, str, dict]]]:
@@ -171,9 +196,34 @@ def _recording_client(responses: dict[str, dict]) -> tuple[httpx.Client, list[tu
 
 def test_ensure_roles_only_creates_missing_roles():
     client, calls = _recording_client({"POST /management/v1/projects/p/roles/_search": {"result": [{"key": "api"}]}})
-    ensure_roles(client, "p", ["api", "dagster"])
+    assert ensure_roles(client, "p", ["api", "dagster"]) == ["dagster"]
     created = [body["roleKey"] for method, path, body in calls if path.endswith("/roles")]
     assert created == ["dagster"]
+
+
+def test_new_roles_are_added_to_the_existing_grant_of_the_admin():
+    client, calls = _recording_client(
+        {
+            "POST /management/v1/users/_search": {"result": [{"id": "u1", "human": {}}]},
+            "POST /management/v1/users/grants/_search": {"result": [{"id": "g1", "roleKeys": ["api"]}]},
+        }
+    )
+    grant_admin_roles(client, "p", "admin", ["api", "console"], ["console"])
+    update = next(body for method, path, body in calls if method == "PUT")
+    assert update == {"roleKeys": ["api", "console"]}
+
+
+def test_admin_keeps_a_removed_role_removed():
+    client, calls = _recording_client(
+        {
+            "POST /management/v1/users/_search": {"result": [{"id": "u1", "human": {}}]},
+            "POST /management/v1/users/grants/_search": {"result": [{"id": "g1", "roleKeys": ["api"]}]},
+        }
+    )
+    grant_admin_roles(client, "p", "admin", ["api", "dagster"], [])
+    assert not [
+        call for call in calls if call[0] in {"PUT", "POST"} and "grants" in call[1] and "_search" not in call[1]
+    ]
 
 
 def test_groups_target_is_fail_closed_and_stores_key(tmp_path):

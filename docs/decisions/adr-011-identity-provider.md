@@ -12,7 +12,7 @@ Keycloak is the fallback if a license or footprint problem appears, and the [spi
 
 ## Context
 
-The web UIs (API, Dagster, dashboard, Marquez, Prometheus) were published without authentication.
+The web UIs (API, console, Dagster, Marquez, Prometheus) were published without authentication.
 Story #127 asks for a reverse proxy with forward auth, and ADR-008 (open question 11) leaves the OIDC provider open.
 This ADR covers the human logins of boundary 1 in ADR-008.
 Access between stations stays with Nuts and DSP (ADR-006, ADR-008).

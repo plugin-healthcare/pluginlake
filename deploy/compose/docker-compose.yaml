@@ -174,7 +174,6 @@ services:
       DUCKLAKE_PG_USER: ducklake
       PLUGINLAKE_SERVER_HOST: 0.0.0.0
       PLUGINLAKE_SERVER_PORT: "8000"
-      PLUGINLAKE_HUB_DOMAIN: ${PLUGINLAKE_DOMAIN:?set by just setup}
       DUCKLAKE_PG_HOST: postgres
       DUCKLAKE_PG_PORT: "5432"
       DUCKLAKE_PG_DB: ducklake
@@ -208,9 +207,13 @@ services:
       dockerfile: deploy/docker/ui.Dockerfile
     environment:
       DASHBOARD_API_URL: http://pluginlake:8000
+      DASHBOARD_DOMAIN: ${PLUGINLAKE_DOMAIN:?set by just setup}
     depends_on:
       pluginlake:
         condition: service_healthy
+      # Last in line: the console is what people open first.
+      oauth2-proxy:
+        condition: service_started
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"]
       interval: 10s
@@ -406,12 +409,28 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    depends_on:
+      - starting-page
     networks:
       edge-net:
         # Lets oauth2-proxy reach the identity provider on its public hostname.
         aliases:
           - auth.${PLUGINLAKE_DOMAIN:?set by just setup}
       app-net:
+    restart: unless-stopped
+
+  # Static page that Traefik shows while the applications are not reachable yet.
+  starting-page:
+    logging: *default-logging
+    user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
+    image: busybox:1.37@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    command: ["httpd", "-f", "-p", "8080", "-h", "/www"]
+    volumes:
+      - ./traefik/starting.html:/www/index.html:ro
+    networks: [edge-net]
     restart: unless-stopped
 
   # Creates the Zitadel schemas with the zitadel role (the role and database come from pluginlake-db-init).
