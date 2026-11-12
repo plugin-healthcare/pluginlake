@@ -4,6 +4,7 @@ Step-by-step instructions for installing, deploying, and integrating pluginlake.
 
 | Guide | Description |
 |-------|-------------|
+| [Quick Start](quick-start.md) | Run a complete node with the console on your own machine. |
 | [Getting Started](getting-started.md) | Install pluginlake, launch the data pipeline, and run your first assets. |
 | [Docker](docker.md) | Container architecture, multi-stage builds, and secrets management. |
 | [Deploying a Station](deploying-a-station.md) | Onboard projects with `pluginlake.toml` and bring a station up with the CLI. |

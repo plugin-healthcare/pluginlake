@@ -84,14 +84,43 @@ smoke-test-full:
 dev-local:
     uv run dg dev -f examples/titanic.py
 
-# Production compose: config from .env.production, passwords (Docker secrets) from .env.production.secrets
-_compose_prod := "docker compose --env-file deploy/compose/.env.production --env-file deploy/compose/.env.production.secrets -f deploy/compose/docker-compose.yaml"
+# Production compose: the node data folder (secrets, compose.env) is prepared by `pluginlake setup`
+home := env("PLUGINLAKE_HOME", justfile_directory() / ".pluginlake")
+_compose_prod := "docker compose --env-file " + home + "/compose.env -f deploy/compose/docker-compose.yaml"
 
-# Start production environment
+# Prepare the node from pluginlake.toml (folders, secrets, compose.env) in a container as the host user. Pass --dev for development defaults
+setup *args='':
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # Created here so docker does not create the mount source as root.
+    mkdir -p "{{ home }}"
+    chmod 700 "{{ home }}"
+    docker build --quiet -f deploy/docker/pluginlake.Dockerfile -t pluginlake-setup . > /dev/null
+    if [[ " {{ args }} " == *" --dev "* ]]; then
+        command -v mkcert > /dev/null || { echo "mkcert is required for --dev: https://github.com/FiloSottile/mkcert" >&2; exit 1; }
+        mkdir -p "{{ home }}/tls"
+        chmod 700 "{{ home }}/tls"
+        if [[ ! -f "{{ home }}/tls/cert.pem" ]]; then
+            mkcert -install
+            mkcert -cert-file "{{ home }}/tls/cert.pem" -key-file "{{ home }}/tls/key.pem" pluginlake.localhost "*.pluginlake.localhost"
+            cp "$(mkcert -CAROOT)/rootCA.pem" "{{ home }}/tls/ca.pem"
+        fi
+    fi
+    docker run --rm --user "$(id -u):$(id -g)" --network none --cap-drop ALL --read-only \
+        -v "{{ home }}:/pluginlake-home" -v "{{ justfile_directory() }}/pluginlake.toml:/pluginlake.toml:ro" \
+        pluginlake-setup pluginlake setup --config /pluginlake.toml --home /pluginlake-home --host-home "{{ home }}" {{ args }}
+
+# Start the production stack
 up *args='':
+    just setup
     {{ _compose_prod }} up --build {{ args }}
 
-# Stop production environment
+# Start the stack with development defaults (pluginlake.localhost, secrets also in secrets.env)
+up-dev *args='':
+    just setup --dev
+    {{ _compose_prod }} up --build {{ args }}
+
+# Stop the production stack
 down *args='':
     {{ _compose_prod }} down {{ args }}
 

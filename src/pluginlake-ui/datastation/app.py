@@ -8,6 +8,7 @@ from pathlib import Path
 
 import streamlit as st
 from client import get_client
+from components.links import sidebar_links
 from components.status import api_status_badge
 
 from config import get_settings
@@ -52,7 +53,7 @@ pg = st.navigation(pages, position="top")
 
 # --- Sidebar ------------------------------------------------------------------
 
-st.sidebar.title("Datastation dashboard")
+st.sidebar.title("Console")
 st.sidebar.subheader(settings.datastation_name)
 
 st.sidebar.caption(f"datastation ID: {settings.datastation_id}")
@@ -69,11 +70,7 @@ st.sidebar.caption(f"Last updated: {st.session_state.last_refreshed:%H:%M:%S}")
 
 with st.sidebar:
     api_status_badge(get_client())
-    st.link_button(
-        "Dagster UI",
-        settings.dagster_url,
-        icon=":material/rocket_launch:",
-    )
+    sidebar_links(settings)
 
 st.sidebar.divider()
 

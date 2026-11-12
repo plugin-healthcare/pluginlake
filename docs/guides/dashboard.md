@@ -41,7 +41,7 @@ The dashboard uses pydantic-settings with the `DASHBOARD_` environment prefix:
 |----------|---------|-------------|
 | `DASHBOARD_API_URL` | `http://pluginlake:8000` | pluginlake API base URL |
 | `DASHBOARD_API_TIMEOUT` | `30` | API request timeout in seconds |
-| `DASHBOARD_DAGSTER_URL` | `http://localhost:3000/asset-groups` | Link to the Dagster UI |
+| `DASHBOARD_DOMAIN` | `pluginlake.localhost` | Domain of the node; the sidebar links to the other web interfaces on its subdomains, for each role the user has |
 | `DASHBOARD_DATASTATION_ID` | `ds-local-001` | Unique identifier for this station |
 | `DASHBOARD_DATASTATION_NAME` | `demo-1` | Display name shown in the sidebar |
 | `DASHBOARD_ASSETS_DIR` | `/app/assets` | Path to brand assets (logo, images) |

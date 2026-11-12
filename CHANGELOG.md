@@ -22,6 +22,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Breaking, production compose: the data moved from named volumes to bind mounts below `PLUGINLAKE_HOME`, the Postgres mount is now `/var/lib/postgresql`, the Postgres superuser is `postgres`, and secrets are files created by `pluginlake-init` (no more `.env.production.secrets`). Existing stations start with an empty database and must copy data from the old volumes first.
 - ADR-006 rewritten: scoped to Nuts as organizational identity layer only (node-to-node trust boundary). Added Processing Hub terminology, governance rules, trust boundary definitions, and credential role enforcement.
 - ADR-003: clarified rejected "landing zone" alternative with explicit rationale for direct FastAPI-to-Dagster triggering.
 - Docs nav restructured in `zensical.toml`: ADR-006, ADR-007, and ADR-008 added to Decisions section.

@@ -38,9 +38,17 @@ class DashboardSettings(BaseSettings):
         default=":hospital:",
         description="Streamlit page icon.",
     )
-    dagster_url: str = Field(
-        default="http://localhost:3000/asset-groups",
-        description="URL of the Dagster webserver UI.",
+    domain: str = Field(
+        default="pluginlake.localhost",
+        description="Public domain of the node; the other web interfaces live on subdomains of it.",
+    )
+    apps: dict[str, str] = Field(
+        default={
+            "dagster": "Dagster",
+            "marquez": "Lineage (Marquez)",
+            "prometheus": "Metrics (Prometheus)",
+        },
+        description="Subdomain and label of each linked web interface. A user sees a link for each role they have.",
     )
     datastation_id: str = Field(
         default="ds-local-001",

@@ -10,6 +10,7 @@ nav = [
     { "Home" = "index.md" },
     { "Guides" = [
         { "Guides" = "guides/index.md" },
+        { "Quick Start" = "guides/quick-start.md" },
         { "Getting Started" = "guides/getting-started.md" },
         { "Docker" = "guides/docker.md" },
         { "Deploying a Station" = "guides/deploying-a-station.md" },
@@ -44,11 +45,11 @@ nav = [
         { "ADR-008: DSP Authorization" = "decisions/adr-008-dataspace-protocol-authz-authc-rbac.md" },
         { "ADR-009: Core + Project Plugin Architecture" = "decisions/adr-009-core-project-plugin-architecture.md" },
         { "ADR-010: Station Monitoring" = "decisions/adr-010-station-monitoring-prometheus.md" },
+        { "ADR-011: Identity Provider" = "decisions/adr-011-identity-provider.md" },
     ]},
     { "Development" = [
         { "Development" = "development/index.md" },
         { "Guidelines" = "development/develop-guidelines.md" },
-        { "Future Features" = "development/future-features.md" },
         { "Release Notes" = "development/release-notes.md" },
     ]},
 ]
