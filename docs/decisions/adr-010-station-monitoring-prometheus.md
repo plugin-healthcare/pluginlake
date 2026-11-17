@@ -82,7 +82,7 @@ A central Prometheus that can reach the station may federate from `/federate`.
 
 ## Consequences
 
-- Operators get station health locally (`http://127.0.0.1:9090`).
+- Operators get station health locally (`http://127.0.0.1:9090`). A host address on a private network can be set with `[monitoring] publish`, and the endpoint has no authentication of its own, so it must not face the internet.
 - cAdvisor needs read access to host paths and `/dev/kmsg`, like in vantage6-ops; it can be switched off with `[monitoring] cadvisor = false`. Its access to the Docker socket makes it host-privileged, so it runs on a separate `monitoring` network that only Prometheus joins.
 - The central side should add `agb`/`host` labels per station if it needs them; the station only sends `station`.
 - Dagster metrics are not collected yet; this can be added as another `scrape.d` job.

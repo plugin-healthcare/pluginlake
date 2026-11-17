@@ -127,6 +127,7 @@ flowchart LR
 `[node] domain` in `pluginlake.toml` sets the domain.
 A domain below `.localhost`, such as the default `pluginlake.localhost`, resolves to the local machine in browsers, so `just setup` creates a certificate for it with [mkcert](https://github.com/FiloSottile/mkcert) in `tls/` of the data folder.
 Install mkcert first; setup runs `mkcert -install` once so browsers trust it, and oauth2-proxy trusts the same root CA.
+Firefox and Chrome need `certutil` for that (`libnss3-tools` on Debian and Ubuntu), so install it before the first `just setup`, or run `mkcert -install` again afterwards.
 
 Traefik reads its certificate from `tls/tls.yaml` in the data folder.
 For a real domain, put your own `tls.yaml` with `certFile` and `keyFile` entries (paths below `/tls`) and the certificate files there; setup does not overwrite it.
