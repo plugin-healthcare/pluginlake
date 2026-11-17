@@ -12,6 +12,7 @@ from pathlib import Path
 
 from pluginlake.deploy.config import NodeSettings, StationConfig, load_init_config, load_station_config
 from pluginlake.deploy.init_secrets import init_home
+from pluginlake.deploy.routes import render_routes
 from pluginlake.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -23,6 +24,8 @@ TLS_CERT, TLS_KEY, TLS_CA = "cert.pem", "key.pem", "ca.pem"
 TLS_FILE_CONFIG = "tls.yaml"
 CONTAINER_TLS_DIR = "/tls"
 DEV_SECRETS_ENV = "secrets.env"
+ROUTES_DIR = "traefik"
+ROUTES_FILE = "routes.yaml"
 
 
 def resolve_node(node: NodeSettings, *, dev: bool) -> NodeSettings:
@@ -92,6 +95,8 @@ def compose_env(
         "PROMETHEUS_STATION_ID": config.monitoring.station_id,
         "PROMETHEUS_SCRAPE_CADVISOR": str(config.monitoring.cadvisor).lower(),
         "PROMETHEUS_REMOTE_WRITE_URL": config.monitoring.remote_write_url or "",
+        "PROMETHEUS_REMOTE_WRITE_USERNAME": config.monitoring.remote_write_username or "",
+        "PROMETHEUS_RETENTION": config.monitoring.retention,
     }
     return "".join(f"{key}='{value}'\n" for key, value in values.items())
 
@@ -120,6 +125,23 @@ def prepare_tls(home: Path, *, dev: bool) -> bool:
     if dev or not config_file.exists():
         config_file.write_text(tls_file_config(dev=dev), encoding="utf-8")
     return True
+
+
+def write_routes(home: Path, domain: str) -> Path:
+    """Write the Traefik routing for ``domain`` below the data folder.
+
+    Args:
+        home: The data folder.
+        domain: Base domain of the node.
+
+    Returns:
+        Path of the written file.
+    """
+    routes_dir = home / ROUTES_DIR
+    routes_dir.mkdir(mode=0o700, exist_ok=True)
+    routes_file = routes_dir / ROUTES_FILE
+    routes_file.write_text(render_routes(domain), encoding="utf-8")
+    return routes_file
 
 
 def _dev_secrets_env(secrets_dir: Path) -> str:
@@ -158,6 +180,8 @@ def run_setup(config_path: Path, home: Path, host_home: Path | None = None, *, d
 
     if not prepare_tls(home, dev=dev):
         return 1
+
+    logger.info("Wrote %s", write_routes(home, str(node.domain)))
 
     env_file = home / COMPOSE_ENV
     env = compose_env(

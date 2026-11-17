@@ -25,7 +25,7 @@ def random_base64(nbytes: int = 32) -> str:
 def random_password(length: int = 24) -> str:
     """Return a password with upper case, lower case, a digit and a symbol."""
     pools = (string.ascii_uppercase, string.ascii_lowercase, string.digits, SYMBOLS)
-    chars = [secrets.choice(pool) for pool in pools]
+    chars: list[str] = [secrets.choice(pool) for pool in pools]
     chars += [secrets.choice("".join(pools)) for _ in range(length - len(pools))]
     secrets.SystemRandom().shuffle(chars)
     return "".join(chars)

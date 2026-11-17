@@ -155,10 +155,6 @@ services:
     image: quay.io/prometheus/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2
     profiles: [monitoring]
     entrypoint: ["/bin/sh", "/etc/prometheus/pluginlake/entrypoint.sh"]
-    env_file:
-      # Remote-write URL and username; read by Prometheus only. See .env.monitoring.example.
-      - path: .env.monitoring
-        required: false
     environment:
       PROMETHEUS_COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME}
     secrets:

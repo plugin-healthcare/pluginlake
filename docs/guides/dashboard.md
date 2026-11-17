@@ -41,9 +41,9 @@ The dashboard uses pydantic-settings with the `DASHBOARD_` environment prefix:
 |----------|---------|-------------|
 | `DASHBOARD_API_URL` | `http://pluginlake:8000` | pluginlake API base URL |
 | `DASHBOARD_API_TIMEOUT` | `30` | API request timeout in seconds |
-| `DASHBOARD_DOMAIN` | `pluginlake.localhost` | Domain of the node; the sidebar links to the other web interfaces on its subdomains, for each role the user has |
-| `DASHBOARD_DATASTATION_ID` | `ds-local-001` | Unique identifier for this station |
-| `DASHBOARD_DATASTATION_NAME` | `demo-1` | Display name shown in the sidebar |
+| `DASHBOARD_DOMAIN` | `pluginlake.localhost` | Domain of the node; the sidebar links to the other web interfaces on its subdomains, for each role the user has. The default is the development domain: a deployed node gets `[node] domain` from `pluginlake.toml` through `pluginlake setup` |
+| `DASHBOARD_DATASTATION_ID` | `ds-local-001` | Unique identifier for this station. The default is a development value; set it for each deployed node |
+| `DASHBOARD_DATASTATION_NAME` | `demo-1` | Display name shown in the sidebar. The default is a development value; set it for each deployed node |
 | `DASHBOARD_ASSETS_DIR` | `/app/assets` | Path to brand assets (logo, images) |
 
 ### Architecture

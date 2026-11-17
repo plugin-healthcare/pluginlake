@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import psycopg2
+import psycopg2.extensions
 from psycopg2 import sql
 
 from pluginlake.utils.logger import get_logger
@@ -83,7 +84,7 @@ def ensure_role(cur: psycopg2.extensions.cursor, role: RoleSpec) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     """Create every role given with ``--role``."""
-    parser = argparse.ArgumentParser(prog="init_databases", description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(prog="init_databases", description=(__doc__ or "").splitlines()[0])
     parser.add_argument("--host", required=True)
     parser.add_argument("--port", required=True, type=int)
     parser.add_argument("--admin-user", required=True)

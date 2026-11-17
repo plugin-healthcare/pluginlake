@@ -230,12 +230,10 @@ services:
     image: quay.io/prometheus/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2
     user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
     entrypoint: ["/bin/sh", "/etc/prometheus/pluginlake/entrypoint.sh"]
-    env_file:
-      # Remote-write URL and username; read by Prometheus only. See .env.monitoring.example.
-      - path: .env.monitoring
-        required: false
     environment:
       PROMETHEUS_COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME}
+      PROMETHEUS_REMOTE_WRITE_USERNAME: ${PROMETHEUS_REMOTE_WRITE_USERNAME?set by just setup}
+      PROMETHEUS_RETENTION: ${PROMETHEUS_RETENTION:?set by just setup}
       PROMETHEUS_STATION_ID: ${PROMETHEUS_STATION_ID:?set by just setup}
       PROMETHEUS_SCRAPE_CADVISOR: ${PROMETHEUS_SCRAPE_CADVISOR:?set by just setup}
       PROMETHEUS_REMOTE_WRITE_URL: ${PROMETHEUS_REMOTE_WRITE_URL?set by just setup}
@@ -396,12 +394,10 @@ services:
     ports:
       - "80:80"
       - "443:443"
-    environment:
-      PLUGINLAKE_DOMAIN: ${PLUGINLAKE_DOMAIN:?set by just setup}
     volumes:
       - ./traefik/traefik.yaml:/etc/traefik/traefik.yaml:ro
       # Single files: the file provider does not read subfolders.
-      - ./traefik/dynamic/routes.yaml:/etc/traefik/dynamic/routes.yaml:ro
+      - ${PLUGINLAKE_HOME:?run just setup}/traefik/routes.yaml:/etc/traefik/dynamic/routes.yaml:ro
       - ${PLUGINLAKE_HOME:?run just setup}/tls/tls.yaml:/etc/traefik/dynamic/tls.yaml:ro
       - ${PLUGINLAKE_HOME:?run just setup}/tls:/tls:ro
     healthcheck:

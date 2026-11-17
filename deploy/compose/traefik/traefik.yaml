@@ -1,10 +1,6 @@
-# Traefik static configuration for the production compose.
-# Routing lives in dynamic/ and is loaded by the file provider, so Traefik never needs the Docker socket.
-# The node certificate comes from ${PLUGINLAKE_HOME}/tls/tls.yaml (certFile and keyFile below /tls).
-# `just setup --dev` creates a trusted mkcert certificate. For a real domain put your own tls.yaml there
-# or add a certificatesResolvers block (Let's Encrypt). Without any, Traefik serves its self-signed default.
+# Traefik static configuration. `pluginlake setup` renders the routing into ${PLUGINLAKE_HOME}/traefik; the certificate is ${PLUGINLAKE_HOME}/tls/tls.yaml.
 
-# Backends trust the X-Auth-Request-* headers, so drop client headers that alias them (X_Auth_Request_Groups).
+# Backends trust X-Auth-Request-* headers, so drop client headers that alias them.
 global:
   aliasHeadersStrategy: delete
 

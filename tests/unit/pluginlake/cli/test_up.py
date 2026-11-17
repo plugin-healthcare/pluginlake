@@ -156,15 +156,19 @@ def test_up_with_monitoring(tmp_path: Path, override_calls: list[dict]):
     assert override["services"]["prometheus"]["environment"] == {
         "PROMETHEUS_STATION_ID": "ds-001",
         "PROMETHEUS_SCRAPE_CADVISOR": "true",
+        "PROMETHEUS_RETENTION": "15d",
     }
 
 
 def test_up_with_remote_write(tmp_path: Path, override_calls: list[dict]):
     url = "https://central.example.org/api/v1/write"
-    config = _config(tmp_path, f'[monitoring]\nenabled = true\nremote_write_url = "{url}"\n')
+    config = _config(
+        tmp_path, f'[monitoring]\nenabled = true\nremote_write_url = "{url}"\nremote_write_username = "st-1"\n'
+    )
     up.run_up(config)
     env = override_calls[0]["override"]["services"]["prometheus"]["environment"]
     assert env["PROMETHEUS_REMOTE_WRITE_URL"] == url
+    assert env["PROMETHEUS_REMOTE_WRITE_USERNAME"] == "st-1"
     assert not any("PASSWORD" in key for key in env)
 
 

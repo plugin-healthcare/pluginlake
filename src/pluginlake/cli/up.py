@@ -69,10 +69,12 @@ def _prometheus_env(config: StationConfig) -> dict[str, str]:
     env = {
         "PROMETHEUS_STATION_ID": monitoring.station_id,
         "PROMETHEUS_SCRAPE_CADVISOR": str(monitoring.cadvisor).lower(),
+        "PROMETHEUS_RETENTION": monitoring.retention,
     }
-    # Unset keeps a URL from .env.monitoring; the override would otherwise blank it.
     if monitoring.remote_write_url:
         env["PROMETHEUS_REMOTE_WRITE_URL"] = monitoring.remote_write_url
+    if monitoring.remote_write_username:
+        env["PROMETHEUS_REMOTE_WRITE_USERNAME"] = monitoring.remote_write_username
     return env
 
 

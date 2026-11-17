@@ -425,7 +425,7 @@ Kubernetes and Swarm mount secrets as files too, so the same `/run/secrets/<name
 | `DAGSTER_PG_PASSWORD` | **Yes** | Secret `dagster_pg_password` (production; dev uses `postgres_password`) |
 | `DUCKLAKE_PG_PASSWORD` | **Yes** | Secret `ducklake_pg_password` (production; dev uses `postgres_password`) |
 | `POSTGRES_EXPORTER_PASSWORD` | **Yes** | Secret `postgres_exporter_password` (production; dev uses `postgres_password`) |
-| `PROMETHEUS_REMOTE_WRITE_PASSWORD` | **Yes** | Secret `prometheus_remote_write_password`; never in `.env.monitoring` |
+| `PROMETHEUS_REMOTE_WRITE_PASSWORD` | **Yes** | Secret `prometheus_remote_write_password`; never in `pluginlake.toml` |
 
 ## File layout
 
@@ -435,9 +435,7 @@ deploy/
 │   ├── .env                          # Dev compose env and secret values (gitignored)
 │   ├── .env.example                  # Template for dev (committed)
 │   ├── .env.containers               # Optional extra non-secret settings for dev containers (gitignored)
-│   ├── traefik/                      # Traefik static config and routes (committed)
-│   ├── .env.monitoring               # Prometheus remote-write URL and username (gitignored)
-│   ├── .env.monitoring.example       # Template for Prometheus settings (committed)
+│   ├── traefik/                      # Traefik static config (committed); `pluginlake setup` renders the routes
 │   ├── smoke.env / smoke.secrets.env # Throwaway config and secrets for the smoke test (committed)
 │   ├── docker-compose.dev.yaml       # Dev: single dagster container + postgres + pluginlake + UI
 │   ├── docker-compose.central.yaml   # Central dashboard (separate compose)

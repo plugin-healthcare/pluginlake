@@ -88,8 +88,7 @@ class StationSettings(BaseModel):
 class MonitoringSettings(BaseModel):
     """Prometheus monitoring of the station (compose profile ``monitoring``).
 
-    Remote-write credentials are secrets and therefore not part of this file;
-    they are read from ``deploy/compose/.env.monitoring``.
+    The remote-write password is a secret and therefore not part of this file; it is a compose secret.
     """
 
     enabled: bool = Field(default=False, description="Start Prometheus and the exporters (compose profile).")
@@ -109,6 +108,16 @@ class MonitoringSettings(BaseModel):
             "Central Prometheus remote-write endpoint; unset keeps metrics local. "
             "Must use https:// and must not contain credentials ('@')."
         ),
+    )
+    remote_write_username: str | None = Field(
+        default=None,
+        pattern=r"^[A-Za-z0-9._-]+$",
+        description="Basic-auth username for remote write. The password is a compose secret.",
+    )
+    retention: str = Field(
+        default="15d",
+        pattern=r"^[0-9]+[smhdwy]$",
+        description="How long Prometheus keeps its data locally, such as 15d.",
     )
 
 

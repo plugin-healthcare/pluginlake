@@ -18,6 +18,7 @@ from pluginlake.deploy.bootstrap import (
 )
 from pluginlake.deploy.config import NodeSettings, StationConfig, load_init_config
 from pluginlake.deploy.config_bootstrap import BootstrapSettings
+from pluginlake.deploy.routes import APPLICATIONS, render_routes
 from pluginlake.deploy.setup import compose_env
 
 COMPOSE_DIR = Path(__file__).resolve().parents[4] / "deploy" / "compose"
@@ -26,6 +27,10 @@ PUBLIC_ROUTERS = {"zitadel", "zitadel-login", "zitadel-root", "oauth2-proxy", "r
 
 def _load(path: Path) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def _routes(domain: str = "lake.test") -> dict:
+    return yaml.safe_load(render_routes(domain))["http"]
 
 
 def _services() -> dict:
@@ -118,16 +123,25 @@ def test_edge_images_are_pinned_by_digest():
 
 
 def test_every_application_router_is_behind_forward_auth():
-    routers = _load(COMPOSE_DIR / "traefik" / "dynamic" / "routes.yaml")["http"]["routers"]
+    routers = _routes()["routers"]
     for name, router in routers.items():
         if name not in PUBLIC_ROUTERS:
             assert any(m.startswith("sso-auth") for m in router["middlewares"]), name
 
 
 def test_every_protected_host_has_a_router():
-    routers = _load(COMPOSE_DIR / "traefik" / "dynamic" / "routes.yaml")["http"]["routers"]
+    routers = _routes()["routers"]
     for subdomain in BootstrapSettings().protected_subdomains:
         assert f"Host(`{subdomain}." in routers[subdomain]["rule"], subdomain
+
+
+def test_the_routed_applications_are_the_protected_subdomains():
+    assert set(APPLICATIONS) == set(BootstrapSettings().protected_subdomains)
+
+
+def test_routes_use_the_node_domain_for_every_host():
+    assert "{{" not in render_routes("lake.test")
+    assert "pluginlake.localhost" not in render_routes("lake.test")
 
 
 def test_redirect_uris_cover_each_host():
@@ -141,12 +155,9 @@ def test_proxy_config_round_trip(tmp_path: Path):
 
 
 def test_bare_domain_redirects_to_the_console():
-    http = _load(COMPOSE_DIR / "traefik" / "dynamic" / "routes.yaml")["http"]
-    assert http["routers"]["root"]["rule"] == 'Host(`{{ env "PLUGINLAKE_DOMAIN" }}`)'
-    assert (
-        http["middlewares"]["root-redirect"]["redirectRegex"]["replacement"]
-        == 'https://console.{{ env "PLUGINLAKE_DOMAIN" }}/'
-    )
+    http = _routes()
+    assert http["routers"]["root"]["rule"] == "Host(`lake.test`)"
+    assert http["middlewares"]["root-redirect"]["redirectRegex"]["replacement"] == "https://console.lake.test/"
     assert BootstrapSettings(domain="example.org").protected_hosts[0] == "example.org"
 
 
@@ -156,28 +167,28 @@ def test_traefik_drops_headers_that_alias_the_identity_headers():
 
 
 def test_forward_auth_limits_the_response_body_size():
-    middlewares = _load(COMPOSE_DIR / "traefik" / "dynamic" / "routes.yaml")["http"]["middlewares"]
+    middlewares = _routes()["middlewares"]
     for name, middleware in middlewares.items():
         if "forwardAuth" in middleware:
             assert middleware["forwardAuth"]["maxResponseBodySize"] > 0, name
 
 
 def test_browser_applications_sign_out_a_user_without_the_role():
-    http = _load(COMPOSE_DIR / "traefik" / "dynamic" / "routes.yaml")["http"]
+    http = _routes()
     assert http["middlewares"]["sso-forbidden"]["errors"]["statusRewrites"] == {"403": 302}
     for app in ("console", "dagster", "marquez", "prometheus"):
         assert "sso-forbidden" in http["routers"][app]["middlewares"], app
 
 
 def test_browser_applications_show_the_starting_page_on_server_errors():
-    http = _load(COMPOSE_DIR / "traefik" / "dynamic" / "routes.yaml")["http"]
+    http = _routes()
     assert http["middlewares"]["sso-starting"]["errors"]["service"] in http["services"]
     for app in ("console", "dagster", "marquez", "prometheus"):
         assert http["routers"][app]["middlewares"][0] == "sso-starting", app
 
 
 def test_each_application_requires_the_role_with_its_own_name():
-    http = _load(COMPOSE_DIR / "traefik" / "dynamic" / "routes.yaml")["http"]
+    http = _routes()
     for app in BootstrapSettings().protected_subdomains:
         assert f"sso-auth-{app}" in http["routers"][app]["middlewares"], app
         assert http["middlewares"][f"sso-auth-{app}"]["forwardAuth"]["address"].endswith(f"?allowed_groups={app}"), app

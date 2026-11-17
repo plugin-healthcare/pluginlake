@@ -19,7 +19,7 @@ Access between stations stays with Nuts and DSP (ADR-006, ADR-008).
 
 The load differs per role, and both roles use the same components:
 
-- A Data Station has a few users for control, maintenance and configuration.
+- A Data Station has users for control, maintenance and configuration. With direct access, where users and organizations log in at the station itself instead of through a Processing Hub, it can also have several organizations and federated logins.
 - A Processing Hub has complex logins: several organizations, federation with their identity providers and fine-grained access.
 - Later, the provider has to help decide which containers and queries a user or project may run, based on data contracts.
 The contract itself (DSP, ODRL) stays the source of truth.

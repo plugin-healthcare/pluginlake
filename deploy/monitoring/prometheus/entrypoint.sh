@@ -37,7 +37,7 @@ reject_unquotable() {
 }
 
 [ -z "${PROMETHEUS_REMOTE_WRITE_PASSWORD:-}" ] ||
-    fail "PROMETHEUS_REMOTE_WRITE_PASSWORD must not be set in the container env (e.g. .env.monitoring); it is a compose secret"
+    fail "PROMETHEUS_REMOTE_WRITE_PASSWORD must not be set in the container env; it is a compose secret"
 
 export PROMETHEUS_STATION_ID="${PROMETHEUS_STATION_ID:-pluginlake}"
 require_safe PROMETHEUS_STATION_ID "$PROMETHEUS_STATION_ID"
