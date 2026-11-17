@@ -65,8 +65,9 @@ Sending metrics from the station to a central place is not supported yet, and ho
 
 ## Missing container metrics
 
-cAdvisor runs without `privileged`.
-On some hosts (certain cgroup v2 or storage setups) a few container metrics, such as disk I/O, stay empty.
+cAdvisor runs without `privileged` and mounts only the cgroup tree, the Docker socket and the Docker image metadata, all read-only.
+It reports memory, CPU and the containers that are running, and has the disk, disk I/O and network metric groups switched off.
+On some hosts (certain cgroup v2 or storage setups) a few container metrics stay empty.
 Only then enable `privileged` for cAdvisor with a local override file, and keep it to the hosts that need it:
 
 ```yaml

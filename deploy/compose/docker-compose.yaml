@@ -10,7 +10,6 @@ x-dagster-db: &dagster-db
   DAGSTER_PG_USER: dagster
   DAGSTER_PG_DB: dagster
 
-# Applied to every service except cAdvisor, which needs root capabilities to read the host.
 x-hardening: &hardening
   cap_drop: [ALL]
   security_opt: ["no-new-privileges:true"]
@@ -292,7 +291,7 @@ services:
   cadvisor:
     # Started through COMPOSE_PROFILES, which `pluginlake setup` sets from [monitoring] cadvisor.
     profiles: [cadvisor]
-    security_opt: ["no-new-privileges:true"]
+    <<: *hardening
     logging: *default-logging
     image: ghcr.io/google/cadvisor:v0.60.6@sha256:b8e7d1093144fd088f425ff003d75a4aa405de075db78dae3bc563730b1bd07a
     command:
@@ -301,17 +300,16 @@ services:
       # Container labels can hold anything; only keep the compose ones Prometheus filters on.
       - --store_container_labels=false
       - --whitelisted_container_labels=com.docker.compose.project,com.docker.compose.service
-      - --disable_metrics=advtcp,cpu_topology,cpuset,hugetlb,memory_numa,percpu,process,referenced_memory,resctrl,sched,tcp,udp
+      - --disable_metrics=advtcp,cpu_topology,cpuset,disk,diskIO,hugetlb,memory_numa,network,percpu,process,referenced_memory,resctrl,sched,tcp,udp
     # Read access to /dev/kmsg only, instead of `privileged` (same as vantage6-ops).
     # If container metrics are missing on a host, see docs/guides/monitoring.md.
     devices:
       - /dev/kmsg
+    # Only what is needed to list the containers of this host and read their cgroups.
     volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:ro
-      - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
-      - /dev/disk/:/dev/disk:ro
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/image:/var/lib/docker/image:ro
     expose:
       - "8080"
     # cAdvisor can reach the Docker socket; keep its unauthenticated API off the app network.

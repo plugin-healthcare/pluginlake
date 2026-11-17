@@ -48,12 +48,11 @@ def test_secrets_are_mounted_by_the_services_that_secrets_toml_lists():
     assert {name: mounted.get(name, set()) for name in declared} == declared
 
 
-def test_every_service_drops_all_capabilities_except_cadvisor():
+def test_every_service_drops_all_capabilities():
     for name, service in _services().items():
         assert "no-new-privileges:true" in service.get("security_opt", []), name
-        if name != "cadvisor":
-            assert service.get("cap_drop") == ["ALL"], name
-            assert service.get("read_only") is True, name
+        assert service.get("cap_drop") == ["ALL"], name
+        assert service.get("read_only") is True, name
 
 
 def test_marquez_uses_the_main_postgres_with_its_own_role():
