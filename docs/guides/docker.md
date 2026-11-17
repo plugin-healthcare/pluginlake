@@ -1,60 +1,54 @@
 # Docker guide
 
-This guide covers how pluginlake uses Docker for development and production, including image strategy, multi-stage builds, and secrets management.
+This is the background and reference page for how pluginlake runs in Docker: the containers, the ways to run them, where each setting lives, and how secrets and data are handled.
+To start a node, follow [Getting started](getting-started.md).
 
 ## Container architecture
 
-pluginlake uses separate containers for each concern:
+The production compose (`deploy/compose/docker-compose.yaml`) has one container per concern.
 
-| Container | Dockerfile | Purpose |
-|-----------|-----------|---------|
-| **postgres** | `dhi.io/postgres:17-alpine3.24` (pre-built) | Dagster metadata + DuckLake catalog |
-| **dagster-webserver** | `dagster-webserver.Dockerfile` | Dagster web UI |
-| **dagster-daemon** | `dagster-webserver.Dockerfile` | Schedules, sensors, run queue |
-| **dagster-code-server** | `pluginlake.Dockerfile` | Asset definitions served via gRPC |
-| **pluginlake** | `pluginlake.Dockerfile` | FastAPI service |
-| **pluginlake-ui** | `ui.Dockerfile` (`APP=datastation`) | Datastation Streamlit dashboard |
-| **pluginlake-central** | `ui.Dockerfile` (`APP=central`) | Central aggregation dashboard |
-| **prometheus** | `quay.io/prometheus/prometheus` (pre-built) | Metrics store |
-| **postgres-exporter** | `quay.io/prometheuscommunity/postgres-exporter` (pre-built) | Postgres metrics |
-| **cadvisor** | `ghcr.io/google/cadvisor` (pre-built) | Container metrics |
-| **marquez-db** | `dhi.io/postgres:17-alpine3.24` (pre-built) | Marquez database |
-| **marquez** | `marquezproject/marquez:0.51.1` (pre-built) | OpenLineage receiver API |
-| **marquez-web** | `marquezproject/marquez-web:0.51.1` (pre-built) | Lineage web UI, host loopback only |
+| Group | Containers | Image |
+|-------|-----------|-------|
+| Platform | `pluginlake` (API), `dagster-webserver`, `dagster-daemon`, `dagster-code-server`, `dashboard-datastation` (the console) | Built from `deploy/docker/` (`pluginlake.Dockerfile`, `dagster-webserver.Dockerfile`, `ui.Dockerfile`) |
+| Data | `postgres` (Dagster metadata and DuckLake catalog), `pluginlake-db-init` (roles and databases) | `dhi.io/postgres:17-alpine3.24`, built init image |
+| Lineage | `marquez-db`, `marquez`, `marquez-web` | `dhi.io/postgres`, `marquezproject/marquez` and `marquez-web` 0.51.1 |
+| Monitoring | `prometheus`, `postgres-exporter`, `cadvisor` (Compose only, can be switched off) | Upstream images pinned by digest, see the [monitoring guide](monitoring.md) |
+| Edge | `traefik`, `oauth2-proxy`, `zitadel-init`, `zitadel-api`, `zitadel-login`, `zitadel-groups-hook`, `pluginlake-init`, `starting-page` | See [Edge](#edge) |
 
-Prometheus and Marquez are core components and always start with the production compose; `[station]` and `[monitoring]` in `pluginlake.toml` set the lineage namespace, the station label, cAdvisor and remote write, see the [monitoring guide](monitoring.md).
+Prometheus and Marquez are core components and always start with the production compose.
+`[station]` and `[monitoring]` in `pluginlake.toml` set the lineage namespace, the station label, cAdvisor and remote write.
 
-In development, `dagster.dev.Dockerfile` replaces the webserver, daemon, and code-server with a single all-in-one container running `dagster dev`. The UI containers use `ui.dev.Dockerfile` with hot reload. Both dashboards share one Dockerfile; the build arguments `APP` (`datastation` or `central`) and `PORT` (8501 or 8502) select the dashboard.
+The development compose (`docker-compose.dev.yaml`) is smaller.
+`dagster.dev.Dockerfile` replaces the Dagster webserver, daemon and code server with 1 container running `dagster dev`, the API runs with `uvicorn --reload`, and source code is mounted into the containers.
+Monitoring and lineage are compose profiles (`monitoring`, `lineage`), and there is no edge.
+The dashboards share `ui.Dockerfile`, where the build arguments `APP` (`datastation` or `central`) and `PORT` select the dashboard.
 
-## Building and running
+## Running options
 
-### Development
+| Recipe | Compose file | What it does |
+|--------|-------------|--------------|
+| `just up` | `docker-compose.yaml` | Runs `pluginlake setup`, then builds and starts the production stack |
+| `just down` | `docker-compose.yaml` | Stops the production stack, the data stays in `PLUGINLAKE_HOME` |
+| `just setup` | none | Prepares the data folder, secrets, `compose.env` and the local certificate without starting anything |
+| `just dev-up` | `docker-compose.dev.yaml` | Platform development stack with the dashboards |
+| `just dev-up-headless` | `docker-compose.dev.yaml` | The same without the dashboards |
+| `just dev-down` | `docker-compose.dev.yaml` | Stops the development stack, all profiles |
+| `just dev-central` | `docker-compose.central.yaml` | Central aggregation dashboard, a separate demo compose |
+| `just dev-local` | none | Titanic example without Docker, see the [Titanic tutorial](../development/titanic-tutorial.md) |
+| `just smoke-test-full` | dev and smoke override | Starts an isolated stack, runs the smoke test and removes it with its volumes |
 
-```bash
-just dev-up        # Build and start all dev containers
-just dev-down      # Stop and remove dev containers
-```
+Production images are self-contained, with no source mounts.
+The build context is always the project root, for example `docker build -f deploy/docker/pluginlake.Dockerfile -t pluginlake .`.
 
-This uses `deploy/compose/docker-compose.dev.yaml`. Source code is volume-mounted into the containers, so changes are picked up immediately without rebuilding.
+## Where settings live
 
-### Production
-
-```bash
-just up            # Prepare the node from pluginlake.toml, then build and start all production containers
-just down          # Stop and remove production containers
-```
-
-This uses `deploy/compose/docker-compose.yaml`.
-Images are fully self-contained, with no volume mounts for source code.
-The stack sits behind Traefik, oauth2-proxy and Zitadel (see [Edge](#edge)).
-
-### Building individual images
-
-```bash
-docker build -f deploy/docker/pluginlake.Dockerfile -t pluginlake .
-```
-
-The build context is always the project root.
+| What | Production | Development |
+|------|-----------|-------------|
+| Node settings (domain, first admin, projects, monitoring) | `pluginlake.toml` | Compose environment in the dev compose file |
+| uid, gid, data folder and domain for compose | `${PLUGINLAKE_HOME}/compose.env`, written by `pluginlake setup` | Not needed |
+| Secrets | One file per secret in `${PLUGINLAKE_HOME}/secrets/` | `deploy/compose/.env`, mounted as the same secret names |
+| Extra non-secret settings for a project | `[[projects]]` in `pluginlake.toml` | `deploy/compose/.env.containers` or `PLUGINLAKE_ENV_FILE` |
+| Data | Bind mounts below `PLUGINLAKE_HOME` | Docker volumes |
 
 ## Projects and database provisioning
 

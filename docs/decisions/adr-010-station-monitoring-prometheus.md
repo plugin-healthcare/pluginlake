@@ -10,6 +10,7 @@ Each data station runs its own Prometheus as the compose profile `monitoring`, s
 It scrapes the pluginlake API (`/metrics` on an internal port), Postgres (via postgres-exporter) and the station's containers (via cAdvisor).
 Metrics leave the station only over an outbound `remote_write` to a central Prometheus, matching the vantage6-ops monitoring setup (vantage6-ops ADR 002).
 Labels are bounded by design, so neither patient data nor free user input can end up in a metric.
+The compose profile is the choice for a node that runs Docker Compose, see [Choices per runtime](#choices-per-runtime) for other runtimes.
 
 ## Context
 
@@ -36,6 +37,21 @@ vantage6-ops (ADR 002, ADR 004 in DutchHospitalData/vantage6-ops) sets the const
 Upstream images are used because the hardened `dhi.io/prometheus` image has no shell (needed for the config entrypoint) and trails upstream.
 
 We run a full Prometheus rather than an Alloy agent like vantage6-ops: the station keeps a local, queryable history (default 15 days) that also works when no central monitoring is connected, and Prometheus' own `remote_write` produces the same wire format the central receiver already accepts.
+
+### Choices per runtime
+
+The components above are what a node on Docker Compose needs, because a bare-metal VM has no cloud provider that supplies container metrics or a metrics store.
+Other runtimes make some of them unnecessary:
+
+| Component | Docker Compose (VM) | Kubernetes (self-hosted or managed) |
+|---|---|---|
+| API metrics and postgres-exporter | Scraped by the station Prometheus | Same endpoints, scraped by the cluster Prometheus |
+| Container metrics | Our `cadvisor` container, only for Compose | The kubelet already serves cAdvisor metrics, so no container of ours |
+| Local Prometheus | Optional, switched on with `[monitoring] enabled`, gives local history without central monitoring | A self-hosted cluster runs its own Prometheus, a managed cluster can use the provider's monitoring |
+| Central `remote_write` | Optional, `[monitoring] remote_write_url` | Optional, configured on the cluster Prometheus |
+
+The `cadvisor` service is therefore part of the Compose deployment only, and a Kubernetes deployment scrapes the kubelet instead.
+An agent such as Grafana Alloy can replace the local Prometheus where no local history is needed, but it runs the same cAdvisor code and needs the same host access, so it does not remove the cAdvisor privileges.
 
 ### API metrics
 

@@ -94,7 +94,7 @@ class MonitoringSettings(BaseModel):
     enabled: bool = Field(default=False, description="Start Prometheus and the exporters (compose profile).")
     cadvisor: bool = Field(
         default=True,
-        description="Collect container metrics with cAdvisor. Disable when the host already runs one.",
+        description="Run a cAdvisor container for container metrics (Docker Compose only). Disable when the host already runs one.",
     )
     station_id: str = Field(
         default="pluginlake",

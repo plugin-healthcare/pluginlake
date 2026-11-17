@@ -179,6 +179,18 @@ Agent-agnostic instructions live in [`AGENTS.md`](../../AGENTS.md), and [`.githu
 Keep `AGENTS.md` short and state hard rules and project facts an agent cannot infer from the code.
 Link to detailed instruction files instead of repeating docs, and leave out anything that is in `pyproject.toml`, the linter config or the code.
 
+## Development stack
+
+`just up` is the production stack that every node runs, also on a laptop with a `.localhost` domain, and it is the right choice for trying out a project or an asset.
+The development stack is for changing the platform itself:
+
+- `just dev-up` starts the dev compose with source mounts, so the API reloads with `uvicorn --reload` and Dagster runs `dagster dev`.
+- `just dev-up-headless` does the same without the dashboards, and `just dev-down` stops it.
+- `just dev-local` runs the Titanic example without Docker, see the [Titanic tutorial](titanic-tutorial.md).
+
+Do not use the development stack to run a station.
+It has no login in front of the applications and keeps its data in Docker volumes.
+
 ## CI/CD
 
 ### Pre-commit hooks
