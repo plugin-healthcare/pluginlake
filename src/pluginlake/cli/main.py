@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from pluginlake.cli.init import run_init
+from pluginlake.cli.secrets import run_secrets_get, run_secrets_list
 from pluginlake.cli.up import run_down, run_up
 from pluginlake.cli.verify import run_verify
 from pluginlake.deploy.setup import run_setup
@@ -65,6 +66,13 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     setup_parser.add_argument("--dev", action="store_true", help="Development defaults; also writes secrets.env.")
 
+    secrets_parser = subparsers.add_parser("secrets", help="List or read the secrets of a node.")
+    secrets_parser.add_argument("--home", type=Path, default=Path(".pluginlake"), help="Data folder.")
+    secrets_sub = secrets_parser.add_subparsers(dest="secrets_command", required=True)
+    secrets_sub.add_parser("list", help="Show name, origin and presence of each secret, without values.")
+    secrets_get = secrets_sub.add_parser("get", help="Print the value of one secret (needs read access to the file).")
+    secrets_get.add_argument("name", help="Name of the secret.")
+
     down_parser = subparsers.add_parser("down", help="Stop the station stack (all profiles).")
     down_parser.add_argument("-v", "--volumes", action="store_true", help="Also remove named volumes.")
 
@@ -88,6 +96,9 @@ def main(argv: list[str] | None = None) -> int:
         "verify": lambda: run_verify(project=args.project),
         "up": lambda: run_up(config_path=args.config, detach=args.detach, build=not args.no_build),
         "setup": lambda: run_setup(config_path=args.config, home=args.home, host_home=args.host_home, dev=args.dev),
+        "secrets": lambda: (
+            run_secrets_list(args.home) if args.secrets_command == "list" else run_secrets_get(args.home, args.name)
+        ),
         "down": lambda: run_down(volumes=args.volumes),
     }
     handler = handlers.get(args.command)
