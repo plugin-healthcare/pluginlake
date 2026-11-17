@@ -237,6 +237,8 @@ __marimo__/
 .agents/plan/
 .agents/memory/
 .agents/review/
+.agents/issues/
+.agents/runbook/
 .agent/
 
 # Data of the production compose (bind mounts)
