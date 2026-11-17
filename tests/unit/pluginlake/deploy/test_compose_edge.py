@@ -8,10 +8,7 @@ import httpx
 import yaml
 
 from pluginlake.deploy.bootstrap import (
-    ensure_groups_executions,
-    ensure_groups_target,
-    ensure_roles,
-    grant_admin_roles,
+    ZitadelBootstrap,
     read_proxy_config,
     redirect_uris,
     write_proxy_config,
@@ -194,7 +191,7 @@ def test_each_application_requires_the_role_with_its_own_name():
         assert http["middlewares"][f"sso-auth-{app}"]["forwardAuth"]["address"].endswith(f"?allowed_groups={app}"), app
 
 
-def _recording_client(responses: dict[str, dict]) -> tuple[httpx.Client, list[tuple[str, str, dict]]]:
+def _bootstrap(responses: dict[str, dict], **settings) -> tuple[ZitadelBootstrap, list[tuple[str, str, dict]]]:
     calls: list[tuple[str, str, dict]] = []
 
     def handle(request: httpx.Request) -> httpx.Response:
@@ -202,50 +199,58 @@ def _recording_client(responses: dict[str, dict]) -> tuple[httpx.Client, list[tu
         calls.append((request.method, request.url.path, body))
         return httpx.Response(200, json=responses.get(f"{request.method} {request.url.path}", {}))
 
-    return httpx.Client(base_url="http://zitadel", transport=httpx.MockTransport(handle)), calls
+    client = httpx.Client(base_url="http://zitadel", transport=httpx.MockTransport(handle))
+    return ZitadelBootstrap(client, BootstrapSettings(**settings)), calls
 
 
 def test_ensure_roles_only_creates_missing_roles():
-    client, calls = _recording_client({"POST /management/v1/projects/p/roles/_search": {"result": [{"key": "api"}]}})
-    assert ensure_roles(client, "p", ["api", "dagster"]) == ["dagster"]
+    bootstrap, calls = _bootstrap(
+        {"POST /management/v1/projects/p/roles/_search": {"result": [{"key": "api"}]}},
+        protected_subdomains=["api", "dagster"],
+    )
+    assert bootstrap.ensure_roles("p") == ["dagster"]
     created = [body["roleKey"] for method, path, body in calls if path.endswith("/roles")]
     assert created == ["dagster"]
 
 
 def test_new_roles_are_added_to_the_existing_grant_of_the_admin():
-    client, calls = _recording_client(
+    bootstrap, calls = _bootstrap(
         {
             "POST /management/v1/users/_search": {"result": [{"id": "u1", "human": {}}]},
             "POST /management/v1/users/grants/_search": {"result": [{"id": "g1", "roleKeys": ["api"]}]},
-        }
+        },
+        protected_subdomains=["api", "console"],
     )
-    grant_admin_roles(client, "p", "admin", ["api", "console"], ["console"])
+    bootstrap.grant_admin_roles("p", ["console"])
     update = next(body for method, path, body in calls if method == "PUT")
     assert update == {"roleKeys": ["api", "console"]}
 
 
 def test_admin_keeps_a_removed_role_removed():
-    client, calls = _recording_client(
+    bootstrap, calls = _bootstrap(
         {
             "POST /management/v1/users/_search": {"result": [{"id": "u1", "human": {}}]},
             "POST /management/v1/users/grants/_search": {"result": [{"id": "g1", "roleKeys": ["api"]}]},
-        }
+        },
+        protected_subdomains=["api", "dagster"],
     )
-    grant_admin_roles(client, "p", "admin", ["api", "dagster"], [])
+    bootstrap.grant_admin_roles("p", [])
     assert not [
         call for call in calls if call[0] in {"PUT", "POST"} and "grants" in call[1] and "_search" not in call[1]
     ]
 
 
 def test_groups_target_is_fail_closed_and_stores_key(tmp_path):
-    client, calls = _recording_client(
+    key_file = tmp_path / "hook.key"
+    bootstrap, calls = _bootstrap(
         {
             "POST /v2/actions/targets/search": {},
             "POST /v2/actions/targets": {"id": "t1", "signingKey": "secret"},
-        }
+        },
+        groups_hook_url="http://hook/groups",
+        groups_hook_key_file=key_file,
     )
-    key_file = tmp_path / "hook.key"
-    assert ensure_groups_target(client, "http://hook/groups", key_file) == "t1"
+    assert bootstrap.ensure_groups_target() == "t1"
     created = next(body for method, path, body in calls if path == "/v2/actions/targets")
     assert created["restCall"] == {"interruptOnError": True}
     assert key_file.read_text().strip() == "secret"
@@ -253,15 +258,19 @@ def test_groups_target_is_fail_closed_and_stores_key(tmp_path):
 
 def test_groups_target_reuses_existing_and_restores_missing_key(tmp_path):
     existing = {"id": "t1", "endpoint": "http://hook/groups", "signingKey": "secret"}
-    client, calls = _recording_client({"POST /v2/actions/targets/search": {"targets": [existing]}})
     key_file = tmp_path / "hook.key"
-    assert ensure_groups_target(client, "http://hook/groups", key_file) == "t1"
+    bootstrap, calls = _bootstrap(
+        {"POST /v2/actions/targets/search": {"targets": [existing]}},
+        groups_hook_url="http://hook/groups",
+        groups_hook_key_file=key_file,
+    )
+    assert bootstrap.ensure_groups_target() == "t1"
     assert [method for method, _, _ in calls] == ["POST"]
     assert key_file.read_text().strip() == "secret"
 
 
 def test_groups_executions_cover_both_token_functions():
-    client, calls = _recording_client({})
-    ensure_groups_executions(client, "t1")
+    bootstrap, calls = _bootstrap({})
+    bootstrap.ensure_groups_executions("t1")
     functions = [body["condition"]["function"]["name"] for _, _, body in calls]
     assert functions == ["preuserinfo", "preaccesstoken"]

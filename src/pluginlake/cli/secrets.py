@@ -21,6 +21,8 @@ def _is_present(spec: SecretSpec, path: Path) -> bool:
 def run_secrets_list(home: Path) -> int:
     """Print the name, origin and presence of every secret, never the value.
 
+    An external secret may be empty (optional), so it only counts as missing when its file is missing.
+
     Args:
         home: The data folder (``PLUGINLAKE_HOME``).
 
@@ -32,7 +34,6 @@ def run_secrets_list(home: Path) -> int:
     failed = False
     for spec in config.secrets:
         present = _is_present(spec, folder / spec.name)
-        # An external secret may be empty (optional), so it only fails when the file itself is missing.
         ok = present or (spec.kind is SecretKind.EMPTY and (folder / spec.name).is_file())
         failed = failed or not ok
         print(f"{'ok' if ok else 'MISSING':8}{_origin(spec):10}{spec.name}")
