@@ -2,10 +2,12 @@
 
 from http import HTTPStatus
 
+import duckdb
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
+from pluginlake.core.ducklake.setup import ResourceLimitError, limit_exceeded_message
 from pluginlake.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -43,6 +45,17 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=exc.status_code,
             content={"detail": exc.detail},
+        )
+
+    # DuckDB limits (DuckDBLimitSettings): tell the client what happened instead of a bare 500.
+    @app.exception_handler(duckdb.OutOfMemoryException)
+    @app.exception_handler(ResourceLimitError)
+    async def _handle_resource_limit(request: Request, _exc: Exception) -> JSONResponse:
+        message = limit_exceeded_message()
+        logger.warning("Query resource limit exceeded on %s %s: %s", request.method, request.url.path, message)
+        return JSONResponse(
+            status_code=HTTPStatus.INSUFFICIENT_STORAGE,
+            content={"detail": message},
         )
 
     @app.exception_handler(ValidationError)

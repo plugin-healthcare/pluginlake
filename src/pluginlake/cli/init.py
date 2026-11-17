@@ -28,6 +28,9 @@ def _core_requirement(installed: str) -> str:
 
     Pins to the current minor series (``>=X.Y.0,<X.(Y+1).0``) so a scaffolded
     project declares compatibility with the core it was generated against.
+
+    Returns:
+        The version specifier, e.g. ``>=0.2.0,<0.3.0``.
     """
     parts = installed.split(".")
     major = parts[0] if parts and parts[0].isdigit() else "0"

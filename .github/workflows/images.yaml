@@ -1,0 +1,47 @@
+# Builds api, dagster-webserver, ui-central and ui-datastation without pushing.
+# Pull requests fail on a CRITICAL vulnerability that has a fix; on main and in the
+# daily run fixable HIGH/CRITICAL findings go to the Security tab (code scanning).
+# Publishing happens only in release.yaml.
+name: Images
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    # Daily at 05:30 UTC: new CVEs in unchanged images.
+    - cron: "30 5 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pull-request:
+    name: Build and gate
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-images.yaml
+    with:
+      report: false
+    secrets:
+      DHI_USERNAME: ${{ secrets.DHI_USERNAME }}
+      DHI_TOKEN: ${{ secrets.DHI_TOKEN }}
+
+  report:
+    name: Build and report
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      security-events: write
+    uses: ./.github/workflows/build-images.yaml
+    with:
+      report: true
+    secrets:
+      DHI_USERNAME: ${{ secrets.DHI_USERNAME }}
+      DHI_TOKEN: ${{ secrets.DHI_TOKEN }}

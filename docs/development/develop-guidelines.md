@@ -153,14 +153,36 @@ We follow [Semantic Versioning](https://semver.org/):
 
 ### Release process
 
+The version policy and the milestones are in the handbook; releases are milestones plus tags on `main`, no release branches.
+`.github/workflows/release.yaml` does the rest.
+
 1. Ensure `CHANGELOG.md` is up to date with an `[Unreleased]` section describing all changes since the last release.
-2. Update the version in `pyproject.toml`.
-3. Rename `[Unreleased]` to `[x.y.z] — YYYY-MM-DD` in the changelog (use today's date — the release date is when you tag, not when the code was merged).
+2. Update the version in `pyproject.toml`. A pre-release has a hyphen: `0.2.0-rc.1`.
+3. Rename `[Unreleased]` to `[x.y.z] — YYYY-MM-DD` in the changelog (use today's date — the release date is when you tag, not when the code was merged). The heading must contain the exact version, e.g. `[0.2.0-rc.1]`.
 4. Add a fresh empty `[Unreleased]` section above it.
 5. Commit the version bump (can be part of the feature PR that completes the milestone, or a separate small PR).
 6. Merge to `main` via PR.
-7. Tag the merge commit: `git tag vx.y.z && git push --tags`.
-8. Create a GitHub Release from the tag (copies changelog entry as release notes).
+7. Tag the merge commit: `git tag vx.y.z && git push origin vx.y.z`.
+   The workflow refuses a tag that is not on `main` or differs from the version in `pyproject.toml`, and otherwise creates a **draft** GitHub Release with the changelog section as notes (marked pre-release when the version has a hyphen).
+8. Review the draft and publish it. Publishing starts the release jobs:
+    - **images**: build `api`, `dagster-webserver`, `ui-central` and `ui-datastation`, push them by digest to `ghcr.io/plugin-healthcare/pluginlake/<image>`, scan them with Trivy (a critical vulnerability with a fix stops the release), sign them with cosign (keyless) and attach an SBOM and build provenance attestation;
+    - **promote**: only when every image passed, verify the signatures and tag each digest with the version (`0.2.0`, no `latest`). An existing tag must already point at the same digest; tags are never moved;
+    - **package**: write the digests into the images lock (`src/pluginlake/deploy/stack/images.json`), build the wheel and sdist, check that the installed wheel runs without a checkout, and attest them;
+    - **pypi**: publish to PyPI with trusted publishing (OIDC, no token), **assets**: attach the dist files to the release.
+
+A failed release is re-run with *Re-run failed jobs* on the workflow run.
+Images whose version tag exists are reused instead of rebuilt, PyPI skips files that are already uploaded and assets are replaced, so a re-run never changes what was already published.
+Fix a broken release with a new version, not by moving a tag.
+
+#### One-time setup
+
+| What | Where |
+|------|-------|
+| PyPI trusted publisher: owner `plugin-healthcare`, repository `pluginlake`, workflow `release.yaml`, environment `pypi` | pypi.org, project `pluginlake` (or a pending publisher before the first upload) |
+| Environment `pypi`, optionally with required reviewers and a tag rule `v*` | Repository settings, Environments |
+| Secrets `DHI_USERNAME` and `DHI_TOKEN`: a Docker account (access token, read-only) for the `dhi.io` base images | Repository or organisation secrets |
+| Package visibility: make the four packages public after the first release, or have nodes log in (see [security](../guides/security.md#registries)) | Organisation, Packages, package settings |
+| Branch protection on `main` and a tag ruleset for `v*` (only maintainers create or delete tags) | Repository settings, Rules |
 
 ### Changelog conventions
 
@@ -252,35 +274,39 @@ All pre-commit hooks are defined in the `.pre-commit-config.yaml` file and inclu
 
 We use GitHub Actions to automate our CI/CD pipeline. All workflows are defined in the `.github/workflows` directory.
 
+All actions are pinned to a full version tag (`actions/checkout@v7.0.1`, not `@v7` or a branch), so updating one is a one-line change; every workflow starts with `permissions: {}` and each job asks only for what it needs; `tests/unit/repo/test_workflows.py` enforces both.
+
 #### CI Workflow (`ci.yaml`)
 
-Runs on every pull request to `main`:
+Runs on every pull request to `main` and on pushes to `main`:
 
-- **Ruff check**: linting only (no auto-fixing)
-- **ty check**: static type checking
+- **Ruff check** (`--no-fix`) and **ruff format --check**: style, docstrings (pydocstyle and the pydoclint `DOC` rules) and formatting fail the build
+- **ty check**: static type checking; warnings fail too (`error-on-warning`)
 - **Pytest**: unit tests with coverage (`--cov=pluginlake`)
+- **Package**: builds the wheel, installs it outside the checkout and checks that the CLI and the packaged production stack work
+
+#### Images Workflow (`images.yaml`, `build-images.yaml`)
+
+Builds `api`, `dagster-webserver`, `ui-central` and `ui-datastation` without pushing, on every pull request, every push to `main` and daily at 05:30 UTC.
+Trivy scans each image: a pull request fails on a CRITICAL vulnerability that has a fix; on `main` and in the daily run, fixable HIGH and CRITICAL findings are uploaded to the Security tab (code scanning) instead.
+
+#### Release Workflow (`release.yaml`)
+
+See [release process](#release-process).
 
 #### Security Workflow (`security.yaml`)
 
 - Runs **daily at 06:00 UTC** on the default branch
 - Can also be triggered manually via workflow dispatch
-- Checks for security vulnerabilities using `uv-secure`
-
-#### Docker Build Workflow (`docker-build.yaml.disabled`)
-
-A disabled scaffold for building and pushing the production images to Azure Container Registry. It is kept with a `.disabled` extension so GitHub does not run it, and needs auth configured (OIDC recommended for a public repo) before being enabled. When enabled it will:
-
-- Trigger on push to `main` when `src/`, `deploy/docker/`, `pyproject.toml`, or `uv.lock` change
-- Build all images (`pluginlake/pluginlake`, `pluginlake/dagster-webserver`, `pluginlake/ui-central`, `pluginlake/ui-datastation`)
-- Tag: `latest` and commit SHA
-- Include SLSA provenance and SBOM attestations
+- Audits the locked Python dependencies with `uv audit`
 
 #### Dependabot
 
 Dependabot is configured to check daily for updates to:
 
 - Python dependencies
-- GitHub Actions versions
-- Docker base images
+- GitHub Actions versions (the version pins)
+- Docker base images (the digest pins in `deploy/docker/`)
+- Images in the compose files (`deploy/compose/` and the packaged stack)
 
 All update PRs target the `main` branch.

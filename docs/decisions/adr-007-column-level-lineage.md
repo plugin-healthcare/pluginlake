@@ -311,7 +311,7 @@ Conclusion:
 - Images are pinned by version: `marquezproject/marquez:0.51.1` and `marquezproject/marquez-web:0.51.1`.
 - Marquez uses its own PostgreSQL container (`marquez-db`) and database, separate from the Dagster and DuckLake database. Credentials are set with `MARQUEZ_DB`, `MARQUEZ_DB_USER` and `MARQUEZ_DB_PASSWORD` in `deploy/compose/.env`.
 - Data lives in the named volume `marquez-db-data`, so it survives `pluginlake down` and restarts. Only `pluginlake down -v` removes it.
-- The API config is `config/marquez/marquez.yml`: credentials come from the environment, OpenSearch-based search is explicitly disabled (it is not part of the stack), and the `PII` and `SENSITIVE` tags are predefined.
+- The API config is `src/pluginlake/deploy/stack/marquez/marquez.yml` (formerly `config/marquez/marquez.yml`): credentials come from the environment, OpenSearch-based search is explicitly disabled (it is not part of the stack), and the `PII` and `SENSITIVE` tags are predefined.
 - The OpenLineage endpoint inside the compose network is `http://marquez:5000/api/v1/lineage`. The API is not published on the host.
 - Marquez has no authentication. The web UI is therefore published on the host loopback interface only (`127.0.0.1:3001`, override with `MARQUEZ_WEB_PORT`), so only administrators with access to the host (for example through an SSH tunnel) can reach it.
 

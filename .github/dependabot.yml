@@ -24,7 +24,7 @@ updates:
       github-actions:
         patterns: ["*"]
 
-  # Docker base images
+  # Docker base images (pinned by digest)
   - package-ecosystem: "docker"
     directory: "/deploy/docker"
     schedule:
@@ -33,8 +33,9 @@ updates:
 
   # Service images in compose files (postgres, marquez, prometheus, exporters, cAdvisor).
   # Updates both tag and pinned digest.
+  # The packaged production stack is in src/pluginlake/deploy/stack.
   - package-ecosystem: "docker-compose"
-    directory: "/deploy/compose"
+    directories: ["/deploy/compose", "/src/pluginlake/deploy/stack"]
     schedule:
       interval: "daily"
     open-pull-requests-limit: 10

@@ -16,5 +16,8 @@ def ready() -> dict[str, str]:
     """Readiness check — returns 200 when the service can accept traffic.
 
     Extend this to verify downstream dependencies (database, storage, etc.).
+
+    Returns:
+        The readiness status.
     """
     return {"status": "ready"}

@@ -12,6 +12,7 @@ from pluginlake.core.ducklake.io_manager import (
     DEFAULT_SCHEMA,
     DuckLakeIOManager,
 )
+from pluginlake.core.ducklake.setup import ResourceLimitError
 
 
 @pytest.fixture
@@ -154,3 +155,19 @@ def test_load_input_single_segment_key(mock_conn, io_mgr):
 
     mock_conn.sql.assert_called_once_with(f"SELECT * FROM {CATALOG}.{DEFAULT_SCHEMA}.titanic_raw")
     assert isinstance(result, pl.LazyFrame)
+
+
+def test_handle_output_out_of_memory_raises_resource_limit_error(mock_conn, io_mgr):
+    context = MagicMock()
+    context.asset_key = AssetKey(["omop", "person"])
+
+    def _execute(sql, *_args):
+        if sql.startswith("CREATE OR REPLACE TABLE"):
+            msg = "Out of Memory Error"
+            raise duckdb.OutOfMemoryException(msg)
+        return MagicMock()
+
+    mock_conn.execute.side_effect = _execute
+    with pytest.raises(ResourceLimitError, match=f"Writing {CATALOG}.omop.person: .*DUCKLAKE_MEMORY_LIMIT"):
+        io_mgr.handle_output(context, pl.DataFrame({"id": [1]}))
+    mock_conn.unregister.assert_called_once_with("_data")

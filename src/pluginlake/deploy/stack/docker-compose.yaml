@@ -1,0 +1,412 @@
+# Production stack of a pluginlake station, shipped inside the pluginlake package.
+# Started by `pluginlake up` (docs/guides/deploying-a-station.md), which runs compose with
+# the station directory (the one holding pluginlake.toml) as project directory, so the
+# relative env files below are read from there:
+#   .env.production          non-secret config, loaded into the containers
+#   secrets/<name>           one file per password, mounted as a Docker secret under
+#                            /run/secrets/<name> (docs/guides/docker.md#secrets)
+#   .env.monitoring          Prometheus remote-write settings (profile `monitoring`)
+# Templates for these files are next to this file in templates/.
+#
+# Our images come from ghcr.io/plugin-healthcare/pluginlake and are pinned by digest:
+# `pluginlake up` sets PLUGINLAKE_IMAGE_* from the images lock (images.json) that the
+# release workflow writes into the package. Third-party images are pinned here.
+# PLUGINLAKE_STACK_DIR (the directory of this file) is set by `pluginlake up` as well.
+#
+# Hardening (docs/guides/security.md): every service merges x-hardening (read-only root
+# filesystem, all capabilities dropped, no-new-privileges) and sets a non-root `user`.
+# cAdvisor is the documented exception. Only the API is published on all interfaces;
+# the web UIs are on loopback (reach them through an SSH tunnel), databases, the Dagster
+# code server and the Marquez API are not published at all.
+# tests/unit/pluginlake/deploy/test_compose_hardening.py enforces these rules.
+
+name: pluginlake
+
+# Rotate container logs: the default json-file driver keeps them unbounded on the host.
+# Step stdout/stderr (dagster-code-server) can contain data, so keep the retention small.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-hardening: &hardening
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs:
+    - /tmp
+  logging: *default-logging
+
+services:
+  postgres:
+    <<: *hardening
+    image: dhi.io/postgres:17-alpine3.24@sha256:078526a2556cf2651d500d1c02902f6696c40148b1dbaff716a8533d81622a35
+    user: "70:70"
+    env_file: .env.production
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    tmpfs:
+      - /tmp
+      - /var/run/postgresql:uid=70,gid=70
+    volumes:
+      # PGDATA of the dhi image; a new named volume inherits its postgres ownership.
+      - dagster-postgres:/var/lib/postgresql/17/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+  dagster-webserver:
+    <<: *hardening
+    image: ${PLUGINLAKE_IMAGE_DAGSTER_WEBSERVER:?set by pluginlake up from the images lock}
+    user: "65532:65532"
+    ports:
+      # The Dagster UI has no authentication: loopback only.
+      - "127.0.0.1:${DAGSTER_WEBSERVER_PORT:-3000}:3000"
+    env_file: .env.production
+    environment:
+      DAGSTER_HOME: /app/config/dagster
+    secrets:
+      - dagster_pg_password
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dagster-code-server:
+        condition: service_healthy
+    command:
+      [
+        "dagster-webserver",
+        "-h", "0.0.0.0",
+        "-p", "3000",
+        "-w", "/app/config/dagster/workspace.yaml",
+      ]
+    restart: unless-stopped
+
+  dagster-daemon:
+    <<: *hardening
+    image: ${PLUGINLAKE_IMAGE_DAGSTER_WEBSERVER:?set by pluginlake up from the images lock}
+    user: "65532:65532"
+    env_file: .env.production
+    environment:
+      DAGSTER_HOME: /app/config/dagster
+    secrets:
+      - dagster_pg_password
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dagster-code-server:
+        condition: service_healthy
+    command: ["dagster-daemon", "run", "-w", "/app/config/dagster/workspace.yaml"]
+    restart: unless-stopped
+
+  dagster-code-server:
+    <<: *hardening
+    image: ${PLUGINLAKE_IMAGE_API:?set by pluginlake up from the images lock}
+    user: "65532:65532"
+    # gRPC on 4000 inside the compose network only.
+    expose:
+      - "4000"
+    env_file: .env.production
+    environment:
+      DUCKLAKE_PG_HOST: postgres
+      DUCKLAKE_PG_PORT: "5432"
+      DUCKLAKE_PG_DB: ${DUCKLAKE_PG_DB:-ducklake}
+      PLUGINLAKE_STORAGE_BASE_DIR: .data/storage
+    secrets:
+      - ducklake_pg_password
+      # Runs execute in this container and write their events to the Dagster instance.
+      - dagster_pg_password
+    volumes:
+      - pluginlake-data:/app/.data
+    healthcheck:
+      test: ["CMD", "dagster", "api", "grpc-health-check", "-p", "4000"]
+      interval: 3s
+      timeout: 3s
+      start_period: 3s
+      retries: 10
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      [
+        "python", "-m", "pluginlake.deploy.dagster_env",
+        "dagster", "code-server", "start",
+        "-h", "0.0.0.0",
+        "-p", "4000",
+        "-m", "pluginlake.definitions",
+      ]
+    restart: unless-stopped
+
+  pluginlake:
+    <<: *hardening
+    image: ${PLUGINLAKE_IMAGE_API:?set by pluginlake up from the images lock}
+    user: "65532:65532"
+    # Backstop above the DuckDB limit (DUCKLAKE_MEMORY_LIMIT, 2GB per connection): a query
+    # over that limit fails with HTTP 507 long before the kernel would kill the container.
+    mem_limit: ${PLUGINLAKE_API_MEM_LIMIT:-4g}
+    env_file: .env.production
+    environment:
+      PLUGINLAKE_SERVER_HOST: ${PLUGINLAKE_SERVER_HOST:-0.0.0.0}
+      PLUGINLAKE_SERVER_PORT: ${PLUGINLAKE_SERVER_PORT:-8000}
+      DUCKLAKE_PG_HOST: postgres
+      DUCKLAKE_PG_PORT: "5432"
+      DUCKLAKE_PG_DB: ${DUCKLAKE_PG_DB:-ducklake}
+      PLUGINLAKE_INGEST_DAGSTER_WEBSERVER_URL: http://dagster-webserver:3000
+      PLUGINLAKE_STORAGE_BASE_DIR: .data/storage
+      PLUGINLAKE_METRICS_HOST: "0.0.0.0"
+    secrets:
+      - ducklake_pg_password
+    ports:
+      # The only port published on all interfaces.
+      - "${PLUGINLAKE_SERVER_PORT:-8000}:${PLUGINLAKE_SERVER_PORT:-8000}"
+    expose:
+      # Internal metrics port (PLUGINLAKE_METRICS_PORT): scraped by Prometheus, never published.
+      - "9464"
+    volumes:
+      - pluginlake-data:/app/.data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${PLUGINLAKE_SERVER_PORT:-8000}/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["python", "-m", "pluginlake"]
+    restart: unless-stopped
+
+  # Datastation dashboard (profile `ui`, `[station] dashboards` in pluginlake.toml).
+  dashboard-datastation:
+    <<: *hardening
+    image: ${PLUGINLAKE_IMAGE_UI_DATASTATION:?set by pluginlake up from the images lock}
+    profiles: [ui]
+    user: "65532:65532"
+    ports:
+      # No authentication: loopback only.
+      - "127.0.0.1:${DASHBOARD_HOST_PORT:-8501}:8501"
+    environment:
+      DASHBOARD_API_URL: http://pluginlake:${PLUGINLAKE_SERVER_PORT:-8000}
+      DASHBOARD_DATASTATION_ID: ${DASHBOARD_DATASTATION_ID:-pluginlake}
+      DASHBOARD_DATASTATION_NAME: ${DASHBOARD_DATASTATION_NAME:-pluginlake}
+    depends_on:
+      pluginlake:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Monitoring (profile `monitoring`, ADR-010). Enabled via [monitoring] in
+  # pluginlake.toml. Only Prometheus is published, on loopback; the exporters and
+  # the API metrics port stay internal.
+  # ---------------------------------------------------------------------------
+  prometheus:
+    <<: *hardening
+    image: quay.io/prometheus/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2
+    profiles: [monitoring]
+    user: "65534:65534"
+    entrypoint: ["/bin/sh", "/etc/prometheus/pluginlake/entrypoint.sh"]
+    env_file:
+      # Remote-write URL and username; read by Prometheus only. See templates/env.monitoring.example.
+      - path: .env.monitoring
+        required: false
+    environment:
+      PROMETHEUS_COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME}
+    secrets:
+      # Referenced directly as basic_auth.password_file; may be empty without remote write.
+      - prometheus_remote_write_password
+    networks: [default, monitoring]
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ${PLUGINLAKE_STACK_DIR:?set by pluginlake up}/monitoring/prometheus:/etc/prometheus/pluginlake:ro
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  postgres-exporter:
+    <<: *hardening
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1@sha256:ac5ec343104fae0e2d84a27bb8d69b38430a11910c5382cad85d478d2bab713e
+    profiles: [monitoring]
+    user: "65534:65534"
+    command:
+      # Per-table collectors would turn table names into labels; table names can
+      # derive from uploaded files, so they stay off.
+      - --no-collector.stat_user_tables
+      - --no-collector.statio_user_tables
+    environment:
+      DATA_SOURCE_URI: postgres:5432/postgres?sslmode=disable
+      # Prefer a dedicated user with the pg_monitor role (docs/guides/monitoring.md).
+      DATA_SOURCE_USER: ${POSTGRES_EXPORTER_USER:-monitoring}
+      DATA_SOURCE_PASS_FILE: /run/secrets/postgres_exporter_password
+    secrets:
+      - postgres_exporter_password
+    expose:
+      - "9187"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Exception to the hardening rules: cAdvisor reads the Docker state of the host,
+  # which needs root and its default capabilities. It keeps a read-only root
+  # filesystem and no-new-privileges, and sits on its own network.
+  cadvisor:
+    image: ghcr.io/google/cadvisor:v0.60.6@sha256:b8e7d1093144fd088f425ff003d75a4aa405de075db78dae3bc563730b1bd07a
+    profiles: [monitoring]
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    logging: *default-logging
+    command:
+      - --docker_only=true
+      - --housekeeping_interval=30s
+      # Container labels can hold anything; only keep the compose ones Prometheus filters on.
+      - --store_container_labels=false
+      - --whitelisted_container_labels=com.docker.compose.project,com.docker.compose.service
+      - --disable_metrics=advtcp,cpu_topology,cpuset,hugetlb,memory_numa,percpu,process,referenced_memory,resctrl,sched,tcp,udp
+    # Read access to /dev/kmsg only, instead of `privileged` (same as vantage6-ops).
+    # If container metrics are missing on a host, see docs/guides/monitoring.md.
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    expose:
+      - "8080"
+    # cAdvisor can reach the Docker socket; keep its unauthenticated API off the app network.
+    networks: [monitoring]
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Lineage (profile `lineage`, ADR-007). Enabled via `[station] lineage`.
+  # OpenLineage endpoint inside the compose network: http://marquez:5000/api/v1/lineage
+  # ---------------------------------------------------------------------------
+  marquez-db:
+    <<: *hardening
+    image: dhi.io/postgres:17-alpine3.24@sha256:078526a2556cf2651d500d1c02902f6696c40148b1dbaff716a8533d81622a35
+    profiles: [lineage]
+    user: "70:70"
+    environment:
+      POSTGRES_USER: ${MARQUEZ_DB_USER:-marquez}
+      POSTGRES_PASSWORD_FILE: /run/secrets/marquez_db_password
+      POSTGRES_DB: ${MARQUEZ_DB:-marquez}
+    secrets:
+      - marquez_db_password
+    tmpfs:
+      - /tmp
+      - /var/run/postgresql:uid=70,gid=70
+    volumes:
+      - marquez-db-data:/var/lib/postgresql/17/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MARQUEZ_DB_USER:-marquez} -d ${MARQUEZ_DB:-marquez}"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+  marquez:
+    <<: *hardening
+    image: marquezproject/marquez:0.51.1@sha256:0721c976cff17d8b14f7949d85d6dac9c7ea37cb9fe857caa19833730fcb1a50
+    profiles: [lineage]
+    user: "65534:65534"
+    # marquez.yml reads the database password from the environment: export it from
+    # the secret for the Marquez process only, so it is not in the container config.
+    entrypoint:
+      [
+        "/bin/bash", "-c",
+        "POSTGRES_PASSWORD=\"$$(cat /run/secrets/marquez_db_password)\" exec ./entrypoint.sh",
+      ]
+    environment:
+      MARQUEZ_CONFIG: /opt/marquez/marquez.yml
+      MARQUEZ_PORT: "5000"
+      MARQUEZ_ADMIN_PORT: "5001"
+      POSTGRES_HOST: marquez-db
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${MARQUEZ_DB:-marquez}
+      POSTGRES_USER: ${MARQUEZ_DB_USER:-marquez}
+    secrets:
+      - marquez_db_password
+    # No published ports: only reachable for services on the compose network.
+    expose:
+      - "5000"
+    volumes:
+      - ${PLUGINLAKE_STACK_DIR:?set by pluginlake up}/marquez/marquez.yml:/opt/marquez/marquez.yml:ro
+    depends_on:
+      marquez-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:5001/healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+    restart: unless-stopped
+
+  marquez-web:
+    <<: *hardening
+    image: marquezproject/marquez-web:0.51.1@sha256:7312112ca0e611b0a37b00d3da6a677485ae4a97622b23d3ae24d849a927868b
+    profiles: [lineage]
+    user: "65534:65534"
+    environment:
+      MARQUEZ_HOST: marquez
+      MARQUEZ_PORT: "5000"
+      WEB_PORT: "3000"
+    # No authentication: loopback only (admins use an SSH tunnel).
+    ports:
+      - "127.0.0.1:${MARQUEZ_WEB_PORT:-3001}:3000"
+    depends_on:
+      marquez:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+networks:
+  # Only Prometheus and cAdvisor; app containers cannot reach cadvisor:8080.
+  monitoring:
+
+secrets:
+  # One file per secret in secrets/ next to pluginlake.toml (directory 0700, files 0644 so
+  # the non-root service users can read them). Compose only supports file secrets in
+  # read-only services; each is bind-mounted read-only at /run/secrets/<name>.
+  postgres_password:
+    file: ./secrets/postgres_password
+  dagster_pg_password:
+    file: ./secrets/dagster_pg_password
+  ducklake_pg_password:
+    file: ./secrets/ducklake_pg_password
+  postgres_exporter_password:
+    file: ./secrets/postgres_exporter_password
+  prometheus_remote_write_password:
+    # May be empty without remote write; `pluginlake up` creates it empty when missing.
+    file: ./secrets/prometheus_remote_write_password
+  marquez_db_password:
+    file: ./secrets/marquez_db_password
+
+volumes:
+  dagster-postgres:
+  pluginlake-data:
+  prometheus-data:
+  marquez-db-data:

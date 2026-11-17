@@ -19,6 +19,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `docs/background/` section for design research (not in public nav):
   - `dsp-authorization.md`: DSP design specification with options analysis, UX workflows, RBAC entity model, and implementation reference.
   - `federated-infrastructure.md`: federated infrastructure comparison (Nuts, vantage6, Flower, FLARE, EU dataspaces).
+- Release workflow (`release.yaml`): a tag `v*` on `main` that matches `pyproject.toml` creates a draft GitHub Release with the `CHANGELOG.md` section as notes (a version with a hyphen is a pre-release). Publishing it pushes `api`, `dagster-webserver`, `ui-central` and `ui-datastation` by digest to `ghcr.io/plugin-healthcare/pluginlake/<image>`, scans them with Trivy, signs them with cosign (keyless) and attaches SBOM and build provenance attestations; only then are the digests tagged with the version (an existing tag is never moved, and a failed release can be re-run). The package is published to PyPI with trusted publishing.
+- Images workflow (`images.yaml`): builds the four images on every pull request, push to `main` and daily without pushing; pull requests fail on a critical vulnerability with a fix, `main` and the daily run report findings to the Security tab. Replaces `docker-build.yaml.disabled`.
+- The production stack ships in the package (`pluginlake/deploy/stack/`: compose, Prometheus and Marquez config, env templates) with an images lock (`images.json`) that the release workflow fills with the image digests. `pluginlake up` runs it from an installed package without a checkout.
+- `SECURITY.md` and `docs/guides/security.md`: release pipeline, how to verify images, runtime hardening, registries and known limitations.
+- CI job `package`: the wheel is installed outside the checkout and the CLI and packaged stack are checked. Tests enforce digest pins in all compose files and Dockerfiles, the hardening rules of the production stack, version-pinned actions and explicit workflow permissions.
+- `just images` builds the four release images locally.
+- DuckDB resource limits (`DuckDBLimitSettings`): every connection gets `DUCKLAKE_MEMORY_LIMIT` (default 2GB) and spills to `DUCKLAKE_TEMP_DIRECTORY` (default `.data/tmp/duckdb`, on the data volume) up to `DUCKLAKE_MAX_TEMP_DIRECTORY_SIZE` (default 10GB). A query beyond the limits returns HTTP 507 with the limits and what to do, and fails a Dagster run with `ResourceLimitError`; before, DuckDB could take 80% of the host memory and spilling failed on the read-only filesystem. The production API container is capped at `PLUGINLAKE_API_MEM_LIMIT` (default 4g).
 
 ### Changed
 
@@ -38,12 +45,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `pluginlake up` deletes its temporary compose override file after running compose.
 - The two dashboards share `deploy/docker/ui.Dockerfile` and `ui.dev.Dockerfile` (build arguments `APP` and `PORT`), replacing the four `ui-central*`/`ui-datastation*` Dockerfiles.
 - Upgraded vulnerable dependencies: streamlit 1.66.1 (pillow 13.0.0; the `starlette` extra is gone, starlette is now built in), dnspython 2.9.2, filelock 4.2.9, graphql-core 3.2.13, setuptools 84.2.1, packaging 26.3, virtualenv 21.15.5; tornado is no longer installed.
+- `pluginlake up` / `down` use the packaged production stack with the released images by default; `--dev` runs the dev stack of a source checkout as before. The production stack does not install `[[projects]]` yet and refuses a config that lists them.
+- Production secrets are files in `secrets/` next to `pluginlake.toml` (directory `0700`, files `0644`) instead of `.env.production.secrets`: Compose only supports file secrets in read-only services. `pluginlake up` checks the directory and the files.
+- Production stack hardening: every service has a read-only root filesystem, drops all capabilities, sets `no-new-privileges` and runs as a non-root user, through a shared `x-hardening` block (cAdvisor is the documented exception). Only the API port is published on all interfaces; the Dagster UI, the dashboard, Prometheus and the Marquez UI listen on `127.0.0.1`, and Postgres (5432) and the Dagster code server (4000) are no longer published. The production stack gained the `lineage` profile and the dashboard moved to the `ui` profile. The compose project name is now `pluginlake`, so existing production volumes are not reused.
+- All images in the compose files and all base images in the Dockerfiles are pinned by digest; Dependabot also updates the packaged stack. The dev compose drops all capabilities and sets `no-new-privileges`, and publishes Postgres on `127.0.0.1` only.
+- The production image `pluginlake` is renamed to `api` (`deploy/docker/api.Dockerfile`). The images run as user 65532, install the package non-editable with precompiled bytecode, and the `api` image contains the DuckDB extensions instead of downloading them at runtime.
+- Prometheus config moved from `deploy/monitoring/` and the Marquez config from `config/marquez/` into `src/pluginlake/deploy/stack/`; `just up` builds the production stack locally with `deploy/compose/docker-compose.build.yaml`.
+- Stricter linting: CI runs `ruff check --no-fix` and `ruff format --check`, the pydoclint rules (`DOC201`, `DOC202`, `DOC402`, `DOC403`, `DOC501`) check docstring sections, the dashboards no longer skip docstring rules, and ty warnings fail the check (`error-on-warning`).
+- All GitHub Actions are pinned to full version tags (e.g. `actions/checkout@v7.0.1`) and every workflow job declares minimal permissions.
 
 ### Removed
 
 - Unused `PostgresSettings` (`PLUGINLAKE_POSTGRES_*`) and `DagsterSettings` (`PLUGINLAKE_DAGSTER_*`), which duplicated the DuckLake and Dagster connection settings; `DagsterPostgresSettings` (`DAGSTER_PG_*`, the variables `dagster.yaml` reads) replaces the latter. The generic `*_FILE` launcher and the `PLUGINLAKE_ENSURE_DB` entrypoint step are gone.
 - Plugin architecture Phase 4: removed all in-tree domain code from core — the `omop/`, `fhir/`, and `assets/` packages, their Dagster definitions, OMOP/FHIR API routers and ingestion services, `utils/testdata.py`, related scripts, notebooks, and tests. This code now lives in the `pluginlake-ehds-demo` package. Core retains only the generic platform (DuckLake, storage, generic ingestion, the FastAPI gateway, and the plugin host).
 - OMOP/FHIR reference docs moved out of core into the `pluginlake-ehds-demo` project (they document project-owned modules); core's reference nav and `docs/reference/{ingestion,index,utils}.md` updated accordingly. Removed the `fhir` and `synthea` optional-dependency extras.
+- `.github/workflows/docker-build.yaml.disabled` (replaced by `images.yaml` and `release.yaml`) and `.env.production.secrets.example` (replaced by `secrets/`).
 
 ### Fixed
 
@@ -52,6 +68,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Production `dagster-daemon` exited because it got no workspace; the compose command now passes `-w /app/config/dagster/workspace.yaml`.
 - Production runs failed before starting: they execute in the code server, which lacked `dagster-postgres` and `DAGSTER_PG_PASSWORD`. `dagster-postgres` is now a core dependency (moved from the `infra` extra) and the code server gets the `dagster_pg_password` secret through the `dagster_env` launcher.
 - Production compute log capture failed (no `tail` in the hardened images) and the webserver could not read the logs anyway. Production now uses `config/dagster/dagster.production.yaml` with `NoOpComputeLogManager`: `context.log` messages show in the UI, step stdout/stderr in the code-server container log. The unused `dagster-compute-logs` volume is removed.
+- The production API container did not start: `uvicorn` was not a dependency (only installed through dev extras). It is now a core dependency.
+- Dagster webserver and daemon crashed on SQLAlchemy 2.1, which defaults `postgresql://` to psycopg 3; `dagster.yaml` now sets `scheme: postgresql+psycopg2`.
+- Postgres stored its data outside the volume in the production and dev stacks (mounted at `/var/lib/postgresql/data`, the image uses `/var/lib/postgresql/17/data`), so data was lost when the container was recreated. The dev stack now keeps it in the named volume `postgres-data` instead of `.data/postgres` (`POSTGRES_DATA` is gone); `just dev-down -v` removes it.
+- The production dashboard service referred to a Dockerfile that no longer existed, and the data volume of the API was not writable for the non-root user.
 
 ## [0.1.1] — 2026-06-03
 

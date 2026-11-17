@@ -128,7 +128,8 @@ class IngestionService:
             An IngestionResult describing the outcome.
 
         Raises:
-            IngestionError: If validation fails (extension, dataset name, size).
+            IngestionError: If validation fails (extension, dataset name).
+            FileTooLargeError: If the file exceeds the size limit.
         """
         filename = safe_filename(file.filename)
         file_id = uuid.uuid4().hex[:12]
@@ -241,8 +242,10 @@ class IngestionService:
     ) -> str | None:
         """Attempt to trigger a Dagster job for the ingested file.
 
-        Returns the run ID on success, or None if triggering fails.
         Failures are logged but do not raise — the file is already stored.
+
+        Returns:
+            The run ID on success, or None if triggering fails.
         """
         try:
             result = await self._dagster.trigger_job(

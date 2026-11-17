@@ -1,9 +1,36 @@
 """Configuration for the DuckLake data catalog."""
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings
 
 from pluginlake.config import settings_config
+
+# DuckDB size literal, e.g. "2GB", "512MB", "1.5GiB".
+_SIZE_PATTERN = r"^\d+(\.\d+)?\s*(B|KB|MB|GB|TB|KiB|MiB|GiB|TiB)$"
+
+
+class DuckDBLimitSettings(BaseSettings):
+    """Resource limits of every DuckDB connection pluginlake opens.
+
+    Each connection is its own in-memory DuckDB instance, so the limits apply per
+    connection (the API shares one; a Dagster run opens one per IO manager).
+    A query that needs more memory than ``memory_limit`` spills to
+    ``temp_directory``, up to ``max_temp_directory_size``; beyond that it fails
+    with :class:`pluginlake.core.ducklake.setup.ResourceLimitError`.
+    Environment variables are prefixed with ``DUCKLAKE_``.
+    """
+
+    model_config = settings_config("DUCKLAKE_")
+
+    memory_limit: str = Field(default="2GB", pattern=_SIZE_PATTERN, description="Maximum memory per connection.")
+    temp_directory: str = Field(
+        default=".data/tmp/duckdb",
+        pattern=r"^[^'\\]*$",
+        description="Directory for spilling to disk, on the data volume in compose; empty disables spilling.",
+    )
+    max_temp_directory_size: str = Field(
+        default="10GB", pattern=_SIZE_PATTERN, description="Maximum disk space a connection may spill to."
+    )
 
 
 class DuckLakeSettings(BaseSettings):

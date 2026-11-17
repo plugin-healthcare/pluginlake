@@ -48,7 +48,7 @@ The API records `pluginlake_http_requests_total`, `pluginlake_http_request_durat
 
 ### Scrape configuration
 
-`deploy/monitoring/prometheus/` holds `prometheus.yml` and one file per job in `scrape.d/`.
+`src/pluginlake/deploy/stack/monitoring/prometheus/` (formerly `deploy/monitoring/prometheus/`) holds `prometheus.yml` and one file per job in `scrape.d/`.
 An entrypoint script renders the final config at container start:
 
 - `station` external label from `PROMETHEUS_STATION_ID` (`[monitoring] station_id`).
@@ -56,7 +56,7 @@ An entrypoint script renders the final config at container start:
 - cAdvisor series are kept only for containers of this compose project.
 - A `remote_write` block with basic auth is appended when `PROMETHEUS_REMOTE_WRITE_URL` is set. The password is the Docker secret `/run/secrets/prometheus_remote_write_password`, referenced as `password_file`; it is never in the Prometheus environment. Only `https://` URLs are accepted, URLs with embedded credentials are rejected, and only the scheme and host are logged.
 
-The URL can be set in `pluginlake.toml`; the remote-write username lives in `deploy/compose/.env.monitoring`, read by Prometheus only.
+The URL can be set in `pluginlake.toml`; the remote-write username lives in `.env.monitoring` (station directory; `deploy/compose/` in dev), read by Prometheus only.
 The remote-write and postgres-exporter passwords are Docker Compose secrets (see the [Docker guide](../guides/docker.md#secrets)): mounted under `/run/secrets/` in their own service only, never in a container environment.
 A central Prometheus that can reach the station may alternatively federate from `/federate`.
 

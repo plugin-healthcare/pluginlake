@@ -2,9 +2,11 @@ name: Security
 
 on:
   schedule:
-    # Run daily at 06:00 UTC
+    # Run daily at 06:00 UTC (container images: images.yaml)
     - cron: '0 6 * * *'
   workflow_dispatch:  # Allow manual trigger
+
+permissions: {}
 
 env:
   UV_PYTHON: "3.13"
@@ -13,11 +15,15 @@ jobs:
   uv-audit:
     name: uv audit
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v10.3.3
 
       - name: Audit dependencies
         run: uv audit --locked --preview-features audit-command

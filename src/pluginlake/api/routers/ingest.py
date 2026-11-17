@@ -141,6 +141,9 @@ async def ingest_file(
 
     Returns:
         IngestionResponse with file metadata and processing status.
+
+    Raises:
+        HTTPException: With the status of the ingestion error (400, 413, ...).
     """
     service = _get_ingestion_service()
 

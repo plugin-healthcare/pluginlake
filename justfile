@@ -12,8 +12,10 @@ init:
 test:
     uv run pytest --cov=pluginlake
 
+# Same checks as CI: no auto-fix, formatting checked, ty warnings fail
 lint:
-    uv run ruff check .
+    uv run ruff check --no-fix .
+    uv run ruff format --check .
     uv run ty check .
 
 secure:
@@ -38,11 +40,11 @@ serve port='8100':
 
 # Lint markdown (no line-length rule: one sentence per line)
 docs-lint *args='':
-    uv run rumdl check docs README.md CONTRIBUTING.md AGENTS.md {{ args }}
+    uv run rumdl check docs README.md CONTRIBUTING.md AGENTS.md SECURITY.md {{ args }}
 
 # Auto-fix markdown lint issues
 docs-lint-fix:
-    uv run rumdl fmt docs README.md CONTRIBUTING.md AGENTS.md
+    uv run rumdl fmt docs README.md CONTRIBUTING.md AGENTS.md SECURITY.md
 
 pre-commit:
     uv run pre-commit run --all-files
@@ -61,7 +63,7 @@ dev-up-headless *args='':
 
 # Stop dev environment (all profiles)
 dev-down *args='':
-    {{ _compose }} --profile ui --profile lineage down {{ args }}
+    {{ _compose }} --profile ui --profile lineage --profile monitoring down {{ args }}
 
 _compose_central := "docker compose -f deploy/compose/docker-compose.central.yaml"
 
@@ -84,16 +86,26 @@ smoke-test-full:
 dev-local:
     uv run dg dev -f examples/titanic.py
 
-# Production compose: config from .env.production, passwords (Docker secrets) from .env.production.secrets
-_compose_prod := "docker compose --env-file deploy/compose/.env.production --env-file deploy/compose/.env.production.secrets -f deploy/compose/docker-compose.yaml"
+# Production stack (packaged in src/pluginlake/deploy/stack) with images built from this
+# checkout. Config from deploy/compose/.env.production, passwords (Docker secrets) from
+# deploy/compose/.env.production.secrets. Stations use `pluginlake up` with released images.
+_prod_env := "PLUGINLAKE_STACK_DIR=" + justfile_directory() + "/src/pluginlake/deploy/stack PLUGINLAKE_IMAGE_API=pluginlake/api:local PLUGINLAKE_IMAGE_DAGSTER_WEBSERVER=pluginlake/dagster-webserver:local PLUGINLAKE_IMAGE_UI_DATASTATION=pluginlake/ui-datastation:local"
+_compose_prod := _prod_env + " docker compose --project-directory deploy/compose --env-file deploy/compose/.env.production --env-file deploy/compose/.env.production.secrets -f src/pluginlake/deploy/stack/docker-compose.yaml -f deploy/compose/docker-compose.build.yaml"
 
-# Start production environment
+# Start production environment (built locally)
 up *args='':
     {{ _compose_prod }} up --build {{ args }}
 
 # Stop production environment
 down *args='':
-    {{ _compose_prod }} down {{ args }}
+    {{ _compose_prod }} --profile ui --profile lineage --profile monitoring down {{ args }}
+
+# Build the four release images locally (same Dockerfiles as the image workflow)
+images:
+    docker build -f deploy/docker/api.Dockerfile -t pluginlake/api:local .
+    docker build -f deploy/docker/dagster-webserver.Dockerfile -t pluginlake/dagster-webserver:local .
+    docker build -f deploy/docker/ui.Dockerfile --build-arg APP=datastation --build-arg PORT=8501 -t pluginlake/ui-datastation:local .
+    docker build -f deploy/docker/ui.Dockerfile --build-arg APP=central --build-arg PORT=8502 -t pluginlake/ui-central:local .
 
 # --- Infrastructure (OpenTofu) ---
 
