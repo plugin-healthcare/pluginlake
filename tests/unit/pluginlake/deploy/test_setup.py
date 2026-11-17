@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from pluginlake.deploy.config import MonitoringSettings, NodeSettings, StationConfig, StationSettings
-from pluginlake.deploy.setup import compose_env, resolve_node, run_setup
+from pluginlake.deploy.setup import compose_env, is_local, require_domain, run_setup
 
 
 def _config(tmp_path: Path, node: str = "") -> Path:
@@ -15,17 +15,16 @@ def _config(tmp_path: Path, node: str = "") -> Path:
     return path
 
 
-def test_a_domain_is_required_outside_development():
+def test_a_domain_is_required():
     with pytest.raises(ValueError, match="domain"):
-        resolve_node(NodeSettings(), dev=False)
+        require_domain(NodeSettings())
 
 
-def test_development_defaults_to_localhost():
-    assert resolve_node(NodeSettings(), dev=True).domain == "pluginlake.localhost"
-
-
-def test_a_configured_domain_wins_in_development():
-    assert resolve_node(NodeSettings(domain="lake.test"), dev=True).domain == "lake.test"
+def test_only_domains_below_localhost_are_local():
+    assert is_local("pluginlake.localhost")
+    assert is_local("localhost")
+    assert not is_local("lake.nl")
+    assert not is_local("notlocalhost.nl")
 
 
 def test_compose_env_holds_the_values_compose_needs():
@@ -62,19 +61,19 @@ def _write_mkcert_files(home: Path) -> None:
         (home / "tls" / name).write_text("pem")
 
 
-def test_dev_setup_serves_the_mkcert_certificate_and_trusts_its_ca(tmp_path: Path):
+def test_local_setup_serves_the_mkcert_certificate_and_trusts_its_ca(tmp_path: Path):
     home = tmp_path / "home"
     home.mkdir()
     _write_mkcert_files(home)
-    assert run_setup(_config(tmp_path), home, dev=True) == 0
+    assert run_setup(_config(tmp_path, 'domain = "pluginlake.localhost"\n'), home) == 0
     assert "certFile: /tls/cert.pem" in (home / "tls" / "tls.yaml").read_text()
     assert "OAUTH2_PROXY_SSL_CERT_FILE='/tls/ca.pem'" in (home / "compose.env").read_text()
 
 
-def test_dev_setup_without_a_certificate_fails(tmp_path: Path):
+def test_local_setup_without_a_certificate_fails(tmp_path: Path):
     home = tmp_path / "home"
     home.mkdir()
-    assert run_setup(_config(tmp_path), home, dev=True) == 1
+    assert run_setup(_config(tmp_path, 'domain = "pluginlake.localhost"\n'), home) == 1
 
 
 def test_setup_keeps_the_own_certificate_config_of_the_operator(tmp_path: Path):
@@ -100,14 +99,3 @@ def test_setup_without_domain_fails_and_creates_nothing(tmp_path: Path):
     home.mkdir()
     assert run_setup(_config(tmp_path), home) == 1
     assert list(home.iterdir()) == []
-
-
-def test_dev_setup_writes_plain_secrets_to_a_private_env_file(tmp_path: Path):
-    home = tmp_path / "home"
-    _write_mkcert_files(home)
-    assert run_setup(_config(tmp_path), home, dev=True) == 0
-    env = (home / "secrets.env").read_text()
-    password = (home / "secrets" / "postgres_password").read_text()
-    assert f"POSTGRES_PASSWORD='{password}'" in env
-    assert "ZITADEL_CONFIG.YAML" not in env
-    assert stat.S_IMODE((home / "secrets.env").stat().st_mode) == 0o600

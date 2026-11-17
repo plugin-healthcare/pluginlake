@@ -64,7 +64,6 @@ def _build_parser() -> argparse.ArgumentParser:
     setup_parser.add_argument(
         "--host-home", type=Path, default=None, help="The data folder as the Docker host sees it (inside a container)."
     )
-    setup_parser.add_argument("--dev", action="store_true", help="Development defaults; also writes secrets.env.")
 
     secrets_parser = subparsers.add_parser("secrets", help="List or read the secrets of a node.")
     secrets_parser.add_argument("--home", type=Path, default=Path(".pluginlake"), help="Data folder.")
@@ -95,7 +94,7 @@ def main(argv: list[str] | None = None) -> int:
         "init": lambda: run_init(name=args.name, dest=args.dest, force=args.force),
         "verify": lambda: run_verify(project=args.project),
         "up": lambda: run_up(config_path=args.config, detach=args.detach, build=not args.no_build),
-        "setup": lambda: run_setup(config_path=args.config, home=args.home, host_home=args.host_home, dev=args.dev),
+        "setup": lambda: run_setup(config_path=args.config, home=args.home, host_home=args.host_home),
         "secrets": lambda: (
             run_secrets_list(args.home) if args.secrets_command == "list" else run_secrets_get(args.home, args.name)
         ),

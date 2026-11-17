@@ -7,7 +7,7 @@ For the Titanic example without Docker, see [Getting started](getting-started.md
 
 - [Docker](https://docs.docker.com/get-docker/) with Compose, for example Docker Desktop, Colima or Docker Engine
 - [just](https://github.com/casey/just)
-- [mkcert](https://github.com/FiloSottile/mkcert), only for the development start, to get a locally trusted certificate
+- [mkcert](https://github.com/FiloSottile/mkcert), only for a `.localhost` domain, to get a locally trusted certificate
 - A Docker Hub account with `docker login dhi.io` done once, because the images are built on hardened base images (see [Docker](docker.md#hardened-base-images))
 
 On macOS with Colima, keep the checkout under your home folder, because Colima only shares that folder with the containers.
@@ -17,10 +17,10 @@ On macOS with Colima, keep the checkout under your home folder, because Colima o
 ```bash
 git clone https://github.com/plugin-healthcare/pluginlake.git
 cd pluginlake
-just up-dev
+just up
 ```
 
-`just up-dev` prepares the node from `pluginlake.toml` (folders, secrets and `compose.env` in `.pluginlake/`), creates a development certificate for `pluginlake.localhost`, then builds and starts all containers.
+`just up` prepares the node from `pluginlake.toml` (folders, secrets and `compose.env` in `.pluginlake/`), creates a certificate for the `.localhost` domain in `[node]`, then builds and starts all containers.
 The first start takes a few minutes, because the images are built and Zitadel is provisioned.
 Add `-d` to run it in the background.
 
@@ -33,7 +33,7 @@ Open [https://console.pluginlake.localhost](https://console.pluginlake.localhost
 | Field | Value |
 |-------|-------|
 | Login name | `admin@zitadel.auth.pluginlake.localhost` |
-| Password | `ZITADEL_ADMIN_PASSWORD` in `.pluginlake/secrets.env` |
+| Password | `.pluginlake/secrets/zitadel_admin_password` |
 
 Zitadel asks you to choose a new password at the first sign-in.
 Store it in a password manager, because the file keeps the initial password only.
@@ -60,12 +60,13 @@ Use **Sign out** in the sidebar to end the session.
 just down
 ```
 
-The data stays in `.pluginlake/`, so the next `just up-dev` continues where you left off.
+The data stays in `.pluginlake/`, so the next `just up` continues where you left off.
 To start from scratch, run `just down` and remove `.pluginlake/` afterwards.
 This deletes all data of the node.
 
 ## Production
 
-Set `domain` under `[node]` in `pluginlake.toml` and run `just up` instead of `just up-dev`.
+Set `domain` under `[node]` in `pluginlake.toml` to your own domain and run `just up`.
+For developing the platform itself, use the `just dev-*` recipes instead (see the [Docker guide](docker.md)).
 The stack does not provision a production certificate yet, so Traefik needs a certificate for your domain before oauth2-proxy can reach Zitadel.
 See the [Docker guide](docker.md#edge) for the edge, the roles and the secrets.

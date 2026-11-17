@@ -124,7 +124,7 @@ class MonitoringSettings(BaseModel):
 class NodeSettings(BaseModel):
     """Production node settings that compose needs before any container starts.
 
-    ``pluginlake setup`` writes them to ``compose.env``. ``--dev`` fills the development defaults.
+    ``pluginlake setup`` writes them to ``compose.env``. A domain below ``.localhost`` is a local node.
     """
 
     domain: str | None = Field(

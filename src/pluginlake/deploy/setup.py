@@ -3,63 +3,57 @@
 Compose reads the host user, the data folder and the domain while it parses the file, so they must exist before any
 container runs. This step reads ``pluginlake.toml``, creates the folders and the missing secrets (see ``secrets.toml``)
 and writes ``compose.env`` for ``docker compose --env-file``. It runs as the host user, normally inside the pluginlake
-image (``just setup``). With ``--dev`` it fills the development defaults and also writes the plain secrets to a
-readable ``secrets.env``.
+image (``just setup``). A domain below ``.localhost`` is a local node: it is served with an mkcert certificate that
+``just setup`` creates.
 """
 
 import os
 from pathlib import Path
 
-from pluginlake.deploy.config import NodeSettings, StationConfig, load_init_config, load_station_config
+from pluginlake.deploy.config import NodeSettings, StationConfig, load_station_config
 from pluginlake.deploy.init_secrets import init_home
 from pluginlake.deploy.routes import render_routes
 from pluginlake.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-DEV_DOMAIN = "pluginlake.localhost"
 COMPOSE_ENV = "compose.env"
 TLS_DIR = "tls"
 TLS_CERT, TLS_KEY, TLS_CA = "cert.pem", "key.pem", "ca.pem"
 TLS_FILE_CONFIG = "tls.yaml"
 CONTAINER_TLS_DIR = "/tls"
-DEV_SECRETS_ENV = "secrets.env"
 ROUTES_DIR = "traefik"
 ROUTES_FILE = "routes.yaml"
 
 
-def resolve_node(node: NodeSettings, *, dev: bool) -> NodeSettings:
-    """Apply the development defaults, or require a domain.
+def is_local(domain: str) -> bool:
+    """Whether ``domain`` is a local node, which browsers resolve to the local machine."""
+    return domain == "localhost" or domain.endswith(".localhost")
 
-    Args:
-        node: The ``[node]`` section of ``pluginlake.toml``.
-        dev: Whether the node is a development node.
 
-    Returns:
-        Settings with a domain.
+def require_domain(node: NodeSettings) -> str:
+    """Return the configured domain.
 
     Raises:
-        ValueError: If no domain is configured outside development.
+        ValueError: If ``[node] domain`` is not set.
     """
-    if dev:
-        return node.model_copy(update={"domain": node.domain or DEV_DOMAIN})
     if node.domain is None:
-        msg = "[node] domain is required in pluginlake.toml (use --dev for pluginlake.localhost)."
+        msg = "[node] domain is required in pluginlake.toml (use pluginlake.localhost for a local node)."
         raise ValueError(msg)
-    return node
+    return node.domain
 
 
-def tls_file_config(*, dev: bool) -> str:
+def tls_file_config(*, local: bool) -> str:
     """Render the Traefik file-provider config for the node certificate.
 
     Args:
-        dev: Whether the node is a development node, which serves the mkcert certificate.
+        local: Whether the node is local, which serves the mkcert certificate.
 
     Returns:
-        YAML for ``tls/tls.yaml``. Outside development it is empty, so Traefik uses what the operator
+        YAML for ``tls/tls.yaml``. For other domains it is empty, so Traefik uses what the operator
         configures in its static config.
     """
-    if not dev:
+    if not local:
         return "{}\n"
     return f"tls:\n  certificates:\n    - certFile: {CONTAINER_TLS_DIR}/{TLS_CERT}\n      keyFile: {CONTAINER_TLS_DIR}/{TLS_KEY}\n"
 
@@ -70,7 +64,6 @@ def compose_env(
     *,
     owner: tuple[int, int],
     host_home: Path,
-    dev: bool = False,
 ) -> str:
     """Render the values compose needs at parse time as a dotenv file.
 
@@ -79,7 +72,6 @@ def compose_env(
         config: The station config, for the lineage namespace and Prometheus settings.
         owner: User id and group id the containers run as.
         host_home: The data folder as the Docker host sees it.
-        dev: Trust the mkcert root CA in oauth2-proxy.
 
     Returns:
         Content of ``compose.env``.
@@ -89,7 +81,7 @@ def compose_env(
         "PLUGINLAKE_GID": str(owner[1]),
         "PLUGINLAKE_HOME": str(host_home),
         "PLUGINLAKE_DOMAIN": node.domain,
-        "OAUTH2_PROXY_SSL_CERT_FILE": f"{CONTAINER_TLS_DIR}/{TLS_CA}" if dev else "",
+        "OAUTH2_PROXY_SSL_CERT_FILE": f"{CONTAINER_TLS_DIR}/{TLS_CA}" if is_local(node.domain or "") else "",
         "ZITADEL_ADMIN_USERNAME": node.admin_username,
         "PLUGINLAKE_LINEAGE_NAMESPACE": config.station.lineage_namespace,
         "PROMETHEUS_STATION_ID": config.monitoring.station_id,
@@ -102,29 +94,31 @@ def compose_env(
     return "".join(f"{key}='{value}'\n" for key, value in values.items())
 
 
-def prepare_tls(home: Path, *, dev: bool) -> bool:
+def prepare_tls(home: Path, *, local: bool) -> bool:
     """Create the ``tls`` folder and its Traefik config.
 
-    In development the mkcert files (``cert.pem``, ``key.pem``, ``ca.pem``, written by ``just setup --dev``) must exist.
-    Outside development an existing ``tls.yaml`` is the operator's own and stays as it is.
+    For a local node the mkcert files (``cert.pem``, ``key.pem``, ``ca.pem``, written by ``just setup``) must exist.
+    For other domains an existing ``tls.yaml`` is the operator's own and stays as it is.
 
     Args:
         home: The data folder.
-        dev: Whether the node is a development node.
+        local: Whether the node is local.
 
     Returns:
-        False if a development certificate is missing.
+        False if the certificate of a local node is missing.
     """
     tls_dir = home / TLS_DIR
     tls_dir.mkdir(mode=0o700, exist_ok=True)
-    if dev:
+    if local:
         missing = [name for name in (TLS_CERT, TLS_KEY, TLS_CA) if not (tls_dir / name).is_file()]
         if missing:
-            logger.error("Missing %s in %s: run `just setup --dev`, which creates them with mkcert.", missing, tls_dir)
+            logger.error("Missing %s in %s: run `just setup`, which creates them with mkcert.", missing, tls_dir)
             return False
     config_file = tls_dir / TLS_FILE_CONFIG
-    if dev or not config_file.exists():
-        config_file.write_text(tls_file_config(dev=dev), encoding="utf-8")
+    # A config left from a local node must not outlive a move to a real domain.
+    own = config_file.exists() and config_file.read_text(encoding="utf-8") != tls_file_config(local=True)
+    if local or not own:
+        config_file.write_text(tls_file_config(local=local), encoding="utf-8")
     return True
 
 
@@ -145,32 +139,20 @@ def write_routes(home: Path, domain: str) -> Path:
     return routes_file
 
 
-def _dev_secrets_env(secrets_dir: Path) -> str:
-    """Return the secrets that are plain values as ``NAME=value`` lines, for development."""
-    config = load_init_config()
-    lines = [
-        f"{spec.name.upper()}='{(secrets_dir / spec.name).read_text(encoding='utf-8')}'\n"
-        for spec in config.secrets
-        if spec.template is None
-    ]
-    return "".join(lines)
-
-
-def run_setup(config_path: Path, home: Path, host_home: Path | None = None, *, dev: bool = False) -> int:
+def run_setup(config_path: Path, home: Path, host_home: Path | None = None) -> int:
     """Prepare ``home`` for ``docker compose``.
 
     Args:
         config_path: Path to ``pluginlake.toml``.
         home: The data folder, which must exist.
         host_home: The same folder as the Docker host sees it, when this runs in a container.
-        dev: Use the development defaults and write ``secrets.env``.
 
     Returns:
         Process exit code.
     """
     try:
         station = load_station_config(config_path)
-        node = resolve_node(station.node, dev=dev)
+        domain = require_domain(station.node)
     except (FileNotFoundError, ValueError) as exc:
         logger.error("Invalid station config: %s", exc)  # noqa: TRY400 (a traceback adds nothing)
         return 1
@@ -179,26 +161,19 @@ def run_setup(config_path: Path, home: Path, host_home: Path | None = None, *, d
     created = init_home(home, uid, gid)
     logger.info("Created %d secrets in %s: %s", len(created), home, ", ".join(created) or "none")
 
-    if not prepare_tls(home, dev=dev):
+    if not prepare_tls(home, local=is_local(domain)):
         return 1
 
-    logger.info("Wrote %s", write_routes(home, str(node.domain)))
+    logger.info("Wrote %s", write_routes(home, domain))
 
     env_file = home / COMPOSE_ENV
     env = compose_env(
-        node,
+        station.node,
         station,
         owner=(uid, gid),
         host_home=host_home or home.resolve(),
-        dev=dev,
     )
     env_file.write_text(env, encoding="utf-8")
     env_file.chmod(0o600)
     logger.info("Wrote %s", env_file)
-
-    if dev:
-        dev_secrets = home / DEV_SECRETS_ENV
-        dev_secrets.write_text(_dev_secrets_env(home / load_init_config().secrets_folder), encoding="utf-8")
-        dev_secrets.chmod(0o600)
-        logger.info("Development secrets are in %s", dev_secrets)
     return 0

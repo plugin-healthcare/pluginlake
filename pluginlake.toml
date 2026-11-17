@@ -23,9 +23,9 @@ station_id = "ds-local-001"
 # remote_write_username = "station-1"
 # retention = "15d"
 
-# Production node (`just up`, see docs/guides/docker.md). `just up-dev` fills in pluginlake.localhost.
+# Production stack (`just up`, see docs/guides/docker.md). A domain below .localhost runs locally with an mkcert certificate.
 [node]
-# domain = "pluginlake.example.org"
+domain = "pluginlake.localhost"  # production: your own domain, e.g. pluginlake.example.org
 # admin_username = "admin"
 
 [[projects]]

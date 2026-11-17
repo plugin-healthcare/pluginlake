@@ -41,7 +41,6 @@ This uses `deploy/compose/docker-compose.dev.yaml`. Source code is volume-mounte
 
 ```bash
 just up            # Prepare the node from pluginlake.toml, then build and start all production containers
-just up-dev        # The same with development defaults (pluginlake.localhost, secrets also in .pluginlake/secrets.env)
 just down          # Stop and remove production containers
 ```
 
@@ -224,7 +223,7 @@ flowchart LR
 | `prometheus.<domain>` | Prometheus | Yes |
 
 `[node] domain` in `pluginlake.toml` sets the domain.
-`just setup --dev` uses `pluginlake.localhost`, which resolves to the local machine in browsers, and creates a certificate for it with [mkcert](https://github.com/FiloSottile/mkcert) in `tls/` of the data folder.
+A domain below `.localhost`, such as the default `pluginlake.localhost`, resolves to the local machine in browsers, so `just setup` creates a certificate for it with [mkcert](https://github.com/FiloSottile/mkcert) in `tls/` of the data folder.
 Install mkcert first; setup runs `mkcert -install` once so browsers trust it, and oauth2-proxy trusts the same root CA.
 
 Traefik reads its certificate from `tls/tls.yaml` in the data folder.
@@ -340,7 +339,7 @@ Node settings (domain, first admin name) are in the `[node]` section of `pluginl
 Compose reads the host user, the data folder and the domain while it parses the file, before any container runs.
 `just up` therefore first runs `pluginlake setup` in a container as the host user, without network and with a read-only root file system.
 `pluginlake setup` creates the folders and the secrets that do not exist yet and writes `compose.env`; `just up` then starts the stack with that file.
-Without `--dev` a `[node] domain` is required, with `--dev` (`just up-dev`) the domain is `pluginlake.localhost` and the plain secrets are also written to `secrets.env`, mode `0600`.
+A `[node] domain` is required; a domain below `.localhost` runs the node locally with an mkcert certificate.
 `pluginlake setup` can also run on the host (`uv run pluginlake setup --home .pluginlake`).
 Existing secrets are never overwritten, so `just up` is safe to run again.
 Secrets are not rotated by deleting files: removing a database password file without changing it in Postgres locks the service out.
@@ -356,7 +355,6 @@ All containers run as the host user (`PLUGINLAKE_UID`, `PLUGINLAKE_GID`) and kee
 ```text
 .pluginlake/
 ├── compose.env    # uid, gid, home and domain for compose, written by pluginlake setup
-├── secrets.env    # plain secrets for development, only with --dev
 ├── secrets/       # secrets written by pluginlake setup, mode 0700
 ├── bootstrap/     # tokens and oauth2-proxy config written by Zitadel and pluginlake-init, mode 0700
 ├── postgres/      # database cluster

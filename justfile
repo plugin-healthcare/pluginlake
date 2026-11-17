@@ -88,7 +88,7 @@ dev-local:
 home := env("PLUGINLAKE_HOME", justfile_directory() / ".pluginlake")
 _compose_prod := "docker compose --env-file " + home + "/compose.env -f deploy/compose/docker-compose.yaml"
 
-# Prepare the node from pluginlake.toml (folders, secrets, compose.env) in a container as the host user. Pass --dev for development defaults
+# Prepare the node from pluginlake.toml (folders, secrets, compose.env) in a container as the host user. A domain below .localhost gets an mkcert certificate
 setup *args='':
     #!/usr/bin/env bash
     set -euo pipefail
@@ -96,11 +96,11 @@ setup *args='':
     mkdir -p "{{ home }}"
     chmod 700 "{{ home }}"
     docker build --quiet -f deploy/docker/pluginlake.Dockerfile -t pluginlake-setup . > /dev/null
-    if [[ " {{ args }} " == *" --dev "* ]]; then
-        command -v mkcert > /dev/null || { echo "mkcert is required for --dev: https://github.com/FiloSottile/mkcert" >&2; exit 1; }
+    domain="$(python3 -c 'import tomllib; print(tomllib.load(open("pluginlake.toml", "rb")).get("node", {}).get("domain") or "")')"
+    if [[ "$domain" == "localhost" || "$domain" == *.localhost ]]; then
+        command -v mkcert > /dev/null || { echo "mkcert is required for a .localhost domain: https://github.com/FiloSottile/mkcert" >&2; exit 1; }
         mkdir -p "{{ home }}/tls"
         chmod 700 "{{ home }}/tls"
-        domain="$(python3 -c 'import tomllib; print(tomllib.load(open("pluginlake.toml", "rb")).get("node", {}).get("domain") or "pluginlake.localhost")')"
         if [[ ! -f "{{ home }}/tls/cert.pem" || "$(cat "{{ home }}/tls/cert.domain" 2>/dev/null)" != "$domain" ]]; then
             mkcert -install
             mkcert -cert-file "{{ home }}/tls/cert.pem" -key-file "{{ home }}/tls/key.pem" "$domain" "*.$domain"
@@ -115,11 +115,6 @@ setup *args='':
 # Start the production stack
 up *args='':
     just setup
-    {{ _compose_prod }} up --build {{ args }}
-
-# Start the stack with development defaults (pluginlake.localhost, secrets also in secrets.env)
-up-dev *args='':
-    just setup --dev
     {{ _compose_prod }} up --build {{ args }}
 
 # Stop the production stack
