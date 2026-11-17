@@ -43,8 +43,6 @@ def test_compose_env_holds_the_values_compose_needs():
         "PROMETHEUS_STATION_ID='ds-1'",
         "PROMETHEUS_SCRAPE_CADVISOR='true'",
         "COMPOSE_PROFILES='cadvisor'",
-        "PROMETHEUS_REMOTE_WRITE_URL=''",
-        "PROMETHEUS_REMOTE_WRITE_USERNAME=''",
         "PROMETHEUS_RETENTION='15d'",
     ]
 

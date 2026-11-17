@@ -86,33 +86,17 @@ class StationSettings(BaseModel):
 
 
 class MonitoringSettings(BaseModel):
-    """Prometheus monitoring of the station (compose profile ``monitoring``).
-
-    The remote-write password is a secret and therefore not part of this file; it is a compose secret.
-    """
+    """Prometheus monitoring of the station (compose profile ``monitoring``)."""
 
     enabled: bool = Field(default=False, description="Start Prometheus and the exporters (compose profile).")
     cadvisor: bool = Field(
         default=True,
-        description="Run a cAdvisor container for container metrics (Docker Compose only). Disable when the host already runs one.",
+        description="Run a cAdvisor container (Docker Compose only). Disable when the host already runs one.",
     )
     station_id: str = Field(
         default="pluginlake",
         pattern=r"^[A-Za-z0-9._-]+$",
         description="Value of the `station` label added to every metric.",
-    )
-    remote_write_url: str | None = Field(
-        default=None,
-        pattern=r"^https://[^\s\"'\\@]+$",
-        description=(
-            "Central Prometheus remote-write endpoint; unset keeps metrics local. "
-            "Must use https:// and must not contain credentials ('@')."
-        ),
-    )
-    remote_write_username: str | None = Field(
-        default=None,
-        pattern=r"^[A-Za-z0-9._-]+$",
-        description="Basic-auth username for remote write. The password is a compose secret.",
     )
     retention: str = Field(
         default="15d",

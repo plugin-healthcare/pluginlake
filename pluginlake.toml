@@ -13,14 +13,11 @@ lineage = true
 # OpenLineage namespace for this node's jobs in Marquez; unique per node.
 lineage_namespace = "ds-local-001"
 
-# Prometheus + exporters (ADR-010), part of every node. The remote-write
-# password is a compose secret, never in this file.
+# Prometheus + exporters (ADR-010), part of every node.
 [monitoring]
 enabled = true
 station_id = "ds-local-001"
 # cadvisor = false  # when the host already runs cAdvisor (e.g. a vantage6 host stack)
-# remote_write_url = "https://plugin.dhd.nl/prometheus/api/v1/write"
-# remote_write_username = "station-1"
 # retention = "15d"
 
 # Production stack (`just up`, see docs/guides/docker.md). A domain below .localhost runs locally with an mkcert certificate.

@@ -232,14 +232,9 @@ services:
     entrypoint: ["/bin/sh", "/etc/prometheus/pluginlake/entrypoint.sh"]
     environment:
       PROMETHEUS_COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME}
-      PROMETHEUS_REMOTE_WRITE_USERNAME: ${PROMETHEUS_REMOTE_WRITE_USERNAME?set by just setup}
       PROMETHEUS_RETENTION: ${PROMETHEUS_RETENTION:?set by just setup}
       PROMETHEUS_STATION_ID: ${PROMETHEUS_STATION_ID:?set by just setup}
       PROMETHEUS_SCRAPE_CADVISOR: ${PROMETHEUS_SCRAPE_CADVISOR:?set by just setup}
-      PROMETHEUS_REMOTE_WRITE_URL: ${PROMETHEUS_REMOTE_WRITE_URL?set by just setup}
-    secrets:
-      # Referenced directly as basic_auth.password_file; may be empty without remote write.
-      - prometheus_remote_write_password
     networks: [app-net, monitoring]
     volumes:
       - ../monitoring/prometheus:/etc/prometheus/pluginlake:ro
@@ -635,8 +630,6 @@ secrets:
     file: ${PLUGINLAKE_HOME:?run just setup}/secrets/ducklake_pg_password
   postgres_exporter_password:
     file: ${PLUGINLAKE_HOME:?run just setup}/secrets/postgres_exporter_password
-  prometheus_remote_write_password:
-    file: ${PLUGINLAKE_HOME:?run just setup}/secrets/prometheus_remote_write_password
   marquez_db_password:
     file: ${PLUGINLAKE_HOME:?run just setup}/secrets/marquez_db_password
   zitadel_db_password:

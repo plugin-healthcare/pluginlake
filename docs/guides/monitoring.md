@@ -21,7 +21,7 @@ Dashboards and alerting are part of the central monitoring in vantage6-ops, not 
 | `pluginlake` | API metrics on the internal port `9464` | `pluginlake_http_requests_total`, `pluginlake_http_request_duration_seconds`, `pluginlake_http_exceptions_total` |
 | `postgres` | postgres-exporter | `pg_up`, connections, database size, locks, WAL |
 | `cadvisor` | cAdvisor, only this stack's containers | `container_memory_usage_bytes`, `container_cpu_usage_seconds_total`, `container_last_seen` |
-| `prometheus` | Prometheus itself | scrape and remote-write health |
+| `prometheus` | Prometheus itself | scrape health |
 
 API metrics are labelled with the route template (`/assets/{asset_id}`), the HTTP method and the status code, never with the raw path or query string.
 Per-table Postgres metrics and container labels are switched off, so no patient data or free user input ends up in a metric.
@@ -35,7 +35,6 @@ Configure it in the `[monitoring]` section of `pluginlake.toml`, which `just set
 [monitoring]
 station_id = "ds-001"          # value of the `station` label on every metric
 # cadvisor = false             # when the host already runs cAdvisor (e.g. a vantage6 host stack)
-# remote_write_url = "https://plugin.dhd.nl/prometheus/api/v1/write"
 ```
 
 Prometheus publishes no port.
@@ -47,25 +46,11 @@ cAdvisor runs on a separate `monitoring` network shared only with Prometheus, an
 
 In the dev stack (`just dev-up`, `pluginlake up`) set `enabled = true` to start the compose profile `monitoring`, and Prometheus is published on loopback only at <http://127.0.0.1:9090> (change the host port with `PROMETHEUS_PORT`).
 
-## Connect to central monitoring
+## Central monitoring
 
-Metrics are pushed outbound with Prometheus `remote_write`, the same model vantage6-ops uses for its nodes.
-
-1. Set `remote_write_url` and the username issued by the central monitoring in `[monitoring]` in `pluginlake.toml`:
-
-    ```toml
-    [monitoring]
-    remote_write_url = "https://..."
-    remote_write_username = "..."
-    ```
-
-2. The password is a Docker secret, not part of `pluginlake.toml`: put it in the file `secrets/prometheus_remote_write_password` in the node data folder (`PLUGINLAKE_HOME`), or set `PROMETHEUS_REMOTE_WRITE_PASSWORD` in `deploy/compose/.env` in the dev stack.
-   Prometheus reads it from `/run/secrets/prometheus_remote_write_password` and refuses to start if the password is found in its environment.
-3. Run `just up` again. The Prometheus log shows `remote_write enabled to <scheme>://<host>` (path and query are not logged).
-
-The URL must use `https://` and must not contain credentials (`user:pass@host`); the configuration is refused otherwise.
-Every sample carries the `station` external label, so the central side can tell stations apart.
-A central Prometheus that can reach the station can alternatively federate from `/federate` on the station's Prometheus.
+Metrics stay on the station for now.
+Sending them to a central place is not supported yet, and how a station authenticates to it is decided together with the processing hub work.
+A central Prometheus that can reach the station can scrape `/federate` on the station's Prometheus in the meantime.
 
 ## Missing container metrics
 
@@ -93,11 +78,8 @@ Alternatively set `[monitoring] cadvisor = false` and run cAdvisor in the host s
 |---------|-------|---------|-------------|
 | `enabled` | `[monitoring]` | `false` | Only for `pluginlake up`: start the `monitoring` profile. The production compose always runs it. |
 | `station_id` | `[monitoring]` | `pluginlake` | `station` label on every metric (`[A-Za-z0-9._-]`). |
-| `cadvisor` | `[monitoring]` | `true` | Collect container metrics with cAdvisor. |
-| `remote_write_url` | `[monitoring]` | unset | Central remote-write endpoint. |
-| `remote_write_username` | `[monitoring]` | unset | Basic-auth username for remote write. |
+| `cadvisor` | `[monitoring]` | `true` | Run the cAdvisor container for container metrics (Docker Compose only). |
 | `retention` | `[monitoring]` | `15d` | Local retention. |
-| `PROMETHEUS_REMOTE_WRITE_PASSWORD` | compose secrets env | empty | Basic-auth password, mounted as a Docker secret. |
 | `PROMETHEUS_PORT` | shell / `.env` | `9090` | Loopback host port of Prometheus. |
 | `PLUGINLAKE_METRICS_ENABLED` | API env | `true` | Record API metrics and serve them on the metrics port. |
 | `PLUGINLAKE_METRICS_PORT` | API env | `9464` | Internal metrics port of the API. |
