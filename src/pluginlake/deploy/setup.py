@@ -88,6 +88,7 @@ def compose_env(
         "PROMETHEUS_SCRAPE_CADVISOR": str(config.monitoring.cadvisor).lower(),
         "COMPOSE_PROFILES": "cadvisor" if config.monitoring.cadvisor else "",
         "PROMETHEUS_RETENTION": config.monitoring.retention,
+        "PROMETHEUS_PUBLISH": config.monitoring.publish or "127.0.0.1:9090",
     }
     return "".join(f"{key}='{value}'\n" for key, value in values.items())
 

@@ -50,7 +50,7 @@ def test_secrets_are_mounted_by_the_services_that_secrets_toml_lists():
 
 def test_only_traefik_publishes_ports():
     published = {name for name, service in _services().items() if service.get("ports")}
-    assert published == {"traefik"}
+    assert published == {"traefik", "prometheus"}  # prometheus is bound to a host address, loopback by default
 
 
 def test_no_service_mounts_the_docker_socket():

@@ -224,6 +224,7 @@ services:
   # ---------------------------------------------------------------------------
   # Monitoring (ADR-010), part of every node and configured by [monitoring] in pluginlake.toml.
   # Prometheus is reached at prometheus.<domain> behind the proxy; the exporters and the API metrics port stay internal.
+  # Prometheus is also published on the host, on loopback unless [monitoring] publish names another address.
   # ---------------------------------------------------------------------------
   prometheus:
     logging: *default-logging
@@ -235,6 +236,8 @@ services:
       PROMETHEUS_RETENTION: ${PROMETHEUS_RETENTION:?set by just setup}
       PROMETHEUS_STATION_ID: ${PROMETHEUS_STATION_ID:?set by just setup}
       PROMETHEUS_SCRAPE_CADVISOR: ${PROMETHEUS_SCRAPE_CADVISOR:?set by just setup}
+    ports:
+      - "${PROMETHEUS_PUBLISH:?set by just setup}:9090"
     networks: [app-net, monitoring]
     volumes:
       - ../monitoring/prometheus:/etc/prometheus/pluginlake:ro

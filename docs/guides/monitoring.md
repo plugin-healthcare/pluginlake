@@ -35,9 +35,10 @@ Configure it in the `[monitoring]` section of `pluginlake.toml`, which `just set
 [monitoring]
 station_id = "ds-001"          # value of the `station` label on every metric
 # cadvisor = false             # when the host already runs cAdvisor (e.g. a vantage6 host stack)
+# publish = "10.0.0.5:9090"    # host address and port for a scraper on the private network
 ```
 
-Prometheus publishes no port.
+Prometheus is published on the host only on `127.0.0.1:9090`, so only processes on the VM can reach it directly.
 Open `https://prometheus.<domain>` behind the sign-in (see [Edge](docker.md#edge)) and check that all targets are up under *Status > Targets*.
 The exporter logs in with the secret `postgres_exporter_password`, a read-only `pg_monitor` role that `pluginlake-db-init` creates; see [secrets](docker.md#secrets).
 
@@ -46,11 +47,21 @@ cAdvisor runs on a separate `monitoring` network shared only with Prometheus, an
 
 In the dev stack (`just dev-up`, `pluginlake up`) set `enabled = true` to start the compose profile `monitoring`, and Prometheus is published on loopback only at <http://127.0.0.1:9090> (change the host port with `PROMETHEUS_PORT`).
 
-## Central monitoring
+## Connect to your own monitoring
 
-Metrics stay on the station for now.
-Sending them to a central place is not supported yet, and how a station authenticates to it is decided together with the processing hub work.
-A central Prometheus that can reach the station can scrape `/federate` on the station's Prometheus in the meantime.
+Metrics stay on the station.
+A hospital that wants them in its own system (for example Azure Monitor managed Prometheus) can do this without changes to the station.
+
+- **Run your own agent on the VM.**
+  A Prometheus or Alloy agent that you operate scrapes `127.0.0.1:9090/federate` and forwards the samples with its own `remote_write`.
+  This only needs outbound HTTPS, which fits hospital firewalls, and the authentication to your system (such as Entra ID for Azure Monitor) stays in your agent.
+- **Let your system scrape the station.**
+  Set `publish` in `[monitoring]` to an address of the VM on the private network, run `just setup` and `just up` again, and let your Prometheus federate from `/federate` there.
+  Use a private interface and not `0.0.0.0`: the endpoint has no authentication of its own.
+
+Both routes only need `pluginlake.toml`, the compose files stay unchanged.
+
+Sending metrics from the station to a central place is not supported yet, and how a station would authenticate to it is decided together with the processing hub work.
 
 ## Missing container metrics
 
@@ -80,6 +91,7 @@ Alternatively set `[monitoring] cadvisor = false` and run cAdvisor in the host s
 | `station_id` | `[monitoring]` | `pluginlake` | `station` label on every metric (`[A-Za-z0-9._-]`). |
 | `cadvisor` | `[monitoring]` | `true` | Run the cAdvisor container for container metrics (Docker Compose only). |
 | `retention` | `[monitoring]` | `15d` | Local retention. |
+| `publish` | `[monitoring]` | `127.0.0.1:9090` | Host address and port on which Prometheus is published. |
 | `PROMETHEUS_PORT` | shell / `.env` | `9090` | Loopback host port of Prometheus. |
 | `PLUGINLAKE_METRICS_ENABLED` | API env | `true` | Record API metrics and serve them on the metrics port. |
 | `PLUGINLAKE_METRICS_PORT` | API env | `9464` | Internal metrics port of the API. |

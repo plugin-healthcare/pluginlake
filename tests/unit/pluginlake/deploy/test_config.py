@@ -84,6 +84,12 @@ def test_load_monitoring_section(tmp_path: Path):
     assert monitoring.station_id == "ds-001"
 
 
+@pytest.mark.parametrize("publish", ["9090", "localhost:9090", "10.0.0.5", "10.0.0.5:9090:1"])
+def test_monitoring_rejects_invalid_publish(publish: str):
+    with pytest.raises(ValueError, match="publish"):
+        MonitoringSettings(publish=publish)
+
+
 @pytest.mark.parametrize("station_id", ["has space", 'quo"te', ""])
 def test_monitoring_rejects_unsafe_station_id(station_id: str):
     with pytest.raises(ValueError, match="station_id"):

@@ -103,6 +103,14 @@ class MonitoringSettings(BaseModel):
         pattern=r"^[0-9]+[smhdwy]$",
         description="How long Prometheus keeps its data locally, such as 15d.",
     )
+    publish: str | None = Field(
+        default=None,
+        pattern=r"^[0-9]{1,3}(\.[0-9]{1,3}){3}:[0-9]{1,5}$",
+        description=(
+            "Host address and port (`10.0.0.5:9090`) on which Prometheus is published, "
+            "for a scraper or agent on the private network. Unset publishes on 127.0.0.1:9090 only."
+        ),
+    )
 
 
 class NodeSettings(BaseModel):
