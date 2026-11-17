@@ -56,8 +56,10 @@ def test_disabled_cadvisor_is_not_started():
 
 def _write_mkcert_files(home: Path) -> None:
     (home / "tls").mkdir(parents=True)
-    for name in ("cert.pem", "key.pem", "ca.pem"):
+    (home / "ca").mkdir()
+    for name in ("cert.pem", "key.pem"):
         (home / "tls" / name).write_text("pem")
+    (home / "ca" / "ca.pem").write_text("pem")
 
 
 def test_local_setup_serves_the_mkcert_certificate_and_trusts_its_ca(tmp_path: Path):
@@ -66,7 +68,7 @@ def test_local_setup_serves_the_mkcert_certificate_and_trusts_its_ca(tmp_path: P
     _write_mkcert_files(home)
     assert run_setup(_config(tmp_path, 'domain = "pluginlake.localhost"\n'), home) == 0
     assert "certFile: /tls/cert.pem" in (home / "tls" / "tls.yaml").read_text()
-    assert "OAUTH2_PROXY_SSL_CERT_FILE='/tls/ca.pem'" in (home / "compose.env").read_text()
+    assert "OAUTH2_PROXY_SSL_CERT_FILE='/ca/ca.pem'" in (home / "compose.env").read_text()
 
 
 def test_local_setup_without_a_certificate_fails(tmp_path: Path):

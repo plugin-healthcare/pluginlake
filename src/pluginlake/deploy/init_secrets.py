@@ -67,9 +67,9 @@ def init_home(home: Path, uid: int, gid: int, config: InitConfig | None = None) 
     config = config or load_init_config()
     secrets = home / config.secrets_folder
     for folder in config.folders:
-        (home / folder).mkdir(exist_ok=True)
+        (home / folder).mkdir(parents=True, exist_ok=True)
     for folder in [*config.private_folders, config.secrets_folder]:
-        (home / folder).mkdir(exist_ok=True)
+        (home / folder).mkdir(parents=True, exist_ok=True)
         (home / folder).chmod(0o700)
 
     passwd = home / "passwd"

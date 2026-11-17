@@ -11,7 +11,7 @@ The production compose (`deploy/compose/docker-compose.yaml`) has one container 
 |-------|-----------|-------|
 | Platform | `pluginlake` (API), `dagster-webserver`, `dagster-daemon`, `dagster-code-server`, `dashboard-datastation` (the console) | Built from `deploy/docker/` (`pluginlake.Dockerfile`, `dagster-webserver.Dockerfile`, `ui.Dockerfile`) |
 | Data | `postgres` (Dagster metadata and DuckLake catalog), `pluginlake-db-init` (roles and databases) | `dhi.io/postgres:17-alpine3.24`, built init image |
-| Lineage | `marquez-db`, `marquez`, `marquez-web` | `dhi.io/postgres`, `marquezproject/marquez` and `marquez-web` 0.51.1 |
+| Lineage | `marquez`, `marquez-web` | `marquezproject/marquez` and `marquez-web` 0.51.1 |
 | Monitoring | `prometheus`, `postgres-exporter`, `cadvisor` (Compose only, can be switched off) | Upstream images pinned by digest, see the [monitoring guide](monitoring.md) |
 | Edge | `traefik`, `oauth2-proxy`, `zitadel-init`, `zitadel-api`, `zitadel-login`, `zitadel-groups-hook`, `pluginlake-init`, `starting-page` | See [Edge](#edge) |
 
@@ -21,7 +21,7 @@ Prometheus and Marquez are core components and always start with the production 
 The development compose (`docker-compose.dev.yaml`) is smaller.
 `dagster.dev.Dockerfile` replaces the Dagster webserver, daemon and code server with 1 container running `dagster dev`, the API runs with `uvicorn --reload`, and source code is mounted into the containers.
 Monitoring and lineage are compose profiles (`monitoring`, `lineage`), and there is no edge.
-The dashboards share `ui.Dockerfile`, where the build arguments `APP` (`datastation` or `central`) and `PORT` select the dashboard.
+The dashboard is built by `ui.Dockerfile`.
 
 ## Running options
 
@@ -33,7 +33,6 @@ The dashboards share `ui.Dockerfile`, where the build arguments `APP` (`datastat
 | `just dev-up` | `docker-compose.dev.yaml` | Platform development stack with the dashboards |
 | `just dev-up-headless` | `docker-compose.dev.yaml` | The same without the dashboards |
 | `just dev-down` | `docker-compose.dev.yaml` | Stops the development stack, all profiles |
-| `just dev-central` | `docker-compose.central.yaml` | Central aggregation dashboard, a separate demo compose |
 | `just dev-local` | none | Titanic example without Docker, see the [Titanic tutorial](../development/titanic-tutorial.md) |
 | `just smoke-test-full` | dev and smoke override | Starts an isolated stack, runs the smoke test and removes it with its volumes |
 
@@ -223,9 +222,9 @@ Back the folder up as a whole.
 .pluginlake/
 ├── compose.env    # uid, gid, home and domain for compose
 ├── secrets/       # mode 0700
-├── bootstrap/     # tokens and oauth2-proxy config, mode 0700
+├── bootstrap/     # one folder per consumer (admin, login, hook, proxy) with tokens and oauth2-proxy config, mode 0700
+├── ca/            # root certificate of a local node, trusted by oauth2-proxy
 ├── postgres/      # database cluster
-├── marquez-db/    # lineage database
 ├── prometheus/    # metrics
 ├── data/          # DuckLake storage and Dagster state
 └── passwd         # passwd entry for the host user, mounted into the Postgres containers

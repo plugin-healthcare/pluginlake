@@ -29,7 +29,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Existing stations rerun `just setup` once more: `pluginlake-init` now writes `bootstrap/project-id`, and the groups hook only trusts roles of that project and refuses to issue groups until the file exists. `[monitoring] cadvisor = false` now also keeps the cAdvisor container from starting.
 - `pluginlake secrets list` and `pluginlake secrets get <name>` show the presence of the secrets of a node and read one value with an audit log line.
 - `pluginlake setup` renders the Traefik routes into `${PLUGINLAKE_HOME}/traefik/routes.yaml` from `[node] domain`, so the routes follow the applications of the deployment. The Prometheus retention moved from `.env.monitoring` (removed) to `[monitoring]` in `pluginlake.toml`.
-- Breaking, production compose: the data moved from named volumes to bind mounts below `PLUGINLAKE_HOME`, the Postgres mount is now `/var/lib/postgresql`, the Postgres superuser is `postgres`, and secrets are files created by `pluginlake-init` (no more `.env.production.secrets`). Existing stations start with an empty database and must copy data from the old volumes first.
+- Breaking, production compose: the data moved from named volumes to bind mounts below `PLUGINLAKE_HOME`, the Postgres mount is now `/var/lib/postgresql`, the Postgres superuser is `postgres`, and secrets are files created by `pluginlake-init` (no more `.env.production.secrets`). The old data directories cannot be copied over because they lack the `postgres` superuser and the per-service roles, so existing stations dump their databases and restore them into the new layout.
+- Removed the central dashboard (`src/pluginlake-ui/central/`), `docker-compose.central.yaml` and the `just dev-central` recipe, while the core is still being built.
+- The pluginlake image installs the DuckDB extensions (`ducklake`, `postgres`) at build time and uses `/opt/duckdb` as `HOME`, because the read-only container cannot download them at runtime.
+- Every production service drops all capabilities, sets `no-new-privileges` and runs with a read-only root filesystem and a `/tmp` tmpfs (cAdvisor only sets `no-new-privileges`). Marquez now uses its own non-superuser role on the main Postgres, and the separate `marquez-db` is removed. The service roles are created without superuser, create database, create role, replication and row security bypass rights, and `pluginlake-db-init` refuses to take over a database with another owner.
+- The bootstrap folder is split per consumer (`admin`, `login`, `hook`, `proxy`), oauth2-proxy only mounts the root certificate from `ca/` and no longer the TLS folder, and `pluginlake-init` grants the first admin role once. `just up` does not install the `[[projects]]` of `pluginlake.toml`, `pluginlake up` does. `just setup` reads the domain inside the setup image.
 - ADR-006 rewritten: scoped to Nuts as organizational identity layer only (node-to-node trust boundary). Added Processing Hub terminology, governance rules, trust boundary definitions, and credential role enforcement.
 - ADR-003: clarified rejected "landing zone" alternative with explicit rationale for direct FastAPI-to-Dagster triggering.
 - Docs nav restructured in `zensical.toml`: ADR-006, ADR-007, and ADR-008 added to Decisions section.
@@ -44,7 +48,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `RequestLoggingMiddleware` is a pure ASGI middleware and also logs requests that end in an unhandled exception (status 500).
 - Settings classes share one `model_config` via `pluginlake.config.settings_config()` (also used by `project_settings_config`).
 - `pluginlake up` deletes its temporary compose override file after running compose.
-- The two dashboards share `deploy/docker/ui.Dockerfile` and `ui.dev.Dockerfile` (build arguments `APP` and `PORT`), replacing the four `ui-central*`/`ui-datastation*` Dockerfiles.
+- The dashboard builds from `deploy/docker/ui.Dockerfile` and `ui.dev.Dockerfile`, replacing the four `ui-central*`/`ui-datastation*` Dockerfiles.
 - Upgraded vulnerable dependencies: streamlit 1.66.1 (pillow 13.0.0; the `starlette` extra is gone, starlette is now built in), dnspython 2.9.2, filelock 4.2.9, graphql-core 3.2.13, setuptools 84.2.1, packaging 26.3, virtualenv 21.15.5; tornado is no longer installed.
 
 ### Removed

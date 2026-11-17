@@ -1,9 +1,11 @@
 """Tests for ``pluginlake secrets``."""
 
+import logging
 from pathlib import Path
 
 import pytest
 
+from pluginlake.cli.main import main
 from pluginlake.cli.secrets import run_secrets_get, run_secrets_list
 from pluginlake.deploy.init_secrets import init_home
 
@@ -35,6 +37,23 @@ def test_get_prints_the_value_and_logs_without_it(home: Path, capsys: pytest.Cap
     assert capsys.readouterr().out == value
     assert "postgres_password" in caplog.text
     assert value not in caplog.text
+
+
+def test_cli_get_writes_the_audit_line_to_stderr_and_only_the_value_to_stdout(
+    home: Path, capsys: pytest.CaptureFixture[str]
+):
+    value = (home / "secrets" / "postgres_password").read_text(encoding="utf-8")
+    handlers = logging.getLogger("pluginlake").handlers[:]
+    try:
+        assert main(["secrets", "--home", str(home), "get", "postgres_password"]) == 0
+        captured = capsys.readouterr()
+    finally:
+        pluginlake_logger = logging.getLogger("pluginlake")
+        pluginlake_logger.handlers[:] = handlers
+        pluginlake_logger.propagate = True
+    assert captured.out == value
+    assert "postgres_password" in captured.err
+    assert value not in captured.err
 
 
 def test_get_rejects_unknown_secret(home: Path):

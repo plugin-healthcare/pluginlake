@@ -41,6 +41,24 @@ class RoleSpec:
     password: str
 
 
+class DatabaseOwnerError(RuntimeError):
+    """A database exists with an owner other than its service role."""
+
+    def __init__(self, database: str, owner: str, role: str) -> None:
+        """Build the message.
+
+        Args:
+            database: The database name.
+            owner: The current owner.
+            role: The expected owner.
+        """
+        super().__init__(
+            f"Database '{database}' is owned by '{owner}' and not by '{role}'. "
+            "Databases and objects from an earlier layout are not migrated: dump and restore them into a fresh "
+            "data folder, or move the ownership yourself (ALTER DATABASE and REASSIGN OWNED BY) and run setup again."
+        )
+
+
 def parse_role(spec: str) -> RoleSpec:
     """Parse ``user:database:password_file`` and read the password file.
 
@@ -62,11 +80,17 @@ def parse_role(spec: str) -> RoleSpec:
 
 
 def ensure_role(cur: psycopg2.extensions.cursor, role: RoleSpec) -> None:
-    """Create ``role`` (or reset its password), its database and its privileges."""
+    """Create ``role`` (or reset its password and privileges), its database and its privileges.
+
+    Raises:
+        DatabaseOwnerError: If the database already exists with another owner.
+    """
     user = sql.Identifier(role.user)
     cur.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (role.user,))
     verb = "ALTER" if cur.fetchone() else "CREATE"
-    cur.execute(sql.SQL(f"{verb} ROLE {{}} LOGIN PASSWORD %s").format(user), (role.password,))
+    # Spelled out because ALTER ROLE keeps the attributes of a role that an earlier setup created as superuser.
+    attributes = "LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS"
+    cur.execute(sql.SQL(f"{verb} ROLE {{}} {attributes} PASSWORD %s").format(user), (role.password,))
 
     if not role.database:
         cur.execute(sql.SQL("GRANT pg_monitor TO {}").format(user))
@@ -74,9 +98,12 @@ def ensure_role(cur: psycopg2.extensions.cursor, role: RoleSpec) -> None:
         return
 
     database = sql.Identifier(role.database)
-    cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (role.database,))
-    if not cur.fetchone():
+    cur.execute("SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = %s", (role.database,))
+    existing = cur.fetchone()
+    if existing is None:
         cur.execute(sql.SQL("CREATE DATABASE {} OWNER {}").format(database, user))
+    elif existing[0] != role.user:
+        raise DatabaseOwnerError(role.database, existing[0], role.user)
     cur.execute(sql.SQL("REVOKE ALL ON DATABASE {} FROM PUBLIC").format(database))
     cur.execute(sql.SQL("GRANT ALL ON DATABASE {} TO {}").format(database, user))
     logger.info("Role '%s' owns database '%s'.", role.user, role.database)
@@ -104,6 +131,9 @@ def main(argv: list[str] | None = None) -> int:
         with conn.cursor() as cur:
             for role in args.role:
                 ensure_role(cur, role)
+    except DatabaseOwnerError as error:
+        logger.error("%s", error)  # noqa: TRY400
+        return 1
     finally:
         conn.close()
     return 0

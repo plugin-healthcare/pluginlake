@@ -27,6 +27,7 @@ domain = "pluginlake.localhost"  # production: your own domain, e.g. pluginlake.
 
 [[projects]]
 name = "ehds-demo"
+# Installed by `pluginlake up` (development stack); `just up` does not install projects yet.
 # Dev: local sibling checkout, mounted and editable-installed into the images.
 path = "../pluginlake-ehds-demo"
 # Prod alternative (pinned, no local checkout needed):

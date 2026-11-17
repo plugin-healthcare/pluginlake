@@ -43,16 +43,8 @@ jobs:
             dockerfile: deploy/docker/pluginlake.Dockerfile
           - image: dagster-webserver
             dockerfile: deploy/docker/dagster-webserver.Dockerfile
-          - image: ui-central
-            dockerfile: deploy/docker/ui.Dockerfile
-            build_args: |
-              APP=central
-              PORT=8502
           - image: ui-datastation
             dockerfile: deploy/docker/ui.Dockerfile
-            build_args: |
-              APP=datastation
-              PORT=8501
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

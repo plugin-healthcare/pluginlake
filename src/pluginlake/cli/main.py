@@ -9,6 +9,7 @@ from pluginlake.cli.secrets import run_secrets_get, run_secrets_list
 from pluginlake.cli.up import run_down, run_up
 from pluginlake.cli.verify import run_verify
 from pluginlake.deploy.setup import run_setup
+from pluginlake.utils.logger import setup_logging
 
 _DEFAULT_CONFIG = Path("pluginlake.toml")
 
@@ -87,6 +88,7 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         Process exit code.
     """
+    setup_logging()
     parser = _build_parser()
     args = parser.parse_args(argv)
 

@@ -321,9 +321,9 @@ class ZitadelBootstrap:
             ).raise_for_status()
 
     def grant_admin_roles(self, project_id: str, new_roles: list[str]) -> None:
-        """Give the first admin all roles, or only the newly created roles when the admin already has a grant.
+        """Give the first admin all roles once, and later only the newly created roles.
 
-        Roles the admin has since given up are not granted again.
+        Roles the admin has since given up, or a grant that was deleted, are not granted again.
 
         Args:
             project_id: The project that owns the roles.
@@ -349,7 +349,9 @@ class ZitadelBootstrap:
         )
         grants.raise_for_status()
         existing = grants.json().get("result")
+        marker = self.settings.admin_granted_file
         if existing:
+            marker.touch()
             missing = [role for role in new_roles if role not in existing[0].get("roleKeys", [])]
             if missing:
                 keys = [*existing[0].get("roleKeys", []), *missing]
@@ -358,9 +360,13 @@ class ZitadelBootstrap:
                 ).raise_for_status()
                 logger.info("Granted new roles %s to %r", ", ".join(missing), admin_username)
             return
+        if marker.exists():
+            logger.info("The grant of %r was removed on purpose, not granting it again", admin_username)
+            return
         self.client.post(
             f"{_API}/users/{user_id}/grants", json={"projectId": project_id, "roleKeys": roles}
         ).raise_for_status()
+        marker.touch()
         logger.info("Granted roles %s to %r", ", ".join(roles), admin_username)
 
     def new_client_secret(self, project_id: str, app_id: str) -> str:

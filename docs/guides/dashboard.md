@@ -1,6 +1,6 @@
 # Dashboard
 
-pluginlake includes two Streamlit dashboards: a **datastation dashboard** for monitoring a single data station, and a **central dashboard** for aggregating data across multiple stations.
+pluginlake includes a Streamlit **datastation dashboard** for monitoring a single data station.
 
 ## Datastation dashboard
 
@@ -49,14 +49,3 @@ The dashboard uses pydantic-settings with the `DASHBOARD_` environment prefix:
 The dashboard code lives in `src/pluginlake-ui/datastation/`: `app.py` (entrypoint, navigation, sidebar), `client.py` (HTTP client), `config.py` (settings), `backend/` (data fetching), `components/` (reusable UI) and `pages/`.
 All data flows through the FastAPI API.
 The dashboard never accesses DuckLake or Dagster directly.
-
-## Central dashboard
-
-The central dashboard aggregates information from multiple data stations.
-It is a separate Streamlit app under `src/pluginlake-ui/central/`.
-
-```bash
-just dev-central
-```
-
-The central dashboard is a demo for development and is available at `http://localhost:8502`.

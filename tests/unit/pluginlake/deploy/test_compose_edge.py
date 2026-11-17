@@ -48,6 +48,29 @@ def test_secrets_are_mounted_by_the_services_that_secrets_toml_lists():
     assert {name: mounted.get(name, set()) for name in declared} == declared
 
 
+def test_every_service_drops_all_capabilities_except_cadvisor():
+    for name, service in _services().items():
+        assert "no-new-privileges:true" in service.get("security_opt", []), name
+        if name != "cadvisor":
+            assert service.get("cap_drop") == ["ALL"], name
+            assert service.get("read_only") is True, name
+
+
+def test_marquez_uses_the_main_postgres_with_its_own_role():
+    services = _services()
+    assert "marquez-db" not in services
+    assert services["marquez"]["environment"]["POSTGRES_HOST"] == "postgres"
+    assert any(str(arg).startswith("--role=marquez:marquez:") for arg in services["pluginlake-db-init"]["command"])
+
+
+def test_bootstrap_folders_are_mounted_per_consumer():
+    services = _services()
+    for name, service in services.items():
+        for volume in service.get("volumes", []):
+            assert not str(volume).split(":")[0].endswith("/bootstrap"), name
+    assert not any(":/tls" in str(v) for v in services["oauth2-proxy"]["volumes"])
+
+
 def test_only_traefik_publishes_ports():
     published = {name for name, service in _services().items() if service.get("ports")}
     assert published == {"traefik", "prometheus"}  # prometheus is bound to a host address, loopback by default
@@ -213,31 +236,49 @@ def test_ensure_roles_only_creates_missing_roles():
     assert created == ["dagster"]
 
 
-def test_new_roles_are_added_to_the_existing_grant_of_the_admin():
+def test_new_roles_are_added_to_the_existing_grant_of_the_admin(tmp_path):
     bootstrap, calls = _bootstrap(
         {
             "POST /management/v1/users/_search": {"result": [{"id": "u1", "human": {}}]},
             "POST /management/v1/users/grants/_search": {"result": [{"id": "g1", "roleKeys": ["api"]}]},
         },
         protected_subdomains=["api", "console"],
+        admin_granted_file=tmp_path / "admin-granted",
     )
     bootstrap.grant_admin_roles("p", ["console"])
     update = next(body for method, path, body in calls if method == "PUT")
     assert update == {"roleKeys": ["api", "console"]}
 
 
-def test_admin_keeps_a_removed_role_removed():
+def test_admin_keeps_a_removed_role_removed(tmp_path):
     bootstrap, calls = _bootstrap(
         {
             "POST /management/v1/users/_search": {"result": [{"id": "u1", "human": {}}]},
             "POST /management/v1/users/grants/_search": {"result": [{"id": "g1", "roleKeys": ["api"]}]},
         },
         protected_subdomains=["api", "dagster"],
+        admin_granted_file=tmp_path / "admin-granted",
     )
     bootstrap.grant_admin_roles("p", [])
     assert not [
         call for call in calls if call[0] in {"PUT", "POST"} and "grants" in call[1] and "_search" not in call[1]
     ]
+
+
+def test_first_admin_grant_is_created_once(tmp_path):
+    marker = tmp_path / "admin-granted"
+    responses = {
+        "POST /management/v1/users/_search": {"result": [{"id": "u1", "human": {}}]},
+        "POST /management/v1/users/grants/_search": {"result": []},
+    }
+    bootstrap, calls = _bootstrap(responses, protected_subdomains=["api"], admin_granted_file=marker)
+    bootstrap.grant_admin_roles("p", ["api"])
+    assert any(path == "/management/v1/users/u1/grants" for _, path, _ in calls)
+    assert marker.exists()
+
+    again, calls = _bootstrap(responses, protected_subdomains=["api"], admin_granted_file=marker)
+    again.grant_admin_roles("p", [])
+    assert not any(path == "/management/v1/users/u1/grants" for _, path, _ in calls)
 
 
 def test_groups_target_is_fail_closed_and_stores_key(tmp_path):

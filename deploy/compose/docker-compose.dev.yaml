@@ -118,9 +118,6 @@ services:
     build:
       context: ../../
       dockerfile: deploy/docker/ui.dev.Dockerfile
-      args:
-        APP: datastation
-        PORT: "8501"
     ports:
       - "${DASHBOARD_HOST_PORT:-8501}:8501"
     environment:

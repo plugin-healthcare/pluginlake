@@ -17,14 +17,15 @@ class BootstrapSettings(BaseSettings):
     domain: str = "pluginlake.localhost"
     protected_subdomains: list[str] = ["api", "console", "dagster", "marquez", "prometheus"]
     zitadel_url: str = "http://zitadel-api:8080"
-    admin_pat_file: Path = Path("/bootstrap/admin.pat")
-    proxy_config_file: Path = Path("/bootstrap/oauth2-proxy.cfg")
+    admin_pat_file: Path = Path("/bootstrap/admin/admin.pat")
+    admin_granted_file: Path = Path("/bootstrap/admin/admin-granted")
+    proxy_config_file: Path = Path("/bootstrap/proxy/oauth2-proxy.cfg")
     admin_username: str = "admin"
     project_name: str = "pluginlake"
     app_name: str = "oauth2-proxy"
     groups_hook_url: str = "http://zitadel-groups-hook:8000/groups"
-    groups_hook_key_file: Path = Path("/bootstrap/groups-hook.key")
-    project_id_file: Path = Path("/bootstrap/project-id")
+    groups_hook_key_file: Path = Path("/bootstrap/hook/groups-hook.key")
+    project_id_file: Path = Path("/bootstrap/hook/project-id")
     wait_seconds: int = 180
 
     @property

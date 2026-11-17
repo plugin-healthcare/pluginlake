@@ -63,12 +63,6 @@ dev-up-headless *args='':
 dev-down *args='':
     {{ _compose }} --profile ui --profile lineage down {{ args }}
 
-_compose_central := "docker compose -f deploy/compose/docker-compose.central.yaml"
-
-# Start central dashboard (separate compose)
-dev-central *args='':
-    {{ _compose_central }} up --build {{ args }}
-
 _smoke-compose := 'env -i HOME="$HOME" PATH="$PATH" PLUGINLAKE_ENV_FILE=smoke.env docker compose --env-file deploy/compose/smoke.env --env-file deploy/compose/smoke.secrets.env -f deploy/compose/docker-compose.dev.yaml -f deploy/compose/docker-compose.smoke.yaml'
 
 # Run smoke test against running stack
@@ -96,15 +90,17 @@ setup *args='':
     mkdir -p "{{ home }}"
     chmod 700 "{{ home }}"
     docker build --quiet -f deploy/docker/pluginlake.Dockerfile -t pluginlake-setup . > /dev/null
-    domain="$(python3 -c 'import tomllib; print(tomllib.load(open("pluginlake.toml", "rb")).get("node", {}).get("domain") or "")')"
+    domain="$(docker run --rm --user "$(id -u):$(id -g)" --network none --cap-drop ALL --read-only \
+        -v "{{ justfile_directory() }}/pluginlake.toml:/pluginlake.toml:ro" pluginlake-setup \
+        python -c 'import tomllib; print(tomllib.load(open("/pluginlake.toml", "rb")).get("node", {}).get("domain") or "")')"
     if [[ "$domain" == "localhost" || "$domain" == *.localhost ]]; then
         command -v mkcert > /dev/null || { echo "mkcert is required for a .localhost domain: https://github.com/FiloSottile/mkcert" >&2; exit 1; }
-        mkdir -p "{{ home }}/tls"
+        mkdir -p "{{ home }}/tls" "{{ home }}/ca"
         chmod 700 "{{ home }}/tls"
-        if [[ ! -f "{{ home }}/tls/cert.pem" || "$(cat "{{ home }}/tls/cert.domain" 2>/dev/null)" != "$domain" ]]; then
+        if [[ ! -f "{{ home }}/tls/cert.pem" || ! -f "{{ home }}/ca/ca.pem" || "$(cat "{{ home }}/tls/cert.domain" 2>/dev/null)" != "$domain" ]]; then
             mkcert -install
             mkcert -cert-file "{{ home }}/tls/cert.pem" -key-file "{{ home }}/tls/key.pem" "$domain" "*.$domain"
-            cp "$(mkcert -CAROOT)/rootCA.pem" "{{ home }}/tls/ca.pem"
+            cp "$(mkcert -CAROOT)/rootCA.pem" "{{ home }}/ca/ca.pem"
             echo "$domain" > "{{ home }}/tls/cert.domain"
         fi
     fi

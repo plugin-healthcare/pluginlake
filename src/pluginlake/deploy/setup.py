@@ -19,8 +19,10 @@ logger = get_logger(__name__)
 
 COMPOSE_ENV = "compose.env"
 TLS_DIR = "tls"
-TLS_CERT, TLS_KEY, TLS_CA = "cert.pem", "key.pem", "ca.pem"
+TLS_CERT, TLS_KEY = "cert.pem", "key.pem"
+CA_DIR, CA_FILE = "ca", "ca.pem"
 TLS_FILE_CONFIG = "tls.yaml"
+CONTAINER_CA_DIR = "/ca"
 CONTAINER_TLS_DIR = "/tls"
 ROUTES_DIR = "traefik"
 ROUTES_FILE = "routes.yaml"
@@ -81,7 +83,7 @@ def compose_env(
         "PLUGINLAKE_GID": str(owner[1]),
         "PLUGINLAKE_HOME": str(host_home),
         "PLUGINLAKE_DOMAIN": node.domain,
-        "OAUTH2_PROXY_SSL_CERT_FILE": f"{CONTAINER_TLS_DIR}/{TLS_CA}" if is_local(node.domain or "") else "",
+        "OAUTH2_PROXY_SSL_CERT_FILE": f"{CONTAINER_CA_DIR}/{CA_FILE}" if is_local(node.domain or "") else "",
         "ZITADEL_ADMIN_USERNAME": node.admin_username,
         "PLUGINLAKE_LINEAGE_NAMESPACE": config.station.lineage_namespace,
         "PROMETHEUS_STATION_ID": config.monitoring.station_id,
@@ -96,7 +98,8 @@ def compose_env(
 def prepare_tls(home: Path, *, local: bool) -> bool:
     """Create the ``tls`` folder and its Traefik config.
 
-    For a local node the mkcert files (``cert.pem``, ``key.pem``, ``ca.pem``, written by ``just setup``) must exist.
+    For a local node the mkcert files (``cert.pem`` and ``key.pem`` in ``tls``, ``ca.pem`` in ``ca``, all written by
+    ``just setup``) must exist.
     For other domains an existing ``tls.yaml`` is the operator's own and stays as it is.
 
     Args:
@@ -109,9 +112,10 @@ def prepare_tls(home: Path, *, local: bool) -> bool:
     tls_dir = home / TLS_DIR
     tls_dir.mkdir(mode=0o700, exist_ok=True)
     if local:
-        missing = [name for name in (TLS_CERT, TLS_KEY, TLS_CA) if not (tls_dir / name).is_file()]
+        expected = [tls_dir / TLS_CERT, tls_dir / TLS_KEY, home / CA_DIR / CA_FILE]
+        missing = [str(path) for path in expected if not path.is_file()]
         if missing:
-            logger.error("Missing %s in %s: run `just setup`, which creates them with mkcert.", missing, tls_dir)
+            logger.error("Missing %s: run `just setup`, which creates them with mkcert.", missing)
             return False
     config_file = tls_dir / TLS_FILE_CONFIG
     # A config left from a local node must not outlive a move to a real domain.

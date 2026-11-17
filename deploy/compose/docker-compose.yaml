@@ -10,6 +10,13 @@ x-dagster-db: &dagster-db
   DAGSTER_PG_USER: dagster
   DAGSTER_PG_DB: dagster
 
+# Applied to every service except cAdvisor, which needs root capabilities to read the host.
+x-hardening: &hardening
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  read_only: true
+  tmpfs: ["/tmp"]
+
 # Rotate container logs: the default json-file driver keeps them unbounded on the host.
 # Step stdout/stderr (dagster-code-server) can contain data, so keep the retention small.
 x-logging: &default-logging
@@ -20,6 +27,7 @@ x-logging: &default-logging
 
 services:
   postgres:
+    <<: *hardening
     logging: *default-logging
     user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
     image: dhi.io/postgres:17-alpine3.24
@@ -48,19 +56,19 @@ services:
   # Creates one role and database per service with the Postgres superuser, so every other service
   # only gets the credentials of its own role.
   pluginlake-db-init:
+    <<: *hardening
     logging: *default-logging
     user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
     build:
       context: ../../
       dockerfile: deploy/docker/pluginlake.Dockerfile
-    cap_drop: [ALL]
-    security_opt: ["no-new-privileges:true"]
     restart: "no"
     secrets:
       - postgres_password
       - dagster_pg_password
       - ducklake_pg_password
       - zitadel_db_password
+      - marquez_db_password
       - postgres_exporter_password
     command:
       - python
@@ -73,6 +81,7 @@ services:
       - --role=dagster:dagster:/run/secrets/dagster_pg_password
       - --role=ducklake:ducklake:/run/secrets/ducklake_pg_password
       - --role=zitadel:zitadel:/run/secrets/zitadel_db_password
+      - --role=marquez:marquez:/run/secrets/marquez_db_password
       - --role=monitoring::/run/secrets/postgres_exporter_password
     depends_on:
       postgres:
@@ -80,6 +89,7 @@ services:
     networks: [db-net]
 
   dagster-webserver:
+    <<: *hardening
     logging: *default-logging
     user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
     build:
@@ -105,6 +115,7 @@ services:
     networks: [app-net, db-net]
 
   dagster-daemon:
+    <<: *hardening
     logging: *default-logging
     user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
     build:
@@ -124,6 +135,7 @@ services:
     networks: [app-net, db-net]
 
   dagster-code-server:
+    <<: *hardening
     logging: *default-logging
     user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
     build:
@@ -165,6 +177,7 @@ services:
     networks: [app-net, db-net]
 
   pluginlake:
+    <<: *hardening
     logging: *default-logging
     user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
     build:
@@ -200,6 +213,7 @@ services:
     networks: [app-net, db-net]
 
   dashboard-datastation:
+    <<: *hardening
     logging: *default-logging
     user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
     build:
@@ -227,6 +241,7 @@ services:
   # Prometheus is also published on the host, on loopback unless [monitoring] publish names another address.
   # ---------------------------------------------------------------------------
   prometheus:
+    <<: *hardening
     logging: *default-logging
     image: quay.io/prometheus/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2
     user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
@@ -250,6 +265,7 @@ services:
     restart: unless-stopped
 
   postgres-exporter:
+    <<: *hardening
     logging: *default-logging
     user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
     image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1@sha256:ac5ec343104fae0e2d84a27bb8d69b38430a11910c5382cad85d478d2bab713e
@@ -276,6 +292,7 @@ services:
   cadvisor:
     # Started through COMPOSE_PROFILES, which `pluginlake setup` sets from [monitoring] cadvisor.
     profiles: [cadvisor]
+    security_opt: ["no-new-privileges:true"]
     logging: *default-logging
     image: ghcr.io/google/cadvisor:v0.60.6@sha256:b8e7d1093144fd088f425ff003d75a4aa405de075db78dae3bc563730b1bd07a
     command:
@@ -306,30 +323,8 @@ services:
   # so the web UI is only reachable at marquez.<domain> behind the proxy.
   # OpenLineage endpoint inside the compose network: http://marquez:5000/api/v1/lineage
   # ---------------------------------------------------------------------------
-  marquez-db:
-    logging: *default-logging
-    user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
-    image: dhi.io/postgres:17-alpine3.24
-    environment:
-      POSTGRES_USER: marquez
-      POSTGRES_DB: marquez
-      POSTGRES_PASSWORD_FILE: /run/secrets/marquez_db_password
-    secrets:
-      - marquez_db_password
-    volumes:
-      - ${PLUGINLAKE_HOME:?run just setup}/marquez-db:/var/lib/postgresql
-      - ${PLUGINLAKE_HOME:?run just setup}/passwd:/etc/passwd:ro
-    tmpfs:
-      - /run/postgresql:mode=1777
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 3s
-      timeout: 3s
-      retries: 10
-      start_period: 5s
-    networks: [db-net]
-
   marquez:
+    <<: *hardening
     logging: *default-logging
     user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
     image: marquezproject/marquez:0.51.1
@@ -344,15 +339,15 @@ services:
       MARQUEZ_CONFIG: /opt/marquez/marquez.yml
       MARQUEZ_PORT: "5000"
       MARQUEZ_ADMIN_PORT: "5001"
-      POSTGRES_HOST: marquez-db
+      POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       POSTGRES_DB: marquez
       POSTGRES_USER: marquez
     volumes:
       - ../../config/marquez/marquez.yml:/opt/marquez/marquez.yml:ro
     depends_on:
-      marquez-db:
-        condition: service_healthy
+      pluginlake-db-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:5001/healthcheck"]
       interval: 5s
@@ -362,6 +357,7 @@ services:
     networks: [app-net, db-net]
 
   marquez-web:
+    <<: *hardening
     logging: *default-logging
     user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
     image: marquezproject/marquez-web:0.51.1
@@ -384,13 +380,12 @@ services:
   # Edge: the only service that publishes ports (docs/guides/docker.md#edge).
   # ---------------------------------------------------------------------------
   traefik:
+    <<: *hardening
     logging: *default-logging
     user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
     image: traefik:v3.7@sha256:f4bb143d1135a579b630ed491e17ec50f6f7c9c6a30585ff3d385471d2a86f5a
     read_only: true
-    cap_drop: [ALL]
     cap_add: [NET_BIND_SERVICE]
-    security_opt: ["no-new-privileges:true"]
     ports:
       - "80:80"
       - "443:443"
@@ -417,12 +412,11 @@ services:
 
   # Static page that Traefik shows while the applications are not reachable yet.
   starting-page:
+    <<: *hardening
     logging: *default-logging
     user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
     image: busybox:1.37@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec
     read_only: true
-    cap_drop: [ALL]
-    security_opt: ["no-new-privileges:true"]
     command: ["httpd", "-f", "-p", "8080", "-h", "/www"]
     volumes:
       - ./traefik/starting.html:/www/index.html:ro
@@ -431,6 +425,7 @@ services:
 
   # Creates the Zitadel schemas with the zitadel role (the role and database come from pluginlake-db-init).
   zitadel-init:
+    <<: *hardening
     logging: *default-logging
     user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
     image: ghcr.io/zitadel/zitadel:v4.20.2@sha256:d7ffdecfe037940beeae24c8bb32a420b2adc67fab7bc51554bdae58f9624ef3
@@ -446,6 +441,7 @@ services:
     networks: [db-net]
 
   zitadel-api:
+    <<: *hardening
     logging: *default-logging
     user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
     image: ghcr.io/zitadel/zitadel:v4.20.2@sha256:d7ffdecfe037940beeae24c8bb32a420b2adc67fab7bc51554bdae58f9624ef3
@@ -469,12 +465,12 @@ services:
       ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: ${ZITADEL_ADMIN_USERNAME:?set by just setup}
       ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: "true"
       # Token for the login UI.
-      ZITADEL_FIRSTINSTANCE_LOGINCLIENTPATPATH: /bootstrap/login-client.pat
+      ZITADEL_FIRSTINSTANCE_LOGINCLIENTPATPATH: /bootstrap/login/login-client.pat
       ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_USERNAME: login-client
       ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_NAME: Login client
       ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_PAT_EXPIRATIONDATE: "2099-01-01T00:00:00Z"
       # Token for pluginlake-init, which provisions the OIDC application.
-      ZITADEL_FIRSTINSTANCE_PATPATH: /bootstrap/admin.pat
+      ZITADEL_FIRSTINSTANCE_PATPATH: /bootstrap/admin/admin.pat
       ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: pluginlake-init
       ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: pluginlake-init
       ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: "2099-01-01T00:00:00Z"
@@ -487,8 +483,10 @@ services:
       # Zitadel blocks webhook targets in private ranges. This is the default list without 172.16.0.0/12,
       # so that it can reach the groups hook on the Docker network.
       ZITADEL_HTTPCLIENT_DENYLIST: "localhost,0.0.0.0/8,10.0.0.0/8,100.64.0.0/10,127.0.0.0/8,169.254.0.0/16,192.168.0.0/16,198.18.0.0/15,::/128,::1/128,fc00::/7,fe80::/10"
+    # Each token has its own folder, so a consumer only sees the token it needs.
     volumes:
-      - ${PLUGINLAKE_HOME:?run just setup}/bootstrap:/bootstrap
+      - ${PLUGINLAKE_HOME:?run just setup}/bootstrap/admin:/bootstrap/admin
+      - ${PLUGINLAKE_HOME:?run just setup}/bootstrap/login:/bootstrap/login
     healthcheck:
       test: ["CMD", "/app/zitadel", "ready"]
       interval: 10s
@@ -502,6 +500,7 @@ services:
     restart: unless-stopped
 
   zitadel-login:
+    <<: *hardening
     logging: *default-logging
     user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
     image: ghcr.io/zitadel/zitadel-login:v4.20.2@sha256:09c1a6ea523818401f0740cca0991fc09166e5c2f15c6999f2806d2b5f4845eb
@@ -518,7 +517,7 @@ services:
       ZITADEL_SERVICE_USER_TOKEN_FILE: /bootstrap/login-client.pat
       CUSTOM_REQUEST_HEADERS: Host:auth.${PLUGINLAKE_DOMAIN:?set by just setup},X-Forwarded-Proto:https
     volumes:
-      - ${PLUGINLAKE_HOME:?run just setup}/bootstrap:/bootstrap:ro
+      - ${PLUGINLAKE_HOME:?run just setup}/bootstrap/login:/bootstrap:ro
     healthcheck:
       test: ["CMD", "/bin/sh", "-c", "node /app/healthcheck.mjs http://localhost:3000/ui/v2/login/healthy"]
       interval: 10s
@@ -533,17 +532,16 @@ services:
 
   # Adds the roles of a user to the tokens as the groups claim that oauth2-proxy needs (Zitadel Actions v2).
   zitadel-groups-hook:
+    <<: *hardening
     logging: *default-logging
     user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
     build:
       context: ../../
       dockerfile: deploy/docker/pluginlake.Dockerfile
     read_only: true
-    cap_drop: [ALL]
-    security_opt: ["no-new-privileges:true"]
     command: ["python", "-m", "pluginlake.deploy.groups_hook"]
     volumes:
-      - ${PLUGINLAKE_HOME:?run just setup}/bootstrap:/bootstrap:ro
+      - ${PLUGINLAKE_HOME:?run just setup}/bootstrap/hook:/bootstrap:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
@@ -555,19 +553,20 @@ services:
 
   # Runs once after Zitadel is up: creates the OIDC application and writes the oauth2-proxy config.
   pluginlake-init:
+    <<: *hardening
     logging: *default-logging
     user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
     build:
       context: ../../
       dockerfile: deploy/docker/pluginlake.Dockerfile
-    cap_drop: [ALL]
-    security_opt: ["no-new-privileges:true"]
     restart: "no"
     environment:
       PLUGINLAKE_BOOTSTRAP_DOMAIN: ${PLUGINLAKE_DOMAIN:?set by just setup}
       PLUGINLAKE_BOOTSTRAP_ADMIN_USERNAME: ${ZITADEL_ADMIN_USERNAME:?set by just setup}
     volumes:
-      - ${PLUGINLAKE_HOME:?run just setup}/bootstrap:/bootstrap
+      - ${PLUGINLAKE_HOME:?run just setup}/bootstrap/admin:/bootstrap/admin
+      - ${PLUGINLAKE_HOME:?run just setup}/bootstrap/hook:/bootstrap/hook
+      - ${PLUGINLAKE_HOME:?run just setup}/bootstrap/proxy:/bootstrap/proxy
     depends_on:
       zitadel-api:
         condition: service_healthy
@@ -575,12 +574,11 @@ services:
     networks: [edge-net]
 
   oauth2-proxy:
+    <<: *hardening
     logging: *default-logging
     user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
     image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.6@sha256:c3415e8660af553f5e18f5d90db050614c02493c0ac6260ac59442f6d9b12048
     read_only: true
-    cap_drop: [ALL]
-    security_opt: ["no-new-privileges:true"]
     command:
       - --config=/bootstrap/oauth2-proxy.cfg
       - --provider=oidc
@@ -603,8 +601,8 @@ services:
       # The mkcert root CA in development, empty for the system roots.
       SSL_CERT_FILE: ${OAUTH2_PROXY_SSL_CERT_FILE?set by just setup}
     volumes:
-      - ${PLUGINLAKE_HOME:?run just setup}/tls:/tls:ro
-      - ${PLUGINLAKE_HOME:?run just setup}/bootstrap:/bootstrap:ro
+      - ${PLUGINLAKE_HOME:?run just setup}/ca:/ca:ro
+      - ${PLUGINLAKE_HOME:?run just setup}/bootstrap/proxy:/bootstrap:ro
     depends_on:
       pluginlake-init:
         condition: service_completed_successfully

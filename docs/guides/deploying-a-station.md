@@ -51,13 +51,15 @@ The `[monitoring]` section is optional and described in the [monitoring guide](m
 
 ## Bring the station up
 
-The station runs as a production node, with the projects available at the paths in `pluginlake.toml`:
+The station runs as a production node:
 
 ```bash
 just up -d
 ```
 
 This prepares the node data folder, builds the images and starts the stack.
+The production stack does not install the `[[projects]]` of `pluginlake.toml` yet, because its images are read-only and have no install step at start.
+Projects are installed by `pluginlake up`, which drives the development compose stack.
 Every application is reached on its own subdomain of `[node] domain` and sits behind the login, for example `https://console.<domain>`, `https://dagster.<domain>`, `https://marquez.<domain>` and `https://api.<domain>/docs`.
 The [Docker guide](docker.md#edge) describes the edge, the roles and the secrets.
 
@@ -92,4 +94,4 @@ Scaffold a conformant project package, implement its assets and routers, then ad
 uv run pluginlake init my-project
 ```
 
-Add a `[[projects]]` entry pointing at the new checkout (or its pinned source) and run `just up` again. The `pluginlake-ehds-demo` repository is a complete worked example of a project package.
+Add a `[[projects]]` entry pointing at the new checkout (or its pinned source) and run `pluginlake up` again. The `pluginlake-ehds-demo` repository is a complete worked example of a project package.
