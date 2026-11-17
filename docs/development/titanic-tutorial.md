@@ -1,6 +1,8 @@
-# Getting started with pluginlake
+# Titanic tutorial
 
-This tutorial walks you through running the included Titanic example to get familiar with pluginlake's asset pipeline. By the end you'll have materialized your first assets, inspected the DuckLake catalog, and queried the data.
+This tutorial walks you through running the included Titanic example to get familiar with pluginlake's asset pipeline.
+It uses the development tooling for developers of the platform and of assets, so it runs without the login and the edge.
+To run a complete node on your own machine, see [Getting started](../guides/getting-started.md).
 
 ## Prerequisites
 
@@ -90,36 +92,27 @@ Both receive the output of `titanic_raw` as a lazy frame.
 Instead of materializing assets one by one, go to **Jobs**, open **titanic_job** and click **Launch Run**.
 This materializes all three assets in the correct order.
 
-## 9. Inspect the DuckLake catalog
+## 9. Explore the data
 
-Open a Python shell with `uv run python` and query the catalog:
-
-```python
-from pluginlake.core.ducklake.setup import setup_ducklake
-
-conn = setup_ducklake()
-conn.sql("SELECT table_schema, table_name FROM information_schema.tables WHERE table_catalog = 'ducklake'").show()
-conn.sql("SELECT * FROM ducklake.main.titanic_survival_by_class").show()
-```
-
-The underlying Parquet files are in `.data/lakehouse/`.
+The assets are stored as tables in the DuckLake catalog, with the Parquet files in `.data/lakehouse/`.
+Explore them with the DuckDB UI, marimo or the application of a project.
 
 ## 10. Understand the code
 
 `examples/titanic.py` defines 3 assets with `@asset`, where function parameters declare the dependencies, 1 job with `define_asset_job`, and a `Definitions` object that registers them together with the DuckLake IO manager.
 Assets that take a `pl.LazyFrame` get a lazy read, so Polars filters are pushed down to DuckDB.
 
-## 11. Clean up
+## 11. Stop
 
-Stop PostgreSQL when you're done, and optionally remove the DuckLake data files:
+Stop PostgreSQL when you're done.
+The data stays in `.data/`, so the next start continues where you left off.
 
 ```bash
 just dev-down
-rm -rf .data/lakehouse/
 ```
 
 ## Next steps
 
-- **Add your own assets** and **use pluginlake as a package**: see the [using as package](using-as-package.md) guide.
-- **Run the full Docker stack**: see the [Docker guide](docker.md).
+- **Add your own assets** and **use pluginlake as a package**: see the [using as package](../guides/using-as-package.md) guide.
+- **Run a node**: see [Getting started](../guides/getting-started.md), and the [Docker guide](../guides/docker.md) for the background, settings and running options.
 - **Explore the API**: see the [API overview](../reference/api.md) and the [interactive specification](../reference/api-specification.md).

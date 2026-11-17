@@ -19,19 +19,17 @@ It connects to the FastAPI API and displays pipeline status, data catalog conten
 | **FHIR** | FHIR resource statistics. |
 | **Upload Data** | Upload OMOP CSV or FHIR NDJSON files through the API. |
 
-### Running locally
+### Running
+
+In a node the dashboard is the console at `https://console.<domain>` (see the [Getting started](getting-started.md)).
+For development:
 
 ```bash
-# With Docker (recommended)
 just dev-up          # Starts all services including the dashboard
 just dev-up-headless # Starts backend services only (no dashboard)
-
-# Without Docker
-cd src/pluginlake-ui/datastation
-streamlit run app.py
 ```
 
-The dashboard is available at `http://localhost:8501`.
+The dev dashboard is available at `http://localhost:8501`.
 
 ### Configuration
 
@@ -41,7 +39,7 @@ The dashboard uses pydantic-settings with the `DASHBOARD_` environment prefix:
 |----------|---------|-------------|
 | `DASHBOARD_API_URL` | `http://pluginlake:8000` | pluginlake API base URL |
 | `DASHBOARD_API_TIMEOUT` | `30` | API request timeout in seconds |
-| `DASHBOARD_DOMAIN` | `pluginlake.localhost` | Domain of the node; the sidebar links to the other web interfaces on its subdomains, for each role the user has. The default is the development domain: a deployed node gets `[node] domain` from `pluginlake.toml` through `pluginlake setup` |
+| `DASHBOARD_DOMAIN` | `pluginlake.localhost` | Domain of the node; the sidebar links to the other web interfaces on its subdomains, for each role the user has. A deployed node gets `[node] domain` from `pluginlake.toml` through `just setup` |
 | `DASHBOARD_DATASTATION_ID` | `ds-local-001` | Unique identifier for this station. The default is a development value; set it for each deployed node |
 | `DASHBOARD_DATASTATION_NAME` | `demo-1` | Display name shown in the sidebar. The default is a development value; set it for each deployed node |
 | `DASHBOARD_ASSETS_DIR` | `/app/assets` | Path to brand assets (logo, images) |
@@ -61,4 +59,4 @@ It is a separate Streamlit app under `src/pluginlake-ui/central/`.
 just dev-central
 ```
 
-The central dashboard is available at `http://localhost:8502`.
+The central dashboard is a demo for development and is available at `http://localhost:8502`.

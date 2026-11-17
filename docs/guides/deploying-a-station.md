@@ -51,21 +51,15 @@ The `[monitoring]` section is optional and described in the [monitoring guide](m
 
 ## Bring the station up
 
-From a core checkout, with the projects available at the paths in `pluginlake.toml`:
+The station runs as a production node, with the projects available at the paths in `pluginlake.toml`:
 
 ```bash
-uv run pluginlake up -d
+just up -d
 ```
 
-This builds the images, starts the stack, installs the configured projects, and wires their contributions. Once it is healthy:
-
-| Service | URL |
-|---------|-----|
-| Dashboard (Streamlit) | <http://localhost:8501> |
-| Dagster (pipelines and assets) | <http://localhost:3000> |
-| API docs (Swagger) | <http://localhost:8000/docs> |
-| API health | <http://localhost:8000/health> |
-| Prometheus (only with `[monitoring] enabled = true`, loopback only) | <http://127.0.0.1:9090> |
+This prepares the node data folder, builds the images and starts the stack.
+Every application is reached on its own subdomain of `[node] domain` and sits behind the login, for example `https://console.<domain>`, `https://dagster.<domain>`, `https://marquez.<domain>` and `https://api.<domain>/docs`.
+The [Docker guide](docker.md#edge) describes the edge, the roles and the secrets.
 
 Verify that the configured projects conform to the plugin contract and are wired correctly:
 
@@ -73,49 +67,22 @@ Verify that the configured projects conform to the plugin contract and are wired
 uv run pluginlake verify
 ```
 
-Stop the station (add `-v` to also remove volumes):
+Stop the station with `just down`.
+Data stays in the node data folder and is never removed by stopping or restarting the station.
 
-```bash
-uv run pluginlake down
-```
+## Lineage with Marquez
 
-`pluginlake down` stops every optional service (dashboards and lineage), also when they are switched off in `pluginlake.toml`.
-
-## Lineage with Marquez (optional)
-
-A station can run [Marquez](https://marquezproject.ai) as the receiver for OpenLineage events (ADR-007). Switch it on in `pluginlake.toml`:
-
-```toml
-[station]
-lineage = true
-```
-
-`pluginlake up` then also starts the `lineage` compose profile: the Marquez API, the Marquez web UI and a dedicated PostgreSQL database.
-
-| What | Where |
-|------|-------|
-| OpenLineage endpoint (inside the compose network) | `http://marquez:5000/api/v1/lineage` |
-| Marquez web UI (host loopback only) | http://127.0.0.1:3001 |
-
-Marquez has no authentication, so on a remote station use an SSH tunnel:
-
-```bash
-ssh -L 3001:127.0.0.1:3001 user@station-host
-```
-
-With lineage on, core registers the `openlineage_sensor`, which sends one OpenLineage event per materialized asset to Marquez: upstream assets as inputs, the DuckLake table as output, and the schema, row count and column lineage from the asset metadata.
+Every station runs [Marquez](https://marquezproject.ai) as the receiver for OpenLineage events (ADR-007).
+Core registers the `openlineage_sensor`, which sends one OpenLineage event per materialized asset: upstream assets as inputs, the DuckLake table as output, and the schema, row count and column lineage from the asset metadata.
 Events contain no data values, projects do not need to register anything, and a failed send only logs a warning.
+The Marquez UI is available at `https://marquez.<domain>` after login.
 
 Give each node its own namespace, so jobs from different stations stay apart:
 
 ```toml
 [station]
-lineage = true
 lineage_namespace = "ds-local-001"
 ```
-
-Lineage data survives `pluginlake down`; `pluginlake down -v` removes it.
-Credentials and the UI port are set in `deploy/compose/.env` (see `.env.example`).
 
 ## Onboarding a new project
 
@@ -125,4 +92,4 @@ Scaffold a conformant project package, implement its assets and routers, then ad
 uv run pluginlake init my-project
 ```
 
-Add a `[[projects]]` entry pointing at the new checkout (or its pinned source) and run `pluginlake up` again. The `pluginlake-ehds-demo` repository is a complete worked example of a project package.
+Add a `[[projects]]` entry pointing at the new checkout (or its pinned source) and run `just up` again. The `pluginlake-ehds-demo` repository is a complete worked example of a project package.

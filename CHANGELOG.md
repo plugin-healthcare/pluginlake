@@ -22,6 +22,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Breaking: `pluginlake up --dev` and the `up-dev` recipe are removed. `just up` is the production stack for every node, and a `.localhost` domain makes it a local node. The platform development stack stays in `just dev-up` and `just dev-local`.
+- `docs/guides/getting-started.md` is now the single entry point for deploying a platform node (it replaces `quick-start.md`), and the Titanic walkthrough moved to `docs/development/titanic-tutorial.md`.
+- The Zitadel bootstrap is a stateless `ZitadelBootstrap` class in `pluginlake.deploy.bootstrap`.
 - Existing stations rerun `just setup` once more: `pluginlake-init` now writes `bootstrap/project-id`, and the groups hook only trusts roles of that project and refuses to issue groups until the file exists. `[monitoring] cadvisor = false` now also keeps the cAdvisor container from starting.
 - `pluginlake secrets list` and `pluginlake secrets get <name>` show the presence of the secrets of a node and read one value with an audit log line.
 - `pluginlake setup` renders the Traefik routes into `${PLUGINLAKE_HOME}/traefik/routes.yaml` from `[node] domain`, so the routes follow the applications of the deployment. The Prometheus remote-write username and retention moved from `.env.monitoring` (removed) to `[monitoring]` in `pluginlake.toml`.

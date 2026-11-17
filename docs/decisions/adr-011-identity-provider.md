@@ -6,9 +6,10 @@
 
 ## TL;DR
 
-Every web UI sits behind Traefik and oauth2-proxy with an OIDC provider.
-Zitadel is chosen for both Data Stations and Processing Hubs because it is light and already works, on the assumption that we run the unmodified images.
-Keycloak is the fallback if a license or footprint problem appears, and the [spike](#spike) shows it works.
+Web UIs are protected at the edge by Traefik forward auth and oauth2-proxy, which log users in with an OIDC provider, and API clients can also call with a valid token.
+We choose Zitadel for both Data Stations and Processing Hubs because it is light and already works, on the assumption that we run the unmodified images.
+The trade-off is an extra service, the `zitadel-groups-hook`, which Keycloak does not need because it maps groups itself.
+Keycloak can replace Zitadel when a license or footprint problem appears, and the [spike](#spike) shows that it works behind the same edge.
 
 ## Context
 
@@ -42,10 +43,8 @@ Authentik drops out as the heaviest, with the slowest logins and the longest upg
 Zitadel is AGPL-3.0, so the choice rests on 1 assumption: we run the unmodified image as a separate container and talk to it only over OIDC and HTTP, which is also the view of our architect.
 The AGPL applies to Zitadel and works based on it, not to separate programs that talk to it, and our own code stays Apache-2.0.
 A patch or fork would have to be published, and code of ours that imports Zitadel code would fall under the AGPL, so a patch we want to keep private is a reason to switch.
-Trivy cannot read licenses from the Go binary, so the scan is no evidence, and the security officer could not say whether the central license policy covers third-party containers.
-A lawyer has not checked this reasoning.
 
-Keycloak (Apache-2.0) is the fallback if a hospital or a policy rejects AGPL software, or if Zitadel falls short on clustering or features.
+Keycloak (Apache-2.0) can replace Zitadel if a hospital or a policy rejects AGPL software, or if Zitadel falls short on clustering or features. A spike decides how then.
 
 To keep switching cheap, the rest of the stack only depends on standard OIDC:
 
@@ -56,11 +55,24 @@ To keep switching cheap, the rest of the stack only depends on standard OIDC:
 
 The setup is described in the [Edge](../guides/docker.md#edge) section of the Docker guide.
 
+### Why a separate groups hook
+
+Zitadel only emits its roles as an object, while oauth2-proxy needs a list, so a small service has to translate them.
+This is the route Zitadel documents for oauth2-proxy.
+
+- Access is checked at the edge, because most components (Dagster, Marquez, Prometheus) are not built by us and cannot check roles themselves.
+- The hook is its own stateless container, so sign-in does not depend on the API, Postgres or DuckLake, and it is only reachable on the internal network.
+- It is not part of `pluginlake-init`, because that container exits after startup while Zitadel calls the hook on every token.
+- oauth2-proxy stays instead of our own login code, because OIDC login, sessions and refresh are better left to a maintained project.
+- If the hook is down nobody can sign in, which is the safe failure.
+- Validating the token in our own API is a later addition and does not replace the edge check.
+
 ## Consequences
 
 - Smallest footprint of the options (about 174 MiB against about 510 MiB for Keycloak), which leaves the RAM for compute.
+- The price of Zitadel is the extra `zitadel-groups-hook`: about 100 lines of our own code and 1 more container to run, monitor and keep available, because nobody can sign in while it is down. Keycloak has a built-in groups mapper and needs neither.
 - A customer or auditor may still reject the AGPL, and then we switch to Keycloak: a realm import instead of the provisioning in `pluginlake-init`, new compose services and users re-created.
-- Users and their access live in Zitadel, and later also in contracts. Our configuration holds no user data, only a first admin with a generated password that must change at the first login.
+- Users and their access live in Zitadel, and later also in contracts. Our configuration holds no user data, only a first admin with a generated password that is forced to change at the first login.
 - Fine-grained access follows the data contracts in our own layer (DSP, ODRL), with the provider supplying identities, groups and claims.
 - Access starts per service or application, and profiles follow later on top of that.
 
@@ -68,7 +80,7 @@ The setup is described in the [Edge](../guides/docker.md#edge) section of the Do
 
 The spike built the same stack for Keycloak and Zitadel (Traefik, provider, own Postgres role, 1 protected host) and compared footprint, provisioning, federation, proxy fit, groups, machine tokens, audit, secrets and clustering.
 Authentik was not run and stays dropped.
-Run on 2026-11-10 with Keycloak 26.4.7 and Postgres 17 in Docker on a laptop, scripts in the local `.agents/memory/spike/`.
+Run on 2026-11-10 with Keycloak 26.4.7 and Postgres 17 in Docker on a laptop.
 Zitadel numbers come from the running compose stack.
 
 ### Results
@@ -78,19 +90,7 @@ Zitadel numbers come from the running compose stack.
 | Footprint | 510 MiB idle, 617 MiB after 50 logins, heap capped at 512 MiB | 174 MiB idle (API 90, login UI 84) |
 | Provisioning | Realm import from 1 JSON file, no own code | Management API calls from `pluginlake-init` |
 | Federation | Login through a second OIDC provider worked | Not tested |
-| Groups | `groups` claim per user, works with `--allowed-group` | Project roles plus an Actions v2 target give a `groups` claim, and a user with only the role `dagster` gets 403 on the other applications |
+| Groups | Native groups with a mapper that adds the `groups` claim | No native groups: an Actions v2 target (`zitadel-groups-hook`) turns the flat project roles into a `groups` claim |
 | Clustering | 2 replicas without sticky sessions, logins survive losing 1 | Not tested |
 
 Keycloak also worked behind Traefik forward auth and oauth2-proxy, including websockets, and kept database and admin passwords in a mounted file.
-
-Gotchas of the Keycloak fallback:
-
-- A realm import with its own `clientScopes` block drops the built-in scopes, so put the groups mapper on the client.
-- Tokens carry `aud=account`, so audience checks need an audience mapper, and service accounts need a groups or audience mapper to pass `--allowed-group`.
-- A brokered user gets no groups, so add a mapper or a default group per upstream provider.
-- The hostname must be fixed (`--hostname`), otherwise replicas reject each other's tokens.
-- oauth2-proxy needs `--scope="openid email profile"` and must start after Keycloak is healthy.
-
-Not tested and still open: federation with a real Entra ID or SURFconext tenant, Nuts and DPoP paths on 1 hostname (#127), upgrade and backup restore.
-The results show that Keycloak works as a fallback.
-The status stays Proposed until the open items are done and the license assumption is confirmed.

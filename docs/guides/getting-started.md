@@ -1,16 +1,19 @@
-# Quick start
+# Getting started
 
 This guide starts a complete pluginlake node on your own machine: the edge with Traefik, oauth2-proxy and Zitadel, plus Dagster, the API, lineage and monitoring.
-For the Titanic example without Docker, see [Getting started](getting-started.md).
+The node is an empty platform instance without data or assets of its own.
+A project adds its assets, routes and data on top, see [Deploying a station](deploying-a-station.md).
+To build assets with the development tooling, see the [Titanic tutorial](../development/titanic-tutorial.md).
 
 ## Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) with Compose, for example Docker Desktop, Colima or Docker Engine
 - [just](https://github.com/casey/just)
-- [mkcert](https://github.com/FiloSottile/mkcert), only for a `.localhost` domain, to get a locally trusted certificate
+- [mkcert](https://github.com/FiloSottile/mkcert), only for a `.localhost` domain, to get a locally trusted certificate. You do not need it when you use your own domain with a certificate from a certificate authority.
 - A Docker Hub account with `docker login dhi.io` done once, because the images are built on hardened base images (see [Docker](docker.md#hardened-base-images))
 
 On macOS with Colima, keep the checkout under your home folder, because Colima only shares that folder with the containers.
+The node data is stored in `.pluginlake/` inside the checkout (or in `PLUGINLAKE_HOME` when set).
 
 ## 1. Start the node
 

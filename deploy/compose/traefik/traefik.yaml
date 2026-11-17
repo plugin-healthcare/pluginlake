@@ -1,6 +1,6 @@
-# Traefik static configuration. `pluginlake setup` renders the routing into ${PLUGINLAKE_HOME}/traefik; the certificate is ${PLUGINLAKE_HOME}/tls/tls.yaml.
+# Traefik static configuration. The routing and the certificate are rendered by `pluginlake setup`.
 
-# Backends trust X-Auth-Request-* headers, so drop client headers that alias them.
+# Backends trust X-Auth-Request-* headers, so client headers that alias them are dropped.
 global:
   aliasHeadersStrategy: delete
 
