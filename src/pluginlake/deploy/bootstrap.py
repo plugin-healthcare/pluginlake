@@ -291,6 +291,7 @@ def bootstrap(client: httpx.Client, settings: BootstrapSettings) -> None:
     """Provision the OIDC app and write the oauth2-proxy config."""
     hosts = settings.protected_hosts
     project_id = ensure_project(client, settings.project_name)
+    settings.project_id_file.write_text(project_id, encoding="utf-8")
     app_id, client_id, client_secret = ensure_app(client, project_id, settings.app_name, hosts)
     sync_redirect_uris(client, project_id, app_id, hosts)
     assert_project_roles(client, project_id, settings.project_name)

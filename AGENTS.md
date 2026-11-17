@@ -32,7 +32,8 @@ For tool-specific configuration, see `.github/copilot-instructions.md`.
 
 ## Configuration
 
-- Use Pydantic Settings (`pydantic-settings`) for all configuration.
+- Use Pydantic for configuration and validation. Combine plain `BaseModel` and Pydantic Settings (`pydantic-settings`) where each fits.
+- Use `BaseSettings` for config read from the environment or `.env`. Use `BaseModel` for structured data such as parsed files (e.g. `pluginlake.toml`) and nested sections.
 - Root settings are in `pluginlake/config.py`.
 - Each submodule can have its own `config.py` with a `Settings` child class.
 - Keep config in config files, not scattered through business logic.
@@ -65,6 +66,11 @@ For tool-specific configuration, see `.github/copilot-instructions.md`.
 - Use em dashes sparingly; prefer commas, colons, or parentheses.
 - Don't overuse bold, italics or emojis. Use them only for emphasis when necessary.
 - Check for zensical configs in `zensical.toml` or `pyproject.toml` before suggesting markdown formatting or structure.
+
+## Docker and persistence
+
+- Keep persistent container data (databases and similar) in a host folder under `.data/`, so it survives `down -v` and `docker volume prune` and is easy to back up. Do not use Docker named volumes for this.
+- Prepare the host with a one-shot `plugin-init` container that runs before the other services: it creates the `.data/` folders, sets their ownership for each image and generates the required passwords and other secrets. Services depend on it with `condition: service_completed_successfully`.
 
 ## Brand and styling
 

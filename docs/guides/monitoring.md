@@ -39,6 +39,7 @@ curl -s http://127.0.0.1:9090/api/v1/targets | jq '.data.activeTargets[] | {job:
 ```
 
 The `/metrics` endpoint of the API is not reachable through the public API port (`8000`) or from the host; only Prometheus reaches it over the compose network.
+`[monitoring] cadvisor = false` also keeps the cAdvisor container from starting, through the compose profile `cadvisor` that setup writes to `COMPOSE_PROFILES`.
 cAdvisor runs on a separate `monitoring` network shared only with Prometheus, so the application containers cannot reach its API.
 
 ## Connect to central monitoring

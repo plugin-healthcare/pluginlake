@@ -94,6 +94,7 @@ def compose_env(
         "PLUGINLAKE_LINEAGE_NAMESPACE": config.station.lineage_namespace,
         "PROMETHEUS_STATION_ID": config.monitoring.station_id,
         "PROMETHEUS_SCRAPE_CADVISOR": str(config.monitoring.cadvisor).lower(),
+        "COMPOSE_PROFILES": "cadvisor" if config.monitoring.cadvisor else "",
         "PROMETHEUS_REMOTE_WRITE_URL": config.monitoring.remote_write_url or "",
         "PROMETHEUS_REMOTE_WRITE_USERNAME": config.monitoring.remote_write_username or "",
         "PROMETHEUS_RETENTION": config.monitoring.retention,

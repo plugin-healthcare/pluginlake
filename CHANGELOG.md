@@ -22,6 +22,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Existing stations rerun `just setup` once more: `pluginlake-init` now writes `bootstrap/project-id`, and the groups hook only trusts roles of that project and refuses to issue groups until the file exists. `[monitoring] cadvisor = false` now also keeps the cAdvisor container from starting.
 - `pluginlake secrets list` and `pluginlake secrets get <name>` show the presence of the secrets of a node and read one value with an audit log line.
 - `pluginlake setup` renders the Traefik routes into `${PLUGINLAKE_HOME}/traefik/routes.yaml` from `[node] domain`, so the routes follow the applications of the deployment. The Prometheus remote-write username and retention moved from `.env.monitoring` (removed) to `[monitoring]` in `pluginlake.toml`.
 - Breaking, production compose: the data moved from named volumes to bind mounts below `PLUGINLAKE_HOME`, the Postgres mount is now `/var/lib/postgresql`, the Postgres superuser is `postgres`, and secrets are files created by `pluginlake-init` (no more `.env.production.secrets`). Existing stations start with an empty database and must copy data from the old volumes first.

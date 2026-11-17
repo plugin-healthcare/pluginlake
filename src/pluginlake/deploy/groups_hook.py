@@ -4,7 +4,7 @@ Zitadel calls this service on the functions ``preuserinfo`` and ``preaccesstoken
 request with the signing key of the target. oauth2-proxy needs ``groups`` as a list, while Zitadel
 only emits its roles claim as an object.
 
-The service is stateless and fails closed: a missing key, a bad signature or an old timestamp
+The service is stateless and fails closed: a missing key or project id, a bad signature or an old timestamp
 all produce an error, and the target is configured with ``interruptOnError`` so Zitadel then
 refuses to issue the token.
 """
@@ -37,6 +37,7 @@ class GroupsHookSettings(BaseSettings):
     host: str = "0.0.0.0"  # noqa: S104  # reachable on the internal edge network only
     port: int = 8000
     signing_key_file: Path = Path("/bootstrap/groups-hook.key")
+    project_id_file: Path = Path("/bootstrap/project-id")
     tolerance_seconds: int = 300
 
 
@@ -61,9 +62,13 @@ def verify_signature(body: bytes, header: str, key: str, tolerance: int, now: fl
     return hmac.compare_digest(expected, signature)
 
 
-def groups_from_payload(payload: dict) -> list[str]:
-    """Return the unique role keys of all user grants, in order of first appearance."""
-    roles = [role for grant in payload.get("user_grants") or [] for role in grant.get("roles") or []]
+def groups_from_payload(payload: dict, project_id: str) -> list[str]:
+    """Return the unique role keys of the user grants on ``project_id``, in order of first appearance.
+
+    Grants on other projects are ignored, so a role of the same name in an unrelated project gives no access.
+    """
+    grants = [grant for grant in payload.get("user_grants") or [] if grant.get("projectId") == project_id]
+    roles = [role for grant in grants for role in grant.get("roles") or []]
     return list(dict.fromkeys(roles))
 
 
@@ -79,6 +84,8 @@ def create_app(settings: GroupsHookSettings) -> FastAPI:
     async def groups(request: Request, zitadel_signature: Annotated[str, Header()] = "") -> dict:
         if not settings.signing_key_file.is_file() or not (key := settings.signing_key_file.read_text().strip()):
             raise HTTPException(status_code=503, detail="signing key not available")
+        if not settings.project_id_file.is_file() or not (project_id := settings.project_id_file.read_text().strip()):
+            raise HTTPException(status_code=503, detail="project id not available")
         body = await request.body()
         if not verify_signature(body, zitadel_signature, key, settings.tolerance_seconds):
             logger.warning("Rejected a call with an invalid or expired signature")
@@ -87,7 +94,7 @@ def create_app(settings: GroupsHookSettings) -> FastAPI:
             payload = json.loads(body)
         except json.JSONDecodeError as error:
             raise HTTPException(status_code=400, detail="invalid body") from error
-        groups = groups_from_payload(payload)
+        groups = groups_from_payload(payload, project_id)
         logger.info("Returned %d groups for function %s", len(groups), payload.get("function"))
         return {"append_claims": [{"key": "groups", "value": groups}]}
 

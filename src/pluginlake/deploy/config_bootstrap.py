@@ -24,6 +24,7 @@ class BootstrapSettings(BaseSettings):
     app_name: str = "oauth2-proxy"
     groups_hook_url: str = "http://zitadel-groups-hook:8000/groups"
     groups_hook_key_file: Path = Path("/bootstrap/groups-hook.key")
+    project_id_file: Path = Path("/bootstrap/project-id")
     wait_seconds: int = 180
 
     @property

@@ -54,7 +54,8 @@ def test_monitoring_is_optional_in_dev_and_core_in_production():
     production = _compose("docker-compose.yaml")["services"]
     for name in MONITORING_SERVICES:
         assert dev[name]["profiles"] == ["monitoring"]
-        assert "profiles" not in production[name]
+        assert "profiles" not in production[name] or name == "cadvisor"
+    assert production["cadvisor"]["profiles"] == ["cadvisor"]
 
 
 @pytest.mark.parametrize("compose_file", COMPOSE_FILES)

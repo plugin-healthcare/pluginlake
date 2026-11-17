@@ -100,10 +100,12 @@ setup *args='':
         command -v mkcert > /dev/null || { echo "mkcert is required for --dev: https://github.com/FiloSottile/mkcert" >&2; exit 1; }
         mkdir -p "{{ home }}/tls"
         chmod 700 "{{ home }}/tls"
-        if [[ ! -f "{{ home }}/tls/cert.pem" ]]; then
+        domain="$(python3 -c 'import tomllib; print(tomllib.load(open("pluginlake.toml", "rb")).get("node", {}).get("domain") or "pluginlake.localhost")')"
+        if [[ ! -f "{{ home }}/tls/cert.pem" || "$(cat "{{ home }}/tls/cert.domain" 2>/dev/null)" != "$domain" ]]; then
             mkcert -install
-            mkcert -cert-file "{{ home }}/tls/cert.pem" -key-file "{{ home }}/tls/key.pem" pluginlake.localhost "*.pluginlake.localhost"
+            mkcert -cert-file "{{ home }}/tls/cert.pem" -key-file "{{ home }}/tls/key.pem" "$domain" "*.$domain"
             cp "$(mkcert -CAROOT)/rootCA.pem" "{{ home }}/tls/ca.pem"
+            echo "$domain" > "{{ home }}/tls/cert.domain"
         fi
     fi
     docker run --rm --user "$(id -u):$(id -g)" --network none --cap-drop ALL --read-only \

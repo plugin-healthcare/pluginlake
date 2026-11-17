@@ -43,10 +43,17 @@ def test_compose_env_holds_the_values_compose_needs():
         "PLUGINLAKE_LINEAGE_NAMESPACE='ds-1'",
         "PROMETHEUS_STATION_ID='ds-1'",
         "PROMETHEUS_SCRAPE_CADVISOR='true'",
+        "COMPOSE_PROFILES='cadvisor'",
         "PROMETHEUS_REMOTE_WRITE_URL=''",
         "PROMETHEUS_REMOTE_WRITE_USERNAME=''",
         "PROMETHEUS_RETENTION='15d'",
     ]
+
+
+def test_disabled_cadvisor_is_not_started():
+    config = StationConfig(monitoring=MonitoringSettings(cadvisor=False))
+    env = compose_env(NodeSettings(domain="lake.nl"), config, owner=(1, 1), host_home=Path("/h"))
+    assert "COMPOSE_PROFILES=''" in env.splitlines()
 
 
 def _write_mkcert_files(home: Path) -> None:
