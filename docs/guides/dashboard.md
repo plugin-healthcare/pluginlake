@@ -48,39 +48,9 @@ The dashboard uses pydantic-settings with the `DASHBOARD_` environment prefix:
 
 ### Architecture
 
-The dashboard follows a layered structure:
-
-```text
-src/pluginlake-ui/datastation/
-├── app.py              # Streamlit entrypoint, navigation, sidebar
-├── client.py           # HTTP client wrapping the pluginlake API
-├── config.py           # Pydantic settings
-├── backend/            # Data fetching functions per domain
-│   ├── catalog.py
-│   ├── fhir.py
-│   ├── ingestion.py
-│   ├── metadata.py
-│   ├── pipelines.py
-│   └── statistics.py
-├── components/         # Reusable UI components
-│   ├── catalog_detail.py
-│   ├── data_flow.py
-│   ├── fhir_charts.py
-│   ├── ingestion_form.py
-│   ├── metadata_view.py
-│   ├── omop_charts.py
-│   └── status.py
-└── pages/              # Streamlit multipage app pages
-    ├── 0_Introductie.py
-    ├── 1_Overview.py
-    ├── 1_Data_Catalog.py
-    ├── 2_Pipelines.py
-    ├── 2_OMOP_Statistics.py
-    ├── 4_FHIR.py
-    └── 5_Data_Ingestion.py
-```
-
-All data flows through the FastAPI API. The dashboard never accesses DuckLake or Dagster directly.
+The dashboard code lives in `src/pluginlake-ui/datastation/`: `app.py` (entrypoint, navigation, sidebar), `client.py` (HTTP client), `config.py` (settings), `backend/` (data fetching), `components/` (reusable UI) and `pages/`.
+All data flows through the FastAPI API.
+The dashboard never accesses DuckLake or Dagster directly.
 
 ## Central dashboard
 

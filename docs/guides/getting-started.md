@@ -82,134 +82,44 @@ Once complete, you'll see a green checkmark on the asset.
 
 ## 7. Materialize the downstream assets
 
-Now click **titanic_survival_by_class** and materialize it. This asset receives the output of `titanic_raw` as a lazy frame and computes survival statistics grouped by class.
-
-Do the same for **titanic_survivors** — it filters to survived passengers only, demonstrating how Polars filter predicates are pushed down to DuckDB.
+Materialize **titanic_survival_by_class** and **titanic_survivors** the same way.
+Both receive the output of `titanic_raw` as a lazy frame.
 
 ## 8. Run the job
 
-Instead of materializing assets one by one, you can run them together as a job.
-
-Go to **Jobs** in the left sidebar. You'll see **titanic_job**. Click **Launch Run**. This materializes all three assets in the correct order.
+Instead of materializing assets one by one, go to **Jobs**, open **titanic_job** and click **Launch Run**.
+This materializes all three assets in the correct order.
 
 ## 9. Inspect the DuckLake catalog
 
-After materializing assets, you can query the DuckLake catalog to see what was written. Open a Python shell:
-
-```bash
-uv run python
-```
-
-Then connect and explore:
+Open a Python shell with `uv run python` and query the catalog:
 
 ```python
 from pluginlake.core.ducklake.setup import setup_ducklake
 
 conn = setup_ducklake()
-
-# List all tables in the catalog
-conn.sql("""
-    SELECT table_schema, table_name
-    FROM information_schema.tables
-    WHERE table_catalog = 'ducklake'
-""").show()
-
-# Preview the raw data
-conn.sql("SELECT * FROM ducklake.main.titanic_raw LIMIT 5").show()
-
-# Check the aggregated results
+conn.sql("SELECT table_schema, table_name FROM information_schema.tables WHERE table_catalog = 'ducklake'").show()
 conn.sql("SELECT * FROM ducklake.main.titanic_survival_by_class").show()
-
-# Check the filtered survivors
-conn.sql("SELECT * FROM ducklake.main.titanic_survivors").show()
 ```
 
-You can also inspect the underlying Parquet files DuckLake created:
-
-```bash
-ls -R .data/lakehouse/
-```
-
-Each table has its own directory with one or more `ducklake-{uuid}.parquet` files.
+The underlying Parquet files are in `.data/lakehouse/`.
 
 ## 10. Understand the code
 
-Open `examples/titanic.py` to see how it all fits together:
-
-### Assets
-
-Assets are Python functions decorated with `@asset`. The function name becomes the asset name. Dependencies are declared via function parameters:
-
-```python
-@asset
-def titanic_raw() -> pl.DataFrame:
-    """No dependencies — this is a root asset."""
-    return pl.read_csv(TITANIC_CSV_URL)
-
-
-@asset
-def titanic_survival_by_class(titanic_raw: pl.LazyFrame) -> pl.DataFrame:
-    """Depends on titanic_raw — receives a LazyFrame with pushdown support."""
-    return titanic_raw.group_by("Pclass").agg(
-        pl.col("Survived").mean().alias("survival_rate"),
-        pl.col("Survived").count().alias("passenger_count"),
-    ).collect()
-
-
-@asset
-def titanic_survivors(titanic_raw: pl.LazyFrame) -> pl.DataFrame:
-    """Filters to survived passengers — filter is pushed down to DuckDB."""
-    return (
-        titanic_raw
-        .filter(pl.col("Survived") == 1)
-        .select("PassengerId", "Name", "Pclass", "Sex", "Age")
-        .collect()
-    )
-```
-
-### Jobs
-
-Jobs group assets for execution. `define_asset_job` creates a job from an asset selection:
-
-```python
-titanic_job = define_asset_job(
-    name="titanic_job",
-    selection=AssetSelection.assets(
-        titanic_raw, titanic_survival_by_class, titanic_survivors
-    ),
-)
-```
-
-### Definitions
-
-The `Definitions` object registers everything with Dagster, including the DuckLake IO manager:
-
-```python
-defs = Definitions(
-    assets=[titanic_raw, titanic_survival_by_class, titanic_survivors],
-    jobs=[titanic_job],
-    resources={"io_manager": ducklake_io_manager},
-)
-```
+`examples/titanic.py` defines 3 assets with `@asset`, where function parameters declare the dependencies, 1 job with `define_asset_job`, and a `Definitions` object that registers them together with the DuckLake IO manager.
+Assets that take a `pl.LazyFrame` get a lazy read, so Polars filters are pushed down to DuckDB.
 
 ## 11. Clean up
 
-Stop PostgreSQL when you're done:
+Stop PostgreSQL when you're done, and optionally remove the DuckLake data files:
 
 ```bash
 just dev-down
-```
-
-To remove DuckLake data files:
-
-```bash
 rm -rf .data/lakehouse/
 ```
 
 ## Next steps
 
-- **Add your own assets** — Follow the patterns in `examples/titanic.py` to create new `@asset` functions, then register them in a `Definitions` object. See the [using as package](using-as-package.md) guide for the full pattern.
-- **Use pluginlake as a package** — Build your own data station on top of pluginlake's core assets. See the [using as package](using-as-package.md) guide.
-- **Run the full Docker stack** — Deploy Dagster + PostgreSQL + pluginlake together. See the [Docker guide](docker.md).
-- **Explore the API** — Query assets and trigger runs programmatically. See the [API overview](../reference/api.md) and the [interactive specification](../reference/api-specification.md).
-- **Explore Dagster** — Learn about schedules, sensors, resources, and more in the [Dagster docs](https://docs.dagster.io/).
+- **Add your own assets** and **use pluginlake as a package**: see the [using as package](using-as-package.md) guide.
+- **Run the full Docker stack**: see the [Docker guide](docker.md).
+- **Explore the API**: see the [API overview](../reference/api.md) and the [interactive specification](../reference/api-specification.md).

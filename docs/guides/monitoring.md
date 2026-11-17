@@ -38,9 +38,9 @@ Check that all targets are up under *Status > Targets* or with:
 curl -s http://127.0.0.1:9090/api/v1/targets | jq '.data.activeTargets[] | {job: .labels.job, health}'
 ```
 
-The `/metrics` endpoint of the API is not reachable through the public API port (`8000`) or from the host; only Prometheus reaches it over the compose network.
-`[monitoring] cadvisor = false` also keeps the cAdvisor container from starting, through the compose profile `cadvisor` that setup writes to `COMPOSE_PROFILES`.
-cAdvisor runs on a separate `monitoring` network shared only with Prometheus, so the application containers cannot reach its API.
+The `/metrics` endpoint of the API is only reachable by Prometheus over the compose network, not through the public API port or from the host.
+`[monitoring] cadvisor = false` also keeps the cAdvisor container from starting.
+cAdvisor runs on a separate `monitoring` network shared only with Prometheus.
 
 ## Connect to central monitoring
 
@@ -64,22 +64,15 @@ A central Prometheus that can reach the station can alternatively federate from 
 
 ## Production compose
 
-In the production compose (`deploy/compose/docker-compose.yaml`) monitoring is a core component and starts with `just up`.
-`pluginlake setup` writes the station label, the cAdvisor switch and the remote-write URL from `[monitoring]` in `pluginlake.toml` to `compose.env`.
-The exporter logs in as the fixed role `monitoring` with the secret `postgres_exporter_password`, which `pluginlake-db-init` creates as a `pg_monitor` role; see [secrets](docker.md#secrets).
-Compose refuses to start when `POSTGRES_EXPORTER_PASSWORD` or `PROMETHEUS_REMOTE_WRITE_PASSWORD` is not set (the latter may be empty).
-Use a dedicated read-only database user for the exporter:
-
-```sql
-CREATE ROLE monitoring LOGIN PASSWORD '...' IN ROLE pg_monitor;
-```
+In the production compose monitoring is a core component and starts with `just up`.
+`pluginlake setup` writes the station label, the cAdvisor switch and the remote-write URL from `[monitoring]` to `compose.env`.
+The exporter logs in with the secret `postgres_exporter_password`, a read-only `pg_monitor` role that `pluginlake-db-init` creates; see [secrets](docker.md#secrets).
 
 ## Missing container metrics
 
-cAdvisor runs without `privileged` and only gets read access to `/dev/kmsg` and the host paths it needs.
-On some hosts (certain cgroup v2 or storage setups) a few container metrics, such as disk I/O or filesystem usage, stay empty.
-Check *Status > Targets* and query `container_memory_usage_bytes` first.
-Only if metrics are missing on that host, enable `privileged` for cAdvisor with a local override file next to the production compose:
+cAdvisor runs without `privileged`.
+On some hosts (certain cgroup v2 or storage setups) a few container metrics, such as disk I/O, stay empty.
+Only then enable `privileged` for cAdvisor with a local override file, and keep it to the hosts that need it:
 
 ```yaml
 # deploy/compose/docker-compose.local.yaml (gitignored)
@@ -93,26 +86,22 @@ docker compose --env-file .pluginlake/compose.env \
   -f deploy/compose/docker-compose.yaml -f deploy/compose/docker-compose.local.yaml up -d
 ```
 
-`privileged` gives the container full access to the host devices.
-cAdvisor already has root-equivalent access through the Docker socket, so this adds little risk, but keep it to the hosts that need it.
-`pluginlake up` does not load extra compose files; on such a host, set `[monitoring] cadvisor = false` and run cAdvisor in the host stack instead.
+Alternatively set `[monitoring] cadvisor = false` and run cAdvisor in the host stack.
 
 ## Configuration reference
 
 | Setting | Where | Default | Description |
 |---------|-------|---------|-------------|
-| `enabled` | `[monitoring]` | `false` | Only for the development flow `pluginlake up`: start the `monitoring` profile. The production compose always runs it. |
+| `enabled` | `[monitoring]` | `false` | Only for `pluginlake up`: start the `monitoring` profile. The production compose always runs it. |
 | `station_id` | `[monitoring]` | `pluginlake` | `station` label on every metric (`[A-Za-z0-9._-]`). |
 | `cadvisor` | `[monitoring]` | `true` | Collect container metrics with cAdvisor. |
 | `remote_write_url` | `[monitoring]` | unset | Central remote-write endpoint. |
 | `remote_write_username` | `[monitoring]` | unset | Basic-auth username for remote write. |
-| `PROMETHEUS_REMOTE_WRITE_PASSWORD` | compose secrets env | empty | Basic-auth password, mounted as a Docker secret. |
 | `retention` | `[monitoring]` | `15d` | Local retention. |
+| `PROMETHEUS_REMOTE_WRITE_PASSWORD` | compose secrets env | empty | Basic-auth password, mounted as a Docker secret. |
 | `PROMETHEUS_PORT` | shell / `.env` | `9090` | Loopback host port of Prometheus. |
 | `PLUGINLAKE_METRICS_ENABLED` | API env | `true` | Record API metrics and serve them on the metrics port. |
-| `PLUGINLAKE_METRICS_HOST` | API env | `127.0.0.1` | Bind address of the metrics port; the compose files set `0.0.0.0` so Prometheus can reach it. |
 | `PLUGINLAKE_METRICS_PORT` | API env | `9464` | Internal metrics port of the API. |
 
-The scrape configuration lives in `deploy/monitoring/prometheus/`: `prometheus.yml` plus one file per job in `scrape.d/`.
-Add a job by adding a file there.
+The scrape configuration lives in `deploy/monitoring/prometheus/`: add a job by adding a file to `scrape.d/`.
 Dashboards and alerting are part of the central monitoring in vantage6-ops, not of the station.

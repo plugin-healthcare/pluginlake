@@ -90,20 +90,21 @@ A station can run [Marquez](https://marquezproject.ai) as the receiver for OpenL
 lineage = true
 ```
 
-`pluginlake up` then also starts the `lineage` compose profile: the Marquez API, the Marquez web UI and a dedicated PostgreSQL database (separate from the Dagster database).
+`pluginlake up` then also starts the `lineage` compose profile: the Marquez API, the Marquez web UI and a dedicated PostgreSQL database.
 
 | What | Where |
 |------|-------|
 | OpenLineage endpoint (inside the compose network) | `http://marquez:5000/api/v1/lineage` |
 | Marquez web UI (host loopback only) | http://127.0.0.1:3001 |
 
-Marquez has no authentication, so the UI is bound to `127.0.0.1` and is not reachable from other machines. Administrators on a remote station use an SSH tunnel:
+Marquez has no authentication, so on a remote station use an SSH tunnel:
 
 ```bash
 ssh -L 3001:127.0.0.1:3001 user@station-host
 ```
 
-With lineage on, `pluginlake up` also sets `OPENLINEAGE_URL=http://marquez:5000` and `OPENLINEAGE_NAMESPACE` on the Dagster service. Core then registers the `openlineage_sensor`, which the Dagster daemon runs after every successful run. It sends one OpenLineage event per materialized asset to Marquez: upstream assets as inputs, the DuckLake table as output, and the schema, row count and column lineage from the asset metadata. Events contain no data values, only job and dataset metadata. Projects do not need to register anything.
+With lineage on, core registers the `openlineage_sensor`, which sends one OpenLineage event per materialized asset to Marquez: upstream assets as inputs, the DuckLake table as output, and the schema, row count and column lineage from the asset metadata.
+Events contain no data values, projects do not need to register anything, and a failed send only logs a warning.
 
 Give each node its own namespace, so jobs from different stations stay apart:
 
@@ -113,9 +114,8 @@ lineage = true
 lineage_namespace = "ds-local-001"
 ```
 
-Dataset names in Marquez are the DuckLake table names (for example `ducklake.omop.person`), the same as in the catalog API. Sending is best-effort: if Marquez is unreachable, the sensor logs a warning and skips that run's events, and the run itself is unaffected.
-
-Lineage data is stored in the `marquez-db-data` volume and survives `pluginlake down` and restarts; `pluginlake down -v` removes it. The database credentials and UI port can be changed in `deploy/compose/.env` (`MARQUEZ_DB`, `MARQUEZ_DB_USER`, `MARQUEZ_DB_PASSWORD`, `MARQUEZ_WEB_PORT`); see `deploy/compose/.env.example`.
+Lineage data survives `pluginlake down`; `pluginlake down -v` removes it.
+Credentials and the UI port are set in `deploy/compose/.env` (see `.env.example`).
 
 ## Onboarding a new project
 
