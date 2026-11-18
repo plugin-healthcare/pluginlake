@@ -9,7 +9,7 @@ image (``just setup``). A domain below ``.localhost`` is a local node: it is ser
 
 import fcntl
 import os
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -35,7 +35,7 @@ SETUP_LOCK = ".setup.lock"
 
 
 @contextmanager
-def setup_lock(home: Path) -> Iterator[None]:
+def setup_lock(home: Path) -> Generator[None]:
     """Hold an exclusive lock on ``home``, so concurrent setup runs do not interleave.
 
     ``just setup`` takes the same lock while it creates the local certificate.
