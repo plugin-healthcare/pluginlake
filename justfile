@@ -80,7 +80,7 @@ dev-local:
 
 # Production compose: the node data folder (secrets, compose.env) is prepared by `pluginlake setup`
 home := env("PLUGINLAKE_HOME", justfile_directory() / ".pluginlake")
-_compose_prod := "docker compose --env-file " + home + "/compose.env -f deploy/compose/docker-compose.yaml"
+_compose_prod := "docker compose --env-file " + quote(home / "compose.env") + " -f deploy/compose/docker-compose.yaml"
 
 # Prepare the node from pluginlake.toml (folders, secrets, compose.env) in a container as the host user. A domain below .localhost gets an mkcert certificate
 setup *args='':
@@ -97,7 +97,7 @@ setup *args='':
         command -v mkcert > /dev/null || { echo "mkcert is required for a .localhost domain: https://github.com/FiloSottile/mkcert" >&2; exit 1; }
         mkdir -p "{{ home }}/tls" "{{ home }}/ca"
         chmod 700 "{{ home }}/tls"
-        if [[ ! -f "{{ home }}/tls/cert.pem" || ! -f "{{ home }}/ca/ca.pem" || "$(cat "{{ home }}/tls/cert.domain" 2>/dev/null)" != "$domain" ]]; then
+        if [[ ! -f "{{ home }}/tls/cert.pem" || ! -f "{{ home }}/tls/key.pem" || ! -f "{{ home }}/ca/ca.pem" || "$(cat "{{ home }}/tls/cert.domain" 2>/dev/null)" != "$domain" ]]; then
             mkcert -install
             mkcert -cert-file "{{ home }}/tls/cert.pem" -key-file "{{ home }}/tls/key.pem" "$domain" "*.$domain"
             cp "$(mkcert -CAROOT)/rootCA.pem" "{{ home }}/ca/ca.pem"
@@ -114,8 +114,9 @@ up *args='':
     {{ _compose_prod }} up --build {{ args }}
 
 # Stop the production stack
+# Variables added after a node's last setup are set here, so its older compose.env can still stop the stack.
 down *args='':
-    {{ _compose_prod }} down {{ args }}
+    CADVISOR_REPLICAS="${CADVISOR_REPLICAS:-0}" PLUGINLAKE_SECRETS_REVISION="${PLUGINLAKE_SECRETS_REVISION:-down}" {{ _compose_prod }} down {{ args }}
 
 # --- Infrastructure (OpenTofu) ---
 

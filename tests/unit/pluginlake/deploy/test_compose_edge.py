@@ -87,7 +87,7 @@ def test_every_required_compose_variable_is_written_by_setup():
     written = {
         line.split("=")[0]
         for line in compose_env(
-            NodeSettings(domain="x.nl"), StationConfig(), owner=(1, 1), host_home=Path("/h")
+            NodeSettings(domain="x.nl"), StationConfig(), owner=(1, 1), host_home=Path("/h"), secrets_revision="r1"
         ).splitlines()
     }
     assert required <= written
@@ -190,6 +190,10 @@ def test_forward_auth_limits_the_response_body_size():
     for name, middleware in middlewares.items():
         if "forwardAuth" in middleware:
             assert middleware["forwardAuth"]["maxResponseBodySize"] > 0, name
+
+
+def test_sign_in_returns_to_the_requested_page():
+    assert _routes()["middlewares"]["sso-errors"]["errors"]["query"] == "/oauth2/sign_in?rd={url}"
 
 
 def test_browser_applications_sign_out_a_user_without_the_role():

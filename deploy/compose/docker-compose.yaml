@@ -4,6 +4,8 @@ x-zitadel-database: &zitadel-database
   ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
   ZITADEL_DATABASE_POSTGRES_USER_USERNAME: zitadel
   ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+  # Compose does not see changes inside mounted files: a new revision recreates the containers that read the templates.
+  PLUGINLAKE_SECRETS_REVISION: ${PLUGINLAKE_SECRETS_REVISION:?set by just setup}
 
 x-dagster-db: &dagster-db
   DAGSTER_PG_HOST: postgres
@@ -289,8 +291,9 @@ services:
     restart: unless-stopped
 
   cadvisor:
-    # Started through COMPOSE_PROFILES, which `pluginlake setup` sets from [monitoring] cadvisor.
-    profiles: [cadvisor]
+    # `pluginlake setup` sets CADVISOR_REPLICAS from [monitoring] cadvisor; 0 also removes a running container on `up`.
+    deploy:
+      replicas: ${CADVISOR_REPLICAS:?set by just setup}
     <<: *hardening
     logging: *default-logging
     image: ghcr.io/google/cadvisor:v0.60.6@sha256:b8e7d1093144fd088f425ff003d75a4aa405de075db78dae3bc563730b1bd07a

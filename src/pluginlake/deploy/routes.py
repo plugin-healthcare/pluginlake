@@ -106,7 +106,8 @@ def _middlewares(domain: str) -> dict:
                 "status": ["401"],
                 "statusRewrites": {"401": 302},
                 "service": "oauth2-proxy",
-                "query": "/oauth2/sign_in",
+                # Traefik fills in the escaped path, so oauth2-proxy returns the user to the page they asked for.
+                "query": "/oauth2/sign_in?rd={url}",
             }
         },
         # Traefik is reachable before oauth2-proxy and the applications are, so a server error shows a waiting page.

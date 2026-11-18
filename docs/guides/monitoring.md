@@ -43,7 +43,7 @@ Open `https://prometheus.<domain>` behind the sign-in (see [Edge](docker.md#edge
 The exporter logs in with the secret `postgres_exporter_password`, a read-only `pg_monitor` role that `pluginlake-db-init` creates; see [secrets](docker.md#secrets).
 
 The `/metrics` endpoint of the API is only reachable by Prometheus over the compose network, not through the public API or from the host.
-cAdvisor runs on a separate `monitoring` network shared only with Prometheus, and `cadvisor = false` keeps the container from starting.
+cAdvisor runs on a separate `monitoring` network shared only with Prometheus, and `cadvisor = false` keeps the container from starting and removes a running one on the next `just up`.
 
 In the dev stack (`just dev-up`, `pluginlake up`) set `enabled = true` to start the compose profile `monitoring`, and Prometheus is published on loopback only at <http://127.0.0.1:9090> (change the host port with `PROMETHEUS_PORT`).
 

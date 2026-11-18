@@ -1,10 +1,11 @@
 """Generate secret values and write them as private files.
 
 Shared by every deployment (compose, Kubernetes) so secrets are generated and stored the same way.
-Existing files are never overwritten, so generating again is safe.
+Generated secrets are never overwritten, so generating again is safe.
 """
 
 import base64
+import os
 import secrets
 import string
 from pathlib import Path
@@ -42,8 +43,33 @@ def write_secret(path: Path, content: str, mode: int = 0o400) -> bool:
     Returns:
         True if the file was created, False if it already existed.
     """
-    if path.exists():
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
+    except FileExistsError:
         return False
-    path.write_text(content, encoding="utf-8")
-    path.chmod(mode)
+    os.fchmod(fd, mode)
+    with os.fdopen(fd, "w", encoding="utf-8") as file:
+        file.write(content)
+    return True
+
+
+def replace_secret(path: Path, content: str, mode: int = 0o400) -> bool:
+    """Atomically replace a secret file when its content differs.
+
+    Meant for files derived from other secrets, which must follow their source.
+
+    Args:
+        path: Destination file.
+        content: Secret content.
+        mode: File permissions, owner read-only by default.
+
+    Returns:
+        True if the file was created or replaced, False if it already held ``content``.
+    """
+    if path.exists() and path.read_text(encoding="utf-8") == content:
+        return False
+    staging = path.with_name(f".{path.name}.new")
+    staging.unlink(missing_ok=True)
+    write_secret(staging, content, mode)
+    staging.replace(path)
     return True

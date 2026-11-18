@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 
 from pluginlake.deploy.config import NodeSettings, StationConfig, load_station_config
-from pluginlake.deploy.init_secrets import init_home
+from pluginlake.deploy.init_secrets import init_home, templates_revision
 from pluginlake.deploy.routes import render_routes
 from pluginlake.utils.logger import get_logger
 
@@ -66,6 +66,7 @@ def compose_env(
     *,
     owner: tuple[int, int],
     host_home: Path,
+    secrets_revision: str,
 ) -> str:
     """Render the values compose needs at parse time as a dotenv file.
 
@@ -74,6 +75,7 @@ def compose_env(
         config: The station config, for the lineage namespace and Prometheus settings.
         owner: User id and group id the containers run as.
         host_home: The data folder as the Docker host sees it.
+        secrets_revision: Hash of the template secrets, see ``templates_revision``.
 
     Returns:
         Content of ``compose.env``.
@@ -88,9 +90,10 @@ def compose_env(
         "PLUGINLAKE_LINEAGE_NAMESPACE": config.station.lineage_namespace,
         "PROMETHEUS_STATION_ID": config.monitoring.station_id,
         "PROMETHEUS_SCRAPE_CADVISOR": str(config.monitoring.cadvisor).lower(),
-        "COMPOSE_PROFILES": "cadvisor" if config.monitoring.cadvisor else "",
+        "CADVISOR_REPLICAS": "1" if config.monitoring.cadvisor else "0",
         "PROMETHEUS_RETENTION": config.monitoring.retention,
         "PROMETHEUS_PUBLISH": config.monitoring.publish or "127.0.0.1:9090",
+        "PLUGINLAKE_SECRETS_REVISION": secrets_revision,
     }
     return "".join(f"{key}='{value}'\n" for key, value in values.items())
 
@@ -175,6 +178,7 @@ def run_setup(config_path: Path, home: Path, host_home: Path | None = None) -> i
         station,
         owner=(uid, gid),
         host_home=host_home or home.resolve(),
+        secrets_revision=templates_revision(home),
     )
     env_file.write_text(env, encoding="utf-8")
     env_file.chmod(0o600)

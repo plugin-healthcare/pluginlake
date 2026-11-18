@@ -7,7 +7,7 @@ import pytest
 import yaml
 
 from pluginlake.deploy.config import InitConfig, load_init_config
-from pluginlake.deploy.init_secrets import build_secret_files, init_home
+from pluginlake.deploy.init_secrets import build_secret_files, init_home, templates_revision
 
 
 def _config(**overrides) -> InitConfig:
@@ -66,6 +66,19 @@ def test_templates_follow_an_existing_secret(tmp_path: Path):
     init_home(tmp_path, 1000, 1000)
     config = yaml.safe_load((tmp_path / "secrets" / "zitadel_config.yaml").read_text())
     assert config["Database"]["Postgres"]["User"]["Password"] == "kept"  # noqa: S105
+
+
+def test_templates_are_rendered_again_when_their_secret_changes(tmp_path: Path):
+    init_home(tmp_path, 1000, 1000)
+    revision = templates_revision(tmp_path)
+    password = tmp_path / "secrets" / "zitadel_db_password"
+    password.unlink()
+    password.write_text("rotated\n")
+    assert init_home(tmp_path, 1000, 1000) == ["zitadel_config.yaml"]
+    assert templates_revision(tmp_path) != revision
+    config_file = tmp_path / "secrets" / "zitadel_config.yaml"
+    assert yaml.safe_load(config_file.read_text())["Database"]["Postgres"]["User"]["Password"] == "rotated"  # noqa: S105
+    assert stat.S_IMODE(config_file.stat().st_mode) == 0o400
 
 
 def test_a_template_must_refer_to_an_earlier_secret():
