@@ -7,7 +7,7 @@ Runs once after Zitadel is healthy and removes the manual setup steps:
 3. Makes sure every protected hostname has a redirect URI and the app may refresh its tokens.
 4. Creates a project role per application, a webhook target that exposes the roles of a user
    as ``groups`` claim, and grants the first admin all roles.
-5. Limits how long a sign-in lasts by the lifetime of the refresh token.
+5. Limits how long a sign-in lasts by the lifetime of the refresh token and of the credential checks.
 6. Writes the oauth2-proxy config file with the client credentials and cookie secret.
 
 The run is idempotent: existing credentials in the config file are reused, and a new client
@@ -24,6 +24,7 @@ import httpx
 
 from pluginlake.deploy.config_bootstrap import BootstrapSettings
 from pluginlake.utils.logger import get_logger, setup_logging
+from pluginlake.utils.secrets import replace_secret
 
 logger = get_logger(__name__)
 
@@ -33,6 +34,29 @@ _ADMIN = "/admin/v1"
 _GROUPS_TARGET = "groups-claim"
 # Token functions in which the target adds the ``groups`` claim.
 _GROUPS_FUNCTIONS = ("preuserinfo", "preaccesstoken")
+# How long each kind of credential check keeps a user signed in at Zitadel.
+_CHECK_LIFETIMES = (
+    "passwordCheckLifetime",
+    "externalLoginCheckLifetime",
+    "secondFactorCheckLifetime",
+    "multiFactorCheckLifetime",
+)
+# The writable fields of the login policy, which an update replaces as a whole.
+_LOGIN_POLICY = (
+    "allowUsernamePassword",
+    "allowRegister",
+    "allowExternalIdp",
+    "forceMfa",
+    "passwordlessType",
+    "hidePasswordReset",
+    "ignoreUnknownUsernames",
+    "defaultRedirectUri",
+    "mfaInitSkipLifetime",
+    "allowDomainDiscovery",
+    "disableLoginWithEmail",
+    "disableLoginWithPhone",
+    "forceMfaLocalOnly",
+)
 
 
 def wait_for_file(path: Path, timeout: int) -> str:
@@ -108,14 +132,19 @@ _OIDC_SETTINGS = [
 ]
 
 
-def write_proxy_config(path: Path, client_id: str, client_secret: str, cookie_secret: str) -> None:
-    """Write the oauth2-proxy config file, readable by the non-root proxy user.
+def write_proxy_config(path: Path, client_id: str, client_secret: str, cookie_secret: str) -> bool:
+    """Atomically write the oauth2-proxy config file, readable by the non-root proxy user.
+
+    An interrupted run leaves the previous file intact, so the next run still finds the credentials.
 
     Args:
         path: The config file to write.
         client_id: OIDC client id of the proxy.
         client_secret: OIDC client secret of the proxy.
         cookie_secret: Secret that signs the session cookie.
+
+    Returns:
+        True if the file was created or changed, False if it already held this config.
     """
     lines = [
         f"client_id = {json.dumps(client_id)}",
@@ -123,8 +152,8 @@ def write_proxy_config(path: Path, client_id: str, client_secret: str, cookie_se
         f"cookie_secret = {json.dumps(cookie_secret)}",
     ]
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(lines) + "\n")
-    path.chmod(0o644)  # the volume is not shared with other services
+    # The volume is not shared with other services.
+    return replace_secret(path, "\n".join(lines) + "\n", mode=0o644)
 
 
 def _first_id(response: httpx.Response) -> str | None:
@@ -434,6 +463,24 @@ class ZitadelBootstrap:
         self.client.put(f"{_ADMIN}/settings/oidc", json={**body, "refreshTokenExpiration": wanted}).raise_for_status()
         logger.info("Set the refresh token lifetime to %s", wanted)
 
+    def ensure_sign_in_lifetime(self) -> None:
+        """Make the sign-in at Zitadel last ``session_max_age``, so a user enters credentials again when it ends.
+
+        Without this, Zitadel keeps a password check valid for days and signs the user in again without credentials
+        once the refresh token has expired. The other settings of the login policy of the instance are kept.
+        """
+        current = self.client.get(f"{_ADMIN}/policies/login")
+        current.raise_for_status()
+        policy = current.json().get("policy") or {}
+        wanted = f"{int(self.settings.session_max_age.total_seconds())}s"
+        if all(policy.get(key) == wanted for key in _CHECK_LIFETIMES):
+            return
+        body = {key: policy[key] for key in _LOGIN_POLICY if key in policy}
+        self.client.put(
+            f"{_ADMIN}/policies/login", json={**body, **dict.fromkeys(_CHECK_LIFETIMES, wanted)}
+        ).raise_for_status()
+        logger.info("Set the sign-in check lifetimes to %s", wanted)
+
     def run(self) -> None:
         """Provision the OIDC app and write the oauth2-proxy config."""
         settings = self.settings
@@ -442,6 +489,7 @@ class ZitadelBootstrap:
         app_id, client_id, client_secret = self.ensure_app(project_id)
         self.sync_app_config(project_id, app_id)
         self.ensure_session_max_age()
+        self.ensure_sign_in_lifetime()
         self.assert_project_roles(project_id)
         new_roles = self.ensure_roles(project_id)
         self.ensure_groups_executions(self.ensure_groups_target())
@@ -456,8 +504,8 @@ class ZitadelBootstrap:
                 client_secret = self.new_client_secret(project_id, app_id)
                 logger.info("Generated a new client secret for %r", settings.app_name)
 
-        write_proxy_config(settings.proxy_config_file, client_id, client_secret, cookie_secret)
-        logger.info("Wrote %s", settings.proxy_config_file)
+        if write_proxy_config(settings.proxy_config_file, client_id, client_secret, cookie_secret):
+            logger.info("Wrote %s", settings.proxy_config_file)
 
 
 def main() -> int:

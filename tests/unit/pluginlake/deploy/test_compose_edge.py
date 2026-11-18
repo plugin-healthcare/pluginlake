@@ -16,7 +16,7 @@ from pluginlake.deploy.bootstrap import (
 )
 from pluginlake.deploy.config import NodeSettings, StationConfig, load_init_config
 from pluginlake.deploy.config_bootstrap import BootstrapSettings
-from pluginlake.deploy.routes import APPLICATIONS, render_routes
+from pluginlake.deploy.routes import APPLICATIONS, COOKIE_APPLICATIONS, render_routes
 from pluginlake.deploy.setup import compose_env
 
 COMPOSE_DIR = Path(__file__).resolve().parents[4] / "deploy" / "compose"
@@ -159,6 +159,17 @@ def test_every_application_router_is_behind_forward_auth():
             assert any(m.startswith("sso-auth") for m in router["middlewares"]), name
 
 
+def test_applications_without_own_cookies_never_receive_the_session_cookie():
+    http = _routes()
+    assert http["middlewares"]["drop-cookies"]["headers"]["customRequestHeaders"] == {"Cookie": ""}
+    for app in APPLICATIONS:
+        middlewares = http["routers"][app]["middlewares"]
+        if app in COOKIE_APPLICATIONS:
+            assert "drop-cookies" not in middlewares, app
+        else:
+            assert middlewares.index("drop-cookies") > middlewares.index(f"sso-auth-{app}"), app
+
+
 def test_every_protected_host_has_a_router():
     routers = _routes()["routers"]
     for subdomain in BootstrapSettings().protected_subdomains:
@@ -182,6 +193,14 @@ def test_proxy_config_round_trip(tmp_path: Path):
     path = tmp_path / "oauth2-proxy.cfg"
     write_proxy_config(path, "client", 'se"cret', "cookie")
     assert read_proxy_config(path) == {"client_id": "client", "client_secret": 'se"cret', "cookie_secret": "cookie"}
+
+
+def test_unchanged_proxy_config_is_not_rewritten(tmp_path: Path):
+    path = tmp_path / "oauth2-proxy.cfg"
+    assert write_proxy_config(path, "client", "secret", "cookie") is True
+    assert write_proxy_config(path, "client", "secret", "cookie") is False
+    assert write_proxy_config(path, "client", "other", "cookie") is True
+    assert [p.name for p in tmp_path.iterdir()] == ["oauth2-proxy.cfg"]
 
 
 def test_bare_domain_redirects_to_the_console():
@@ -404,6 +423,39 @@ def test_sign_in_lasts_at_most_the_session_max_age():
         "/admin/v1/settings/oidc",
         {"accessTokenLifetime": "43200s", "refreshTokenExpiration": "43200s"},
     ) in calls
+
+
+def test_sign_in_at_zitadel_ends_with_the_session_and_keeps_the_login_policy():
+    current = {
+        "policy": {"allowRegister": False, "forceMfa": True, "passwordCheckLifetime": "864000s", "isDefault": True}
+    }
+    bootstrap, calls = _bootstrap({"GET /admin/v1/policies/login": current})
+    bootstrap.ensure_sign_in_lifetime()
+    method, path, body = calls[-1]
+    assert (method, path) == ("PUT", "/admin/v1/policies/login")
+    assert body == {
+        "allowRegister": False,
+        "forceMfa": True,
+        "passwordCheckLifetime": "43200s",
+        "externalLoginCheckLifetime": "43200s",
+        "secondFactorCheckLifetime": "43200s",
+        "multiFactorCheckLifetime": "43200s",
+    }
+
+
+def test_aligned_sign_in_lifetime_is_left_alone():
+    policy = dict.fromkeys(
+        [
+            "passwordCheckLifetime",
+            "externalLoginCheckLifetime",
+            "secondFactorCheckLifetime",
+            "multiFactorCheckLifetime",
+        ],
+        "43200s",
+    )
+    bootstrap, calls = _bootstrap({"GET /admin/v1/policies/login": {"policy": policy}})
+    bootstrap.ensure_sign_in_lifetime()
+    assert [method for method, _, _ in calls] == ["GET"]
 
 
 def test_session_max_age_is_left_alone_when_it_is_set():

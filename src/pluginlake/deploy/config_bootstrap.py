@@ -28,7 +28,8 @@ class BootstrapSettings(BaseSettings):
     groups_hook_key_file: Path = Path("/bootstrap/hook/groups-hook.key")
     project_id_file: Path = Path("/bootstrap/hook/project-id")
     wait_seconds: int = 180
-    # Longest a sign-in lasts, also while the session is in use: Zitadel refuses to refresh it after this.
+    # Longest a sign-in lasts, also while the session is in use: Zitadel refuses to refresh it and asks for the
+    # credentials again after this.
     session_max_age: timedelta = timedelta(hours=12)
 
     @property

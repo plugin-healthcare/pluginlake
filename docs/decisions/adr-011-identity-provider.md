@@ -69,13 +69,17 @@ This is the route Zitadel documents for oauth2-proxy.
 
 ### Session lifetime
 
-A session at the edge ends after 30 minutes without use and at most 12 hours after signing in.
-These are the reauthentication limits of NIST SP 800-63B for AAL2, the level that fits access to health data.
+A session at the edge ends after 30 minutes without use, and the user enters their credentials again 12 hours after signing in.
+The 12 hours follow the reauthentication limit of NIST SP 800-63B for AAL2, the level that fits access to health data.
+The 30 minutes without use of AAL2 only apply to the edge session, so nobody is signed out in the middle of their work.
 
 - oauth2-proxy refreshes the session with Zitadel every 5 minutes, so a removed role takes effect within those minutes instead of when the cookie expires.
 - The 30 minutes are the cookie lifetime of oauth2-proxy, which starts again at every refresh.
-- oauth2-proxy cannot limit the total length of a session, so the 12 hours are the lifetime of the refresh token in Zitadel; after that the refresh fails and the user signs in again.
+- oauth2-proxy cannot limit the total length of a session, so the 12 hours are the lifetime of the refresh token in Zitadel, counted from when Zitadel issued it at sign-in; after that the refresh fails and oauth2-proxy sends the user to Zitadel again.
 - A browser tab that polls in the background never reaches the 30 minutes, so for that tab the 12 hours are the only limit.
+- Zitadel keeps its own sign-in, by default for 10 days after a password check. `pluginlake-init` sets the check lifetimes of the login policy of the instance to the same 12 hours, so at the end of the 12 hours the user enters their credentials again. An organization with a login policy of its own does not inherit these lifetimes.
+- After 30 minutes without use, Zitadel signs the user in again without credentials, so nobody loses their work. The idle limit only shortens the time in which a stolen session cookie of the edge can be used.
+- Such a sign-in gives a new refresh token of 12 hours, and Zitadel does not end it together with its own sign-in. A user who returns just before their 12 hours end can therefore keep working for almost 24 hours. We accept this edge case, because shorter lifetimes would ask everyone for their password more often.
 
 ## Consequences
 

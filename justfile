@@ -86,6 +86,11 @@ _compose_prod := "docker compose --env-file " + quote(home / "compose.env") + " 
 setup *args='':
     #!/usr/bin/env bash
     set -euo pipefail
+    # The checkout is the Docker build context, and only .pluginlake/ is kept out of it.
+    case "$(realpath -m "{{ home }}")/" in
+        "$(realpath "{{ justfile_directory() }}")/.pluginlake/") ;;
+        "$(realpath "{{ justfile_directory() }}")"/*) echo "PLUGINLAKE_HOME must be .pluginlake or outside the checkout, so no image can contain its secrets" >&2; exit 1 ;;
+    esac
     # Created here so docker does not create the mount source as root.
     mkdir -p "{{ home }}"
     chmod 700 "{{ home }}"
@@ -94,8 +99,9 @@ setup *args='':
         -v "{{ justfile_directory() }}/pluginlake.toml:/pluginlake.toml:ro" pluginlake-setup \
         python -c 'import tomllib; print(tomllib.load(open("/pluginlake.toml", "rb")).get("node", {}).get("domain") or "")')"
     # The same lock as `pluginlake setup`, so concurrent runs do not mix the files of two certificates.
+    command -v flock > /dev/null || { echo "flock (util-linux) is required for just setup" >&2; exit 1; }
     exec 9>> "{{ home }}/.setup.lock"
-    if command -v flock > /dev/null; then flock 9; fi
+    flock 9
     if [[ "$domain" == "localhost" || "$domain" == *.localhost ]]; then
         command -v mkcert > /dev/null || { echo "mkcert is required for a .localhost domain: https://github.com/FiloSottile/mkcert" >&2; exit 1; }
         mkdir -p "{{ home }}/tls" "{{ home }}/ca"

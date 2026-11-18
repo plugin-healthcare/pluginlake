@@ -346,6 +346,14 @@ services:
         condition: service_healthy
     expose:
       - "8080"
+    # Unhealthy when cAdvisor reports no compose containers on the host, for example on a Docker host with the containerd
+    # image store, which cAdvisor can only read through the containerd socket.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/metrics | grep -q 'container_label_com_docker_compose_service=\"[^\"]'"]
+      interval: 60s
+      timeout: 10s
+      start_period: 90s
+      retries: 3
     # Its API has no authentication; keep it off the app network.
     networks: [monitoring, docker-api]
     restart: unless-stopped
@@ -599,8 +607,11 @@ services:
       - ${PLUGINLAKE_HOME:?run just setup}/bootstrap/admin:/bootstrap/admin
       - ${PLUGINLAKE_HOME:?run just setup}/bootstrap/hook:/bootstrap/hook
       - ${PLUGINLAKE_HOME:?run just setup}/bootstrap/proxy:/bootstrap/proxy
+    # Zitadel refuses a webhook target whose host does not resolve, so the groups hook must be up first.
     depends_on:
       zitadel-api:
+        condition: service_healthy
+      zitadel-groups-hook:
         condition: service_healthy
     command: ["python", "-m", "pluginlake.deploy.bootstrap"]
     networks: [edge-net]
@@ -620,7 +631,6 @@ services:
       - --email-domain=*
       - --reverse-proxy=true
       - --set-xauthrequest=true
-      - --pass-access-token=true
       - --skip-provider-button=true
       - --skip-jwt-bearer-tokens=true
       - --code-challenge-method=S256
@@ -629,7 +639,7 @@ services:
       - --cookie-secure=true
       - --cookie-samesite=lax
       # The session is refreshed every 5 minutes, which also renews the groups of the user, and ends after 30 minutes
-      # without use. pluginlake-init limits a sign-in to 12 hours in Zitadel, after which the refresh fails.
+      # without use. pluginlake-init limits the refresh token to 12 hours in Zitadel, after which the refresh fails.
       - --scope=openid email profile offline_access
       - --cookie-refresh=5m
       - --cookie-expire=30m

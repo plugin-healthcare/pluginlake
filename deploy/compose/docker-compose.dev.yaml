@@ -240,6 +240,14 @@ services:
         condition: service_healthy
     expose:
       - "8080"
+    # Unhealthy when cAdvisor reports no compose containers on the host, for example on a Docker host with the containerd
+    # image store, which cAdvisor can only read through the containerd socket.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/metrics | grep -q 'container_label_com_docker_compose_service=\"[^\"]'"]
+      interval: 60s
+      timeout: 10s
+      start_period: 90s
+      retries: 3
     # Its API has no authentication; keep it off the app network.
     networks: [monitoring, docker-api]
     restart: unless-stopped

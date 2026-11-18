@@ -140,7 +140,11 @@ The choice of Zitadel, with Keycloak as the fallback, is described in [ADR-011](
 All protected hosts share one oauth2-proxy and one session cookie on `.<domain>`, so you sign in once, for example on the console, and open every application without signing in again.
 All applications behind the proxy therefore trust the same session.
 oauth2-proxy refreshes the session with Zitadel every 5 minutes, so a removed role takes effect within those minutes.
-A session ends after 30 minutes without use, and in any case 12 hours after signing in, because `pluginlake-init` sets the lifetime of refresh tokens in Zitadel to 12 hours.
+The session at the edge ends after 30 minutes without use, and at the latest 12 hours after signing in, because `pluginlake-init` sets the lifetime of refresh tokens in Zitadel to 12 hours.
+oauth2-proxy then sends the user to Zitadel.
+After 30 minutes without use Zitadel signs them in again without a password, and after 12 hours they enter their password again, because `pluginlake-init` also limits the sign-in at Zitadel to 12 hours.
+This limit is set on the default login policy of the instance; an organization that gets a login policy of its own in the Zitadel console needs the same check lifetimes.
+A silent sign-in just before the 12 hours end gives a new refresh token, so in that case a session lasts at most almost 24 hours.
 A browser tab that polls in the background, such as the Dagster UI, keeps its session in use, so for that tab only the 12 hours apply.
 Change the 12 hours with `PLUGINLAKE_BOOTSTRAP_SESSION_MAX_AGE` (for example `PT8H`) on `pluginlake-init`, and the 30 minutes with `--cookie-expire` of oauth2-proxy in a local override file.
 

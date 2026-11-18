@@ -1,6 +1,8 @@
 .venv/
 data/
 .data/
+# Node home of `just setup`: secrets, TLS keys and data must never reach an image.
+.pluginlake/
 dist/
 .git/
 .github/

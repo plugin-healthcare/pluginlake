@@ -86,6 +86,11 @@ docker compose --env-file .pluginlake/compose.env \
 
 Alternatively set `[monitoring] cadvisor = false` and run cAdvisor in the host stack.
 
+cAdvisor turns unhealthy when it reports no Docker Compose container at all on the host, so on a host with other Compose stacks the check does not notice when only this station's containers are missing.
+A known cause is the containerd image store of Docker (the default on new installations of Docker Engine 29 and later, shown as `Storage Driver: overlayfs` in `docker info`).
+cAdvisor can only read those containers through the containerd socket, which gives full control over every container, so pluginlake does not mount it and `privileged` does not help.
+On such a host set `[monitoring] cadvisor = false`, or switch Docker back to the classic image store as described in the [Docker documentation](https://docs.docker.com/engine/storage/containerd/).
+
 ## Configuration reference
 
 | Setting | Where | Default | Description |
