@@ -67,6 +67,16 @@ This is the route Zitadel documents for oauth2-proxy.
 - If the hook is down nobody can sign in, which is the safe failure.
 - Validating the token in our own API is a later addition and does not replace the edge check.
 
+### Session lifetime
+
+A session at the edge ends after 30 minutes without use and at most 12 hours after signing in.
+These are the reauthentication limits of NIST SP 800-63B for AAL2, the level that fits access to health data.
+
+- oauth2-proxy refreshes the session with Zitadel every 5 minutes, so a removed role takes effect within those minutes instead of when the cookie expires.
+- The 30 minutes are the cookie lifetime of oauth2-proxy, which starts again at every refresh.
+- oauth2-proxy cannot limit the total length of a session, so the 12 hours are the lifetime of the refresh token in Zitadel; after that the refresh fails and the user signs in again.
+- A browser tab that polls in the background never reaches the 30 minutes, so for that tab the 12 hours are the only limit.
+
 ## Consequences
 
 - Smallest footprint of the options (about 174 MiB against about 510 MiB for Keycloak), which leaves the RAM for compute.

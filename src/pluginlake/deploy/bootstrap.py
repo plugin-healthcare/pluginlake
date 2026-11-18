@@ -4,10 +4,11 @@ Runs once after Zitadel is healthy and removes the manual setup steps:
 
 1. Waits for the admin machine token that Zitadel writes on first start.
 2. Creates (or finds) the Zitadel project and the OIDC application for oauth2-proxy.
-3. Makes sure every protected hostname has a redirect URI.
+3. Makes sure every protected hostname has a redirect URI and the app may refresh its tokens.
 4. Creates a project role per application, a webhook target that exposes the roles of a user
    as ``groups`` claim, and grants the first admin all roles.
-5. Writes the oauth2-proxy config file with the client credentials and cookie secret.
+5. Limits how long a sign-in lasts by the lifetime of the refresh token.
+6. Writes the oauth2-proxy config file with the client credentials and cookie secret.
 
 The run is idempotent: existing credentials in the config file are reused, and a new client
 secret is only generated when the file is missing or belongs to another client.
@@ -28,6 +29,7 @@ logger = get_logger(__name__)
 
 _API = "/management/v1"
 _ACTIONS = "/v2/actions"
+_ADMIN = "/admin/v1"
 _GROUPS_TARGET = "groups-claim"
 # Token functions in which the target adds the ``groups`` claim.
 _GROUPS_FUNCTIONS = ("preuserinfo", "preaccesstoken")
@@ -84,6 +86,26 @@ def read_proxy_config(path: Path) -> dict[str, str]:
         if separator:
             values[key] = json.loads(value)
     return values
+
+
+# The refresh token lets oauth2-proxy renew the session, and with it the ``groups`` claim, without a new login.
+_GRANT_TYPES = ["OIDC_GRANT_TYPE_AUTHORIZATION_CODE", "OIDC_GRANT_TYPE_REFRESH_TOKEN"]
+# Writable settings of an OIDC app, as the Management API returns them in ``oidcConfig``.
+_OIDC_SETTINGS = [
+    "responseTypes",
+    "appType",
+    "authMethodType",
+    "postLogoutRedirectUris",
+    "devMode",
+    "accessTokenType",
+    "accessTokenRoleAssertion",
+    "idTokenRoleAssertion",
+    "idTokenUserinfoAssertion",
+    "clockSkew",
+    "skipNativeAppSuccessPage",
+    "backChannelLogoutUri",
+    "loginVersion",
+]
 
 
 def write_proxy_config(path: Path, client_id: str, client_secret: str, cookie_secret: str) -> None:
@@ -189,7 +211,7 @@ class ZitadelBootstrap:
                 "name": name,
                 "redirectUris": redirect_uris(self.settings.protected_hosts),
                 "responseTypes": ["OIDC_RESPONSE_TYPE_CODE"],
-                "grantTypes": ["OIDC_GRANT_TYPE_AUTHORIZATION_CODE"],
+                "grantTypes": _GRANT_TYPES,
                 "appType": "OIDC_APP_TYPE_WEB",
                 "authMethodType": "OIDC_AUTH_METHOD_TYPE_BASIC",
             },
@@ -199,8 +221,8 @@ class ZitadelBootstrap:
         logger.info("Created OIDC app %r", name)
         return body["appId"], body["clientId"], body["clientSecret"]
 
-    def sync_redirect_uris(self, project_id: str, app_id: str) -> None:
-        """Add missing redirect URIs and allowed origins to the app, keeping existing ones.
+    def sync_app_config(self, project_id: str, app_id: str) -> None:
+        """Add missing redirect URIs, allowed origins and grant types to the app, keeping existing ones.
 
         Args:
             project_id: The project that owns the app.
@@ -213,25 +235,24 @@ class ZitadelBootstrap:
         config = current.json()["app"]["oidcConfig"]
 
         uris = sorted({*config["redirectUris"], *redirect_uris(hosts)})
-        origins = sorted({*(config.get("allowedOrigins") or []), *(f"https://{h}" for h in hosts)})
-        if uris == sorted(config["redirectUris"]) and origins == sorted(config.get("allowedOrigins") or []):
-            logger.info("Redirect URIs already up to date")
+        origins = sorted({*(config.get("additionalOrigins") or []), *(f"https://{h}" for h in hosts)})
+        grant_types = sorted({*config["grantTypes"], *_GRANT_TYPES})
+        if (
+            uris == sorted(config["redirectUris"])
+            and origins == sorted(config.get("additionalOrigins") or [])
+            and grant_types == sorted(config["grantTypes"])
+        ):
+            logger.info("OIDC app config already up to date")
             return
 
+        # The update replaces every setting, so the ones an operator changed are sent back as they are.
+        kept = {key: config[key] for key in _OIDC_SETTINGS if key in config}
         response = self.client.put(
             f"{url}/oidc_config",
-            json={
-                "redirectUris": uris,
-                "responseTypes": config["responseTypes"],
-                "grantTypes": config["grantTypes"],
-                "appType": "OIDC_APP_TYPE_WEB",
-                "authMethodType": "OIDC_AUTH_METHOD_TYPE_BASIC",
-                "devMode": config.get("devMode", False),
-                "allowedOrigins": origins,
-            },
+            json={**kept, "redirectUris": uris, "grantTypes": grant_types, "additionalOrigins": origins},
         )
         response.raise_for_status()
-        logger.info("Updated redirect URIs: %s", ", ".join(uris))
+        logger.info("Updated OIDC app: redirect URIs %s, grant types %s", ", ".join(uris), ", ".join(grant_types))
 
     def assert_project_roles(self, project_id: str) -> None:
         """Make Zitadel add the roles of the user to the tokens of this project.
@@ -299,7 +320,7 @@ class ZitadelBootstrap:
         else:
             target_id, key = found["id"], found["signingKey"]
             if found["endpoint"] != endpoint:
-                self.client.patch(f"{_ACTIONS}/targets/{target_id}", json={"endpoint": endpoint}).raise_for_status()
+                self.client.post(f"{_ACTIONS}/targets/{target_id}", json={"endpoint": endpoint}).raise_for_status()
                 logger.info("Updated endpoint of target %r", _GROUPS_TARGET)
         if not key_file.is_file() or key_file.read_text().strip() != key:
             key_file.parent.mkdir(parents=True, exist_ok=True)
@@ -311,14 +332,25 @@ class ZitadelBootstrap:
     def ensure_groups_executions(self, target_id: str) -> None:
         """Call the target in the token functions that carry the ``groups`` claim.
 
+        Setting an execution replaces its whole list of targets, so targets that an operator added are kept, in their
+        order, and the groups target is appended when it is missing.
+
         Args:
             target_id: The id of the target from ``ensure_groups_target``.
         """
         for function in _GROUPS_FUNCTIONS:
+            condition = {"function": {"name": function}}
+            search = {"filters": [{"inConditionsFilter": {"conditions": [condition]}}]}
+            response = self.client.post(f"{_ACTIONS}/executions/search", json=search)
+            response.raise_for_status()
+            executions = response.json().get("executions") or []
+            targets = list(executions[0].get("targets") or []) if executions else []
+            if target_id in targets:
+                continue
             self.client.put(
-                f"{_ACTIONS}/executions",
-                json={"condition": {"function": {"name": function}}, "targets": [target_id]},
+                f"{_ACTIONS}/executions", json={"condition": condition, "targets": [*targets, target_id]}
             ).raise_for_status()
+            logger.info("Added target %r to the %s execution", _GROUPS_TARGET, function)
 
     def grant_admin_roles(self, project_id: str, new_roles: list[str]) -> None:
         """Give the first admin all roles once, and later only the newly created roles.
@@ -385,13 +417,31 @@ class ZitadelBootstrap:
         response.raise_for_status()
         return response.json()["clientSecret"]
 
+    def ensure_session_max_age(self) -> None:
+        """Set the lifetime of refresh tokens on the instance, so a sign-in ends after ``session_max_age``.
+
+        oauth2-proxy renews its session with the refresh token, so the session ends when Zitadel refuses to refresh.
+        The other OIDC settings of the instance are kept.
+        """
+        current = self.client.get(f"{_ADMIN}/settings/oidc")
+        current.raise_for_status()
+        settings = current.json().get("settings") or {}
+        wanted = f"{int(self.settings.session_max_age.total_seconds())}s"
+        if settings.get("refreshTokenExpiration") == wanted:
+            return
+        kept = ("accessTokenLifetime", "idTokenLifetime", "refreshTokenIdleExpiration")
+        body = {key: settings[key] for key in kept if key in settings}
+        self.client.put(f"{_ADMIN}/settings/oidc", json={**body, "refreshTokenExpiration": wanted}).raise_for_status()
+        logger.info("Set the refresh token lifetime to %s", wanted)
+
     def run(self) -> None:
         """Provision the OIDC app and write the oauth2-proxy config."""
         settings = self.settings
         project_id = self.ensure_project()
         settings.project_id_file.write_text(project_id, encoding="utf-8")
         app_id, client_id, client_secret = self.ensure_app(project_id)
-        self.sync_redirect_uris(project_id, app_id)
+        self.sync_app_config(project_id, app_id)
+        self.ensure_session_max_age()
         self.assert_project_roles(project_id)
         new_roles = self.ensure_roles(project_id)
         self.ensure_groups_executions(self.ensure_groups_target())

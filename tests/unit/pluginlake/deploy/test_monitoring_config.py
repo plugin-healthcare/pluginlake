@@ -10,7 +10,7 @@ from pluginlake.api.config import MetricsSettings
 DEPLOY_DIR = Path(__file__).resolve().parents[4] / "deploy"
 PROMETHEUS_DIR = DEPLOY_DIR / "monitoring" / "prometheus"
 COMPOSE_FILES = ["docker-compose.dev.yaml", "docker-compose.yaml"]
-MONITORING_SERVICES = {"prometheus", "postgres-exporter", "cadvisor"}
+MONITORING_SERVICES = {"prometheus", "postgres-exporter", "cadvisor", "docker-socket-proxy"}
 
 
 def _compose(name: str) -> dict:
@@ -55,7 +55,8 @@ def test_monitoring_is_optional_in_dev_and_core_in_production():
     for name in MONITORING_SERVICES:
         assert dev[name]["profiles"] == ["monitoring"]
         assert "profiles" not in production[name]
-    assert production["cadvisor"]["deploy"]["replicas"] == "${CADVISOR_REPLICAS:?set by just setup}"
+    for name in ("cadvisor", "docker-socket-proxy"):
+        assert production[name]["deploy"]["replicas"] == "${CADVISOR_REPLICAS:?set by just setup}"
 
 
 @pytest.mark.parametrize("compose_file", COMPOSE_FILES)

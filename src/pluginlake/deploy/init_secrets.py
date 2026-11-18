@@ -6,11 +6,8 @@ Generated secrets are never overwritten, so running it again is safe.
 Template secrets are rendered again on every run, so they always hold the current value of the secrets they refer to.
 """
 
-import fcntl
 import hashlib
 import json
-from collections.abc import Iterator
-from contextlib import contextmanager
 from pathlib import Path
 
 from pluginlake.deploy.config import InitConfig, SecretKind, load_init_config
@@ -56,19 +53,10 @@ def passwd_file(uid: int, gid: int) -> str:
     return f"root:x:0:0:root:/root:/sbin/nologin\npluginlake:x:{uid}:{gid}:pluginlake:/tmp:/sbin/nologin\n"
 
 
-@contextmanager
-def _exclusive(lock_file: Path) -> Iterator[None]:
-    """Hold an exclusive lock on ``lock_file``, so concurrent setup runs on one home do not interleave."""
-    with lock_file.open("a") as handle:
-        fcntl.flock(handle, fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(handle, fcntl.LOCK_UN)
-
-
 def init_home(home: Path, uid: int, gid: int, config: InitConfig | None = None) -> list[str]:
     """Create the folders, the passwd file and the missing secrets below ``home``.
+
+    The caller holds ``setup_lock`` while this runs, so concurrent runs on one home do not interleave.
 
     Args:
         home: The data folder (``PLUGINLAKE_HOME``), which must already exist.
@@ -91,20 +79,19 @@ def init_home(home: Path, uid: int, gid: int, config: InitConfig | None = None) 
     if not passwd.exists():
         passwd.write_text(passwd_file(uid, gid), encoding="utf-8")
 
-    with _exclusive(home / ".setup.lock"):
-        existing = {
-            # Stripped like `pluginlake-db-init` does, so a template holds the password the role gets.
-            spec.name: (secrets / spec.name).read_text(encoding="utf-8").strip()
-            for spec in config.secrets
-            if spec.kind is not SecretKind.TEMPLATE and (secrets / spec.name).exists()
-        }
-        files = build_secret_files(config, existing)
-        written = []
-        for spec in config.secrets:
-            write = replace_secret if spec.kind is SecretKind.TEMPLATE else write_secret
-            if write(secrets / spec.name, files[spec.name]):
-                written.append(spec.name)
-        return written
+    existing = {
+        # Stripped like `pluginlake-db-init` does, so a template holds the password the role gets.
+        spec.name: (secrets / spec.name).read_text(encoding="utf-8").strip()
+        for spec in config.secrets
+        if spec.kind is not SecretKind.TEMPLATE and (secrets / spec.name).exists()
+    }
+    files = build_secret_files(config, existing)
+    written = []
+    for spec in config.secrets:
+        write = replace_secret if spec.kind is SecretKind.TEMPLATE else write_secret
+        if write(secrets / spec.name, files[spec.name]):
+            written.append(spec.name)
+    return written
 
 
 def templates_revision(home: Path, config: InitConfig | None = None) -> str:

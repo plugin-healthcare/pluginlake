@@ -7,25 +7,55 @@ image (``just setup``). A domain below ``.localhost`` is a local node: it is ser
 ``just setup`` creates.
 """
 
+import fcntl
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from pluginlake.deploy.config import NodeSettings, StationConfig, load_station_config
 from pluginlake.deploy.init_secrets import init_home, templates_revision
 from pluginlake.deploy.routes import render_routes
 from pluginlake.utils.logger import get_logger
+from pluginlake.utils.secrets import replace_secret
 
 logger = get_logger(__name__)
 
 COMPOSE_ENV = "compose.env"
 TLS_DIR = "tls"
 TLS_CERT, TLS_KEY = "cert.pem", "key.pem"
+TLS_CERT_DOMAIN = "cert.domain"
 CA_DIR, CA_FILE = "ca", "ca.pem"
 TLS_FILE_CONFIG = "tls.yaml"
 CONTAINER_CA_DIR = "/ca"
 CONTAINER_TLS_DIR = "/tls"
 ROUTES_DIR = "traefik"
 ROUTES_FILE = "routes.yaml"
+SETUP_LOCK = ".setup.lock"
+
+
+@contextmanager
+def setup_lock(home: Path) -> Iterator[None]:
+    """Hold an exclusive lock on ``home``, so concurrent setup runs do not interleave.
+
+    ``just setup`` takes the same lock while it creates the local certificate.
+    """
+    with (home / SETUP_LOCK).open("a") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def _write_in_place(path: Path, content: str) -> None:
+    """Write ``path`` only when its content changes, keeping the same file.
+
+    Traefik mounts these files one by one, and a bind mount of a single file keeps showing the old file once it is
+    replaced, so they are overwritten in place.
+    """
+    if not path.exists() or path.read_text(encoding="utf-8") != content:
+        path.write_text(content, encoding="utf-8")
 
 
 def is_local(domain: str) -> bool:
@@ -98,20 +128,21 @@ def compose_env(
     return "".join(f"{key}='{value}'\n" for key, value in values.items())
 
 
-def prepare_tls(home: Path, *, local: bool) -> bool:
+def prepare_tls(home: Path, domain: str) -> bool:
     """Create the ``tls`` folder and its Traefik config.
 
     For a local node the mkcert files (``cert.pem`` and ``key.pem`` in ``tls``, ``ca.pem`` in ``ca``, all written by
-    ``just setup``) must exist.
+    ``just setup``) must exist, and ``tls/cert.domain`` must name ``domain``.
     For other domains an existing ``tls.yaml`` is the operator's own and stays as it is.
 
     Args:
         home: The data folder.
-        local: Whether the node is local.
+        domain: Base domain of the node.
 
     Returns:
-        False if the certificate of a local node is missing.
+        False if the certificate of a local node is missing or made for another domain.
     """
+    local = is_local(domain)
     tls_dir = home / TLS_DIR
     tls_dir.mkdir(mode=0o700, exist_ok=True)
     if local:
@@ -120,11 +151,15 @@ def prepare_tls(home: Path, *, local: bool) -> bool:
         if missing:
             logger.error("Missing %s: run `just setup`, which creates them with mkcert.", missing)
             return False
+        cert_domain = tls_dir / TLS_CERT_DOMAIN
+        if not cert_domain.is_file() or cert_domain.read_text(encoding="utf-8").strip() != domain:
+            logger.error("The certificate in %s is not made for %s: run `just setup` again.", tls_dir, domain)
+            return False
     config_file = tls_dir / TLS_FILE_CONFIG
     # A config left from a local node must not outlive a move to a real domain.
     own = config_file.exists() and config_file.read_text(encoding="utf-8") != tls_file_config(local=True)
     if local or not own:
-        config_file.write_text(tls_file_config(local=local), encoding="utf-8")
+        _write_in_place(config_file, tls_file_config(local=local))
     return True
 
 
@@ -141,7 +176,7 @@ def write_routes(home: Path, domain: str) -> Path:
     routes_dir = home / ROUTES_DIR
     routes_dir.mkdir(mode=0o700, exist_ok=True)
     routes_file = routes_dir / ROUTES_FILE
-    routes_file.write_text(render_routes(domain), encoding="utf-8")
+    _write_in_place(routes_file, render_routes(domain))
     return routes_file
 
 
@@ -163,11 +198,16 @@ def run_setup(config_path: Path, home: Path, host_home: Path | None = None) -> i
         logger.error("Invalid station config: %s", exc)  # noqa: TRY400 (a traceback adds nothing)
         return 1
 
+    with setup_lock(home):
+        return _prepare_home(station, domain, home, host_home)
+
+
+def _prepare_home(station: StationConfig, domain: str, home: Path, host_home: Path | None) -> int:
     uid, gid = os.getuid(), os.getgid()
     created = init_home(home, uid, gid)
     logger.info("Created %d secrets in %s: %s", len(created), home, ", ".join(created) or "none")
 
-    if not prepare_tls(home, local=is_local(domain)):
+    if not prepare_tls(home, domain):
         return 1
 
     logger.info("Wrote %s", write_routes(home, domain))
@@ -180,7 +220,6 @@ def run_setup(config_path: Path, home: Path, host_home: Path | None = None) -> i
         host_home=host_home or home.resolve(),
         secrets_revision=templates_revision(home),
     )
-    env_file.write_text(env, encoding="utf-8")
-    env_file.chmod(0o600)
+    replace_secret(env_file, env, mode=0o600)
     logger.info("Wrote %s", env_file)
     return 0

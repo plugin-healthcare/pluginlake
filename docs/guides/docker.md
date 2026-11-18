@@ -139,6 +139,10 @@ The choice of Zitadel, with Keycloak as the fallback, is described in [ADR-011](
 
 All protected hosts share one oauth2-proxy and one session cookie on `.<domain>`, so you sign in once, for example on the console, and open every application without signing in again.
 All applications behind the proxy therefore trust the same session.
+oauth2-proxy refreshes the session with Zitadel every 5 minutes, so a removed role takes effect within those minutes.
+A session ends after 30 minutes without use, and in any case 12 hours after signing in, because `pluginlake-init` sets the lifetime of refresh tokens in Zitadel to 12 hours.
+A browser tab that polls in the background, such as the Dagster UI, keeps its session in use, so for that tab only the 12 hours apply.
+Change the 12 hours with `PLUGINLAKE_BOOTSTRAP_SESSION_MAX_AGE` (for example `PT8H`) on `pluginlake-init`, and the 30 minutes with `--cookie-expire` of oauth2-proxy in a local override file.
 
 Access is per application.
 `pluginlake-init` creates a Zitadel project role for each application (`api`, `console`, `dagster`, `marquez`, `prometheus`) and gives the first admin all of them.

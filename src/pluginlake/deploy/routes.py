@@ -16,6 +16,9 @@ APPLICATIONS = {
 BROWSER_APPLICATIONS = tuple(name for name in APPLICATIONS if name != "api")
 ROOT_REDIRECT_TARGET = "console"
 OAUTH2_PROXY_URL = "http://oauth2-proxy:4180"
+SESSION_COOKIE = "_pluginlake_session"
+# oauth2-proxy splits a session cookie above 4 KB into numbered parts.
+SESSION_COOKIES = [SESSION_COOKIE, *(f"{SESSION_COOKIE}_{part}" for part in range(4))]
 IDENTITY_HEADERS = [
     "X-Auth-Request-User",
     "X-Auth-Request-Email",
@@ -89,6 +92,8 @@ def _forward_auth(application: str) -> dict:
             "trustForwardHeader": True,
             "maxResponseBodySize": 65536,
             "authResponseHeaders": IDENTITY_HEADERS,
+            # oauth2-proxy refreshes the session during the auth check; the browser must get the new cookie.
+            "addAuthCookiesToResponse": SESSION_COOKIES,
         }
     }
 

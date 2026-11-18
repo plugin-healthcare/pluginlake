@@ -93,6 +93,9 @@ setup *args='':
     domain="$(docker run --rm --user "$(id -u):$(id -g)" --network none --cap-drop ALL --read-only \
         -v "{{ justfile_directory() }}/pluginlake.toml:/pluginlake.toml:ro" pluginlake-setup \
         python -c 'import tomllib; print(tomllib.load(open("/pluginlake.toml", "rb")).get("node", {}).get("domain") or "")')"
+    # The same lock as `pluginlake setup`, so concurrent runs do not mix the files of two certificates.
+    exec 9>> "{{ home }}/.setup.lock"
+    if command -v flock > /dev/null; then flock 9; fi
     if [[ "$domain" == "localhost" || "$domain" == *.localhost ]]; then
         command -v mkcert > /dev/null || { echo "mkcert is required for a .localhost domain: https://github.com/FiloSottile/mkcert" >&2; exit 1; }
         mkdir -p "{{ home }}/tls" "{{ home }}/ca"
@@ -104,6 +107,7 @@ setup *args='':
             echo "$domain" > "{{ home }}/tls/cert.domain"
         fi
     fi
+    exec 9>&-
     docker run --rm --user "$(id -u):$(id -g)" --network none --cap-drop ALL --read-only \
         -v "{{ home }}:/pluginlake-home" -v "{{ justfile_directory() }}/pluginlake.toml:/pluginlake.toml:ro" \
         pluginlake-setup pluginlake setup --config /pluginlake.toml --home /pluginlake-home --host-home "{{ home }}" {{ args }}

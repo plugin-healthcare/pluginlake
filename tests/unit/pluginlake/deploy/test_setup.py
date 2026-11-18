@@ -1,12 +1,13 @@
 """Tests for ``pluginlake setup``."""
 
 import stat
+import threading
 from pathlib import Path
 
 import pytest
 
 from pluginlake.deploy.config import MonitoringSettings, NodeSettings, StationConfig, StationSettings
-from pluginlake.deploy.setup import compose_env, is_local, require_domain, run_setup
+from pluginlake.deploy.setup import compose_env, is_local, require_domain, run_setup, setup_lock
 
 
 def _config(tmp_path: Path, node: str = "") -> Path:
@@ -57,12 +58,13 @@ def test_disabled_cadvisor_is_scaled_to_zero():
     assert "CADVISOR_REPLICAS='0'" in env.splitlines()
 
 
-def _write_mkcert_files(home: Path) -> None:
+def _write_mkcert_files(home: Path, domain: str = "pluginlake.localhost") -> None:
     (home / "tls").mkdir(parents=True)
     (home / "ca").mkdir()
     for name in ("cert.pem", "key.pem"):
         (home / "tls" / name).write_text("pem")
     (home / "ca" / "ca.pem").write_text("pem")
+    (home / "tls" / "cert.domain").write_text(f"{domain}\n")
 
 
 def test_local_setup_serves_the_mkcert_certificate_and_trusts_its_ca(tmp_path: Path):
@@ -72,6 +74,13 @@ def test_local_setup_serves_the_mkcert_certificate_and_trusts_its_ca(tmp_path: P
     assert run_setup(_config(tmp_path, 'domain = "pluginlake.localhost"\n'), home) == 0
     assert "certFile: /tls/cert.pem" in (home / "tls" / "tls.yaml").read_text()
     assert "OAUTH2_PROXY_SSL_CERT_FILE='/ca/ca.pem'" in (home / "compose.env").read_text()
+
+
+def test_local_setup_with_the_certificate_of_another_domain_fails(tmp_path: Path):
+    home = tmp_path / "home"
+    home.mkdir()
+    _write_mkcert_files(home, domain="other.localhost")
+    assert run_setup(_config(tmp_path, 'domain = "pluginlake.localhost"\n'), home) == 1
 
 
 def test_local_setup_without_a_certificate_fails(tmp_path: Path):
@@ -96,6 +105,20 @@ def test_setup_writes_private_compose_env_and_secrets(tmp_path: Path):
     assert "PLUGINLAKE_DOMAIN='lake.nl'" in (home / "compose.env").read_text()
     assert (home / "secrets" / "postgres_password").is_file()
     assert not (home / "secrets.env").exists()
+
+
+def test_setup_waits_for_a_running_setup(tmp_path: Path):
+    home = tmp_path / "home"
+    home.mkdir()
+    config = _config(tmp_path, 'domain = "lake.nl"\n')
+    with setup_lock(home):
+        other = threading.Thread(target=run_setup, args=(config, home))
+        other.start()
+        other.join(timeout=0.5)
+        assert other.is_alive()
+        assert not (home / "compose.env").exists()
+    other.join(timeout=10)
+    assert (home / "compose.env").is_file()
 
 
 def test_setup_without_domain_fails_and_creates_nothing(tmp_path: Path):

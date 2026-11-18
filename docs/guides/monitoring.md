@@ -44,6 +44,8 @@ The exporter logs in with the secret `postgres_exporter_password`, a read-only `
 
 The `/metrics` endpoint of the API is only reachable by Prometheus over the compose network, not through the public API or from the host.
 cAdvisor runs on a separate `monitoring` network shared only with Prometheus, and `cadvisor = false` keeps the container from starting and removes a running one on the next `just up`.
+cAdvisor has no access to the Docker socket itself.
+It reads the Docker API through `docker-socket-proxy`, which only allows the read-only calls cAdvisor needs (version, info and the details of one container) and is only reachable from cAdvisor.
 
 In the dev stack (`just dev-up`, `pluginlake up`) set `enabled = true` to start the compose profile `monitoring`, and Prometheus is published on loopback only at <http://127.0.0.1:9090> (change the host port with `PROMETHEUS_PORT`).
 
@@ -65,7 +67,7 @@ Sending metrics from the station to a central place is not supported yet, and ho
 
 ## Missing container metrics
 
-cAdvisor runs without `privileged` and mounts only the cgroup tree, the Docker socket and the Docker image metadata, all read-only.
+cAdvisor runs without `privileged` and mounts only the cgroup tree and the Docker image metadata, both read-only.
 It reports memory, CPU and the containers that are running, and has the disk, disk I/O and network metric groups switched off.
 On some hosts (certain cgroup v2 or storage setups) a few container metrics stay empty.
 Only then enable `privileged` for cAdvisor with a local override file, and keep it to the hosts that need it:

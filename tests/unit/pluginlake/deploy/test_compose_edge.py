@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 
 import httpx
+import pytest
 import yaml
 
 from pluginlake.deploy.bootstrap import (
@@ -75,10 +76,20 @@ def test_only_traefik_publishes_ports():
     assert published == {"traefik", "prometheus"}  # prometheus is bound to a host address, loopback by default
 
 
-def test_no_service_mounts_the_docker_socket():
-    for name, service in _services().items():
-        volumes = [str(v) for v in service.get("volumes", [])]
-        assert not any("docker.sock" in v for v in volumes if name != "cadvisor"), name
+@pytest.mark.parametrize("compose_file", ["docker-compose.yaml", "docker-compose.dev.yaml"])
+def test_only_the_socket_proxy_reaches_the_docker_socket(compose_file: str):
+    services = _load(COMPOSE_DIR / compose_file)["services"]
+    with_socket = {
+        name
+        for name, service in services.items()
+        if any(
+            str(v).startswith(("/var/run/docker.sock:", "/var/run:", "/run:", "/:")) for v in service.get("volumes", [])
+        )
+    }
+    assert with_socket == {"docker-socket-proxy"}
+    proxy = services["docker-socket-proxy"]
+    assert proxy["networks"] == ["docker-api"]
+    assert not any(arg.startswith(("-allowPOST", "-allowPUT", "-allowDELETE")) for arg in proxy["command"])
 
 
 def test_every_required_compose_variable_is_written_by_setup():
@@ -190,6 +201,15 @@ def test_forward_auth_limits_the_response_body_size():
     for name, middleware in middlewares.items():
         if "forwardAuth" in middleware:
             assert middleware["forwardAuth"]["maxResponseBodySize"] > 0, name
+
+
+def test_forward_auth_passes_the_refreshed_session_cookie():
+    cookie_name = next(
+        arg.split("=", 1)[1] for arg in _services()["oauth2-proxy"]["command"] if arg.startswith("--cookie-name=")
+    )
+    for name, middleware in _routes()["middlewares"].items():
+        if "forwardAuth" in middleware:
+            assert cookie_name in middleware["forwardAuth"]["addAuthCookiesToResponse"], name
 
 
 def test_sign_in_returns_to_the_requested_page():
@@ -316,5 +336,77 @@ def test_groups_target_reuses_existing_and_restores_missing_key(tmp_path):
 def test_groups_executions_cover_both_token_functions():
     bootstrap, calls = _bootstrap({})
     bootstrap.ensure_groups_executions("t1")
-    functions = [body["condition"]["function"]["name"] for _, _, body in calls]
+    functions = [body["condition"]["function"]["name"] for method, _, body in calls if method == "PUT"]
     assert functions == ["preuserinfo", "preaccesstoken"]
+
+
+def test_groups_executions_keep_the_targets_of_the_operator():
+    existing = {"executions": [{"targets": ["other"]}]}
+    bootstrap, calls = _bootstrap({"POST /v2/actions/executions/search": existing})
+    bootstrap.ensure_groups_executions("t1")
+    assert [body["targets"] for method, _, body in calls if method == "PUT"] == [["other", "t1"], ["other", "t1"]]
+
+
+def test_groups_executions_are_left_alone_when_they_hold_the_target():
+    bootstrap, calls = _bootstrap({"POST /v2/actions/executions/search": {"executions": [{"targets": ["t1"]}]}})
+    bootstrap.ensure_groups_executions("t1")
+    assert not [call for call in calls if call[0] == "PUT"]
+
+
+def test_groups_target_endpoint_is_updated_with_post(tmp_path):
+    existing = {"id": "t1", "endpoint": "http://old/groups", "signingKey": "secret"}
+    bootstrap, calls = _bootstrap(
+        {"POST /v2/actions/targets/search": {"targets": [existing]}},
+        groups_hook_url="http://hook/groups",
+        groups_hook_key_file=tmp_path / "hook.key",
+    )
+    bootstrap.ensure_groups_target()
+    assert ("POST", "/v2/actions/targets/t1", {"endpoint": "http://hook/groups"}) in calls
+
+
+def test_new_app_may_refresh_its_tokens():
+    bootstrap, calls = _bootstrap(
+        {"POST /management/v1/projects/p/apps/oidc": {"appId": "a", "clientId": "c", "clientSecret": "s"}}
+    )
+    bootstrap.ensure_app("p")
+    created = next(body for _, path, body in calls if path.endswith("/apps/oidc"))
+    assert "OIDC_GRANT_TYPE_REFRESH_TOKEN" in created["grantTypes"]
+
+
+def test_existing_app_gets_the_refresh_grant_and_keeps_its_settings():
+    app = {
+        "redirectUris": [],
+        "additionalOrigins": ["https://other.example"],
+        "allowedOrigins": ["https://other.example"],
+        "responseTypes": ["OIDC_RESPONSE_TYPE_CODE"],
+        "grantTypes": ["OIDC_GRANT_TYPE_AUTHORIZATION_CODE"],
+        "postLogoutRedirectUris": ["https://console.lake.test/"],
+        "accessTokenType": "OIDC_TOKEN_TYPE_JWT",
+        "clockSkew": "2s",
+    }
+    bootstrap, calls = _bootstrap({"GET /management/v1/projects/p/apps/a": {"app": {"oidcConfig": app}}})
+    bootstrap.sync_app_config("p", "a")
+    updated = next(body for method, _, body in calls if method == "PUT")
+    assert updated["grantTypes"] == ["OIDC_GRANT_TYPE_AUTHORIZATION_CODE", "OIDC_GRANT_TYPE_REFRESH_TOKEN"]
+    assert updated["postLogoutRedirectUris"] == ["https://console.lake.test/"]
+    assert updated["accessTokenType"] == "OIDC_TOKEN_TYPE_JWT"
+    assert updated["clockSkew"] == "2s"
+    assert "https://other.example" in updated["additionalOrigins"]
+    assert "allowedOrigins" not in updated
+
+
+def test_sign_in_lasts_at_most_the_session_max_age():
+    current = {"settings": {"accessTokenLifetime": "43200s", "refreshTokenExpiration": "7776000s"}}
+    bootstrap, calls = _bootstrap({"GET /admin/v1/settings/oidc": current})
+    bootstrap.ensure_session_max_age()
+    assert (
+        "PUT",
+        "/admin/v1/settings/oidc",
+        {"accessTokenLifetime": "43200s", "refreshTokenExpiration": "43200s"},
+    ) in calls
+
+
+def test_session_max_age_is_left_alone_when_it_is_set():
+    bootstrap, calls = _bootstrap({"GET /admin/v1/settings/oidc": {"settings": {"refreshTokenExpiration": "43200s"}}})
+    bootstrap.ensure_session_max_age()
+    assert [method for method, _, _ in calls] == ["GET"]

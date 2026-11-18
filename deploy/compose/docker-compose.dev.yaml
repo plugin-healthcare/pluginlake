@@ -189,30 +189,59 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # Only the read-only Docker API calls cAdvisor needs; everything else, such as reading files from a container,
+  # is refused.
+  docker-socket-proxy:
+    image: wollomatic/socket-proxy:1.13.2@sha256:ff95d6ff6c27853005ef85eb8f4ab5923dc3d2f1e055f98fb6aeeaceec3fe848
+    profiles: [monitoring]
+    # Root, without capabilities, to open the socket, which is owned by root and the docker group of the host.
+    user: "0:0"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    command:
+      - -listenip=0.0.0.0
+      - -allowfrom=cadvisor
+      - -allowhealthcheck
+      - -allowHEAD=/_ping
+      - -allowGET=/v1\.[0-9]+/(version|info|containers/[a-zA-Z0-9_.-]+/json)
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    healthcheck:
+      test: ["CMD", "/healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks: [docker-api]
+    restart: unless-stopped
+
   cadvisor:
     image: ghcr.io/google/cadvisor:v0.60.6@sha256:b8e7d1093144fd088f425ff003d75a4aa405de075db78dae3bc563730b1bd07a
     profiles: [monitoring]
     command:
+      - --docker=tcp://docker-socket-proxy:2375
       - --docker_only=true
       - --housekeeping_interval=30s
       # Container labels can hold anything; only keep the compose ones Prometheus filters on.
       - --store_container_labels=false
       - --whitelisted_container_labels=com.docker.compose.project,com.docker.compose.service
-      - --disable_metrics=advtcp,cpu_topology,cpuset,hugetlb,memory_numa,percpu,process,referenced_memory,resctrl,sched,tcp,udp
+      - --disable_metrics=advtcp,cpu_topology,cpuset,disk,diskIO,hugetlb,memory_numa,network,percpu,process,referenced_memory,resctrl,sched,tcp,udp
     # Read access to /dev/kmsg only, instead of `privileged` (same as vantage6-ops).
     # If container metrics are missing on a host, see docs/guides/monitoring.md.
     devices:
       - /dev/kmsg
+    # The cgroups and image metadata of the host, read-only; the Docker API goes through the socket proxy.
+    # Mounting more of the host, such as `/`, would also expose the Docker socket.
     volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:ro
-      - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
-      - /dev/disk/:/dev/disk:ro
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+      - /var/lib/docker/image:/var/lib/docker/image:ro
+    depends_on:
+      docker-socket-proxy:
+        condition: service_healthy
     expose:
       - "8080"
-    # cAdvisor can reach the Docker socket; keep its unauthenticated API off the app network.
-    networks: [monitoring]
+    # Its API has no authentication; keep it off the app network.
+    networks: [monitoring, docker-api]
     restart: unless-stopped
 
   # --- Lineage (profile `lineage`, ADR-007) ---
@@ -284,6 +313,9 @@ services:
 networks:
   # Only Prometheus and cAdvisor; app containers cannot reach cadvisor:8080.
   monitoring:
+  # Only cAdvisor and the Docker socket proxy.
+  docker-api:
+    internal: true
 
 secrets:
   # Values come from the compose environment (deploy/compose/.env), never from a container env file.

@@ -5,12 +5,15 @@ Generated secrets are never overwritten, so generating again is safe.
 """
 
 import base64
+import errno
 import os
 import secrets
 import string
+import tempfile
 from pathlib import Path
 
 SYMBOLS = "!#%*+-=?@^_"
+_NO_HARD_LINKS = {errno.EPERM, errno.ENOTSUP, errno.EXDEV, errno.EMLINK}
 
 
 def random_hex(nbytes: int = 16) -> str:
@@ -32,8 +35,29 @@ def random_password(length: int = 24) -> str:
     return "".join(chars)
 
 
+def _staged(path: Path, content: str, mode: int) -> Path:
+    """Write ``content`` to a new private file next to ``path`` and flush it to disk."""
+    fd, name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    staging = Path(name)
+    try:
+        os.fchmod(fd, mode)
+        with os.fdopen(fd, "w", encoding="utf-8") as file:
+            file.write(content)
+            file.flush()
+            os.fsync(file.fileno())
+    except BaseException:
+        staging.unlink(missing_ok=True)
+        raise
+    return staging
+
+
 def write_secret(path: Path, content: str, mode: int = 0o400) -> bool:
     """Write a secret file with a restrictive mode unless it already exists.
+
+    The content is written to a staging file first and then linked into place, so ``path`` either holds the complete
+    content or does not exist, also when the process is killed halfway.
+    On a filesystem without hard links the staging file is renamed into place instead, so concurrent writers of one
+    file must then hold a shared lock, as ``pluginlake setup`` does.
 
     Args:
         path: Destination file.
@@ -43,13 +67,21 @@ def write_secret(path: Path, content: str, mode: int = 0o400) -> bool:
     Returns:
         True if the file was created, False if it already existed.
     """
+    if path.exists():
+        return False
+    staging = _staged(path, content, mode)
     try:
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
+        os.link(staging, path)
     except FileExistsError:
         return False
-    os.fchmod(fd, mode)
-    with os.fdopen(fd, "w", encoding="utf-8") as file:
-        file.write(content)
+    except OSError as exc:
+        if exc.errno not in _NO_HARD_LINKS:
+            raise
+        if path.exists():
+            return False
+        staging.replace(path)
+    finally:
+        staging.unlink(missing_ok=True)
     return True
 
 
@@ -68,8 +100,10 @@ def replace_secret(path: Path, content: str, mode: int = 0o400) -> bool:
     """
     if path.exists() and path.read_text(encoding="utf-8") == content:
         return False
-    staging = path.with_name(f".{path.name}.new")
-    staging.unlink(missing_ok=True)
-    write_secret(staging, content, mode)
-    staging.replace(path)
+    staging = _staged(path, content, mode)
+    try:
+        staging.replace(path)
+    except BaseException:
+        staging.unlink(missing_ok=True)
+        raise
     return True
