@@ -165,7 +165,11 @@ activemq-data/
 
 # Environments
 .env
-.env.production
+.env.*
+!.env.*example
+
+# Station secrets (one file per password, production stack)
+secrets/
 .envrc
 .venv
 env/

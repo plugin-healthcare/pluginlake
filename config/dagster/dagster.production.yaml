@@ -14,6 +14,8 @@ storage:
       db_name:
         env: DAGSTER_PG_DB
       port: 5432
+      # SQLAlchemy 2.1 defaults postgresql:// to psycopg 3; dagster-postgres ships psycopg2.
+      scheme: postgresql+psycopg2
 
 # No stdout/stderr capture: it needs `tail`, which the hardened runtime images lack.
 # Step output goes to the code-server container log (docker logs); context.log

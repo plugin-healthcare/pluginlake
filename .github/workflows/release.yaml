@@ -1,0 +1,442 @@
+# Release flow (docs/development/develop-guidelines.md#release-process):
+#   1. Push a tag v<version> on main (equal to project.version in pyproject.toml).
+#      -> verify + a draft GitHub Release with the CHANGELOG.md section as notes.
+#         A version with a hyphen (v0.2.0-rc.1) is a pre-release.
+#   2. Publish the draft release.
+#      -> images: build and push by digest to ghcr.io/plugin-healthcare/pluginlake/<name>,
+#         Trivy scan, cosign signature, SBOM and build provenance attestations.
+#      -> promote: only when every image passed, tag each digest with the version.
+#         An existing tag must already point at the same digest.
+#      -> package: write the digests into the images lock, build the wheel/sdist.
+#      -> pypi: trusted publishing (OIDC); assets: attach the dist files to the release.
+# Every step is idempotent, so a failed release can be re-run ("Re-run failed jobs"):
+# images whose version tag exists are reused instead of rebuilt.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  release:
+    types: [published]
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.event.release.tag_name || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io/plugin-healthcare/pluginlake
+  TAG: ${{ github.event.release.tag_name || github.ref_name }}
+
+jobs:
+  verify:
+    name: Verify tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      prerelease: ${{ steps.check.outputs.prerelease }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: false
+
+      - name: Tag is on main
+        run: |
+          commit="$(git rev-parse "refs/tags/${TAG}^{commit}")"
+          if ! git merge-base --is-ancestor "$commit" origin/main; then
+            echo "::error::${TAG} (${commit}) is not on main; release tags are only made on main."
+            exit 1
+          fi
+
+      - name: Tag matches pyproject.toml
+        id: check
+        run: uv run --no-project --python 3.13 --with packaging python scripts/release.py check-tag "$TAG"
+
+      - name: Release pre-release flag matches the version
+        if: github.event_name == 'release'
+        env:
+          EXPECTED: ${{ steps.check.outputs.prerelease }}
+          ACTUAL: ${{ github.event.release.prerelease }}
+        run: |
+          if [ "$EXPECTED" != "$ACTUAL" ]; then
+            echo "::error::release prerelease=${ACTUAL}, but ${TAG} implies prerelease=${EXPECTED}."
+            exit 1
+          fi
+
+  draft:
+    name: Draft release
+    if: github.event_name == 'push'
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: false
+
+      - name: Release notes from CHANGELOG.md
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: uv run --no-project --python 3.13 --with packaging python scripts/release.py notes "$VERSION" > notes.md
+
+      - name: Create or update the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+        run: |
+          if state="$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null)"; then
+            if [ "$state" != "true" ]; then
+              echo "::error::release ${TAG} is already published."
+              exit 1
+            fi
+            gh release edit "$TAG" --notes-file notes.md --prerelease="$PRERELEASE"
+          else
+            gh release create "$TAG" --draft --verify-tag --title "$TAG" --notes-file notes.md --prerelease="$PRERELEASE"
+          fi
+
+  images:
+    name: Image ${{ matrix.image }}
+    if: github.event_name == 'release'
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # keyless cosign signature and attestations
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: api
+            dockerfile: deploy/docker/api.Dockerfile
+          - image: dagster-webserver
+            dockerfile: deploy/docker/dagster-webserver.Dockerfile
+          - image: ui-central
+            dockerfile: deploy/docker/ui.Dockerfile
+            build_args: |
+              APP=central
+              PORT=8502
+          - image: ui-datastation
+            dockerfile: deploy/docker/ui.Dockerfile
+            build_args: |
+              APP=datastation
+              PORT=8501
+    env:
+      IMAGE: ${{ matrix.image }}
+      VERSION: ${{ needs.verify.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Log in to dhi.io
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: dhi.io
+          username: ${{ secrets.DHI_USERNAME }}
+          password: ${{ secrets.DHI_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Re-run: an image whose version tag exists passed every check before; reuse it.
+      - name: Existing release image
+        id: existing
+        run: |
+          if out="$(docker buildx imagetools inspect "${REGISTRY}/${IMAGE}:${VERSION}" --format '{{json .Manifest.Digest}}' 2>&1)"; then
+            echo "digest=$(echo "$out" | tr -d '"')" >> "$GITHUB_OUTPUT"
+            echo "Reusing ${REGISTRY}/${IMAGE}:${VERSION} (${out})"
+          # A new package can answer "denied" or 403 until its first push; building is safe then.
+          elif echo "$out" | grep -qiE "not found|manifest unknown|name unknown|denied|403 forbidden"; then
+            echo "No ${IMAGE}:${VERSION} yet, building."
+          else
+            echo "::error::cannot inspect ${REGISTRY}/${IMAGE}:${VERSION}: ${out}"
+            exit 1
+          fi
+
+      - name: Image labels
+        id: meta
+        if: steps.existing.outputs.digest == ''
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ matrix.image }}
+          labels: |
+            org.opencontainers.image.title=pluginlake ${{ matrix.image }}
+            org.opencontainers.image.version=${{ needs.verify.outputs.version }}
+
+      # Pushed by digest only: no tag until every image passed (promote job).
+      # Buildx attestations are off so the digest is the plain image manifest; SBOM
+      # and provenance are attached below as signed attestations instead.
+      - name: Build and push by digest
+        id: build
+        if: steps.existing.outputs.digest == ''
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          build-args: ${{ matrix.build_args }}
+          platforms: linux/amd64
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
+          sbom: false
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ matrix.image }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Scan (fail on critical vulnerabilities with a fix)
+        if: steps.existing.outputs.digest == ''
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.70.0
+          image-ref: ${{ env.REGISTRY }}/${{ matrix.image }}@${{ steps.build.outputs.digest }}
+          scanners: vuln
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+
+      - name: Install cosign
+        if: steps.existing.outputs.digest == ''
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+
+      - name: Sign (keyless, GitHub OIDC)
+        if: steps.existing.outputs.digest == ''
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${REGISTRY}/${IMAGE}@${DIGEST}"
+
+      - name: SBOM
+        if: steps.existing.outputs.digest == ''
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: ${{ env.REGISTRY }}/${{ matrix.image }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Attest SBOM
+        if: steps.existing.outputs.digest == ''
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ matrix.image }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          sbom-path: sbom.spdx.json
+          push-to-registry: true
+
+      - name: Attest build provenance
+        if: steps.existing.outputs.digest == ''
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ matrix.image }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Record digest
+        env:
+          DIGEST: ${{ steps.existing.outputs.digest || steps.build.outputs.digest }}
+        run: |
+          mkdir -p digests
+          echo "$DIGEST" > "digests/${IMAGE}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digest-${{ matrix.image }}
+          path: digests/${{ matrix.image }}
+          if-no-files-found: error
+          retention-days: 7
+
+  promote:
+    name: Tag images
+    needs: [verify, images]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      VERSION: ${{ needs.verify.outputs.version }}
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-*
+          merge-multiple: true
+          path: digests
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+
+      - name: Verify signatures and tag
+        env:
+          IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/release.yaml@refs/tags/${{ env.TAG }}
+        run: |
+          set -euo pipefail
+          for image in api dagster-webserver ui-central ui-datastation; do
+            digest="$(cat "digests/${image}")"
+            ref="${REGISTRY}/${image}"
+            # Only images signed by this workflow for this tag get a version tag.
+            cosign verify "${ref}@${digest}" \
+              --certificate-identity "$IDENTITY" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com > /dev/null
+            if current="$(docker buildx imagetools inspect "${ref}:${VERSION}" --format '{{json .Manifest.Digest}}' 2>&1)"; then
+              current="$(echo "$current" | tr -d '"')"
+              if [ "$current" != "$digest" ]; then
+                echo "::error::${ref}:${VERSION} already points at ${current}, not ${digest}; tags are never moved."
+                exit 1
+              fi
+              echo "${ref}:${VERSION} already at ${digest}"
+              continue
+            elif ! echo "$current" | grep -qiE "not found|manifest unknown"; then
+              # Anything but "no such tag" stops here, so an existing tag is never overwritten.
+              echo "::error::cannot inspect ${ref}:${VERSION}: ${current}"
+              exit 1
+            fi
+            # --prefer-index=false copies the manifest as is, so the tag gets exactly this digest.
+            docker buildx imagetools create --prefer-index=false --tag "${ref}:${VERSION}" "${ref}@${digest}"
+            tagged="$(docker buildx imagetools inspect "${ref}:${VERSION}" --format '{{json .Manifest.Digest}}' | tr -d '"')"
+            if [ "$tagged" != "$digest" ]; then
+              echo "::error::${ref}:${VERSION} points at ${tagged}, expected ${digest}."
+              exit 1
+            fi
+            echo "Tagged ${ref}:${VERSION} -> ${digest}"
+          done
+
+  package:
+    name: Build package
+    needs: [verify, promote]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # provenance attestation of the dist files
+      attestations: write
+    env:
+      VERSION: ${{ needs.verify.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: false
+
+      - name: Download digests
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-*
+          merge-multiple: true
+          path: digests
+
+      - name: Write images lock
+        run: |
+          args=()
+          for image in api dagster-webserver ui-central ui-datastation; do
+            args+=(--digest "${image}=$(cat "digests/${image}")")
+          done
+          uv run --frozen --no-dev --python 3.13 python -m pluginlake.deploy.images write --version "$VERSION" "${args[@]}"
+          cat src/pluginlake/deploy/stack/images.json
+
+      - name: Build
+        run: uv build --python 3.13
+
+      - name: Check the wheel ships the stack and the lock
+        run: |
+          uv venv --python 3.13 /tmp/check
+          uv pip install --python /tmp/check/bin/python dist/*.whl
+          cd /tmp
+          /tmp/check/bin/pluginlake up --help > /dev/null
+          /tmp/check/bin/python -c "from pluginlake.deploy.images import PROD_COMPOSE_FILE, released_image_env; assert PROD_COMPOSE_FILE.is_file(); print(released_image_env())"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*
+
+      - name: Upload dist
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  pypi:
+    name: Publish to PyPI
+    needs: package
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/pluginlake/
+    permissions:
+      id-token: write # trusted publishing
+    steps:
+      - name: Download dist
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist
+
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+        with:
+          # Re-run after a later failure: the version is already on PyPI.
+          skip-existing: true
+
+  assets:
+    name: Attach dist to the release
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download dist
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist
+
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"

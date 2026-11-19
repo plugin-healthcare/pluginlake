@@ -97,21 +97,23 @@ just ci           # Run all checks (lint + test + secure)
 
 ## Production
 
-Start the production deployment:
+A station runs the released, signed images without a checkout:
 
 ```bash
-just up
+uv tool install pluginlake
+pluginlake up -d     # in the station directory: pluginlake.toml, .env.production, secrets/
 ```
 
-This runs the full container architecture:
+See [docs/guides/deploying-a-station.md](docs/guides/deploying-a-station.md) for the setup and [SECURITY.md](SECURITY.md) for the security measures and how to report a vulnerability.
+`just up` starts the same production stack with images built from a checkout. It runs:
 
 | Container           | Image                           | Purpose                                       |
 | ------------------- | ------------------------------- | --------------------------------------------- |
 | postgres            | `dhi.io/postgres:17-alpine3.24` | Dagster metadata storage                      |
-| dagster-webserver   | `dagster-webserver.Dockerfile`  | Web UI (port 3000)                            |
-| dagster-daemon      | `dagster-webserver.Dockerfile`  | Schedules, sensors, run queue                 |
-| dagster-code-server | `pluginlake.Dockerfile`         | Serves asset definitions via gRPC (port 4000) |
-| pluginlake          | `pluginlake.Dockerfile`         | FastAPI service                               |
+| dagster-webserver   | `dagster-webserver`             | Web UI (port 3000, loopback)                  |
+| dagster-daemon      | `dagster-webserver`             | Schedules, sensors, run queue                 |
+| dagster-code-server | `api`                           | Serves asset definitions via gRPC (internal)  |
+| pluginlake          | `api`                           | FastAPI service (port 8000)                   |
 
 Stop with `just down`.
 

@@ -9,6 +9,7 @@ from pluginlake.cli.up import run_down, run_up
 from pluginlake.cli.verify import run_verify
 
 _DEFAULT_CONFIG = Path("pluginlake.toml")
+_DEV_HELP = "Use the dev stack of a source checkout (built from source) instead of the released images."
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -51,10 +52,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "up", parents=[config_parent], help="Deploy the station stack with the configured projects."
     )
     up_parser.add_argument("-d", "--detach", action="store_true", help="Run containers in the background.")
-    up_parser.add_argument("--no-build", action="store_true", help="Do not rebuild images before starting.")
+    up_parser.add_argument("--no-build", action="store_true", help="Do not rebuild images before starting (--dev).")
+    up_parser.add_argument("--dev", action="store_true", help=_DEV_HELP)
 
-    down_parser = subparsers.add_parser("down", help="Stop the station stack (all profiles).")
+    down_parser = subparsers.add_parser("down", parents=[config_parent], help="Stop the station stack (all profiles).")
     down_parser.add_argument("-v", "--volumes", action="store_true", help="Also remove named volumes.")
+    down_parser.add_argument("--dev", action="store_true", help=_DEV_HELP)
 
     return parser
 
@@ -82,10 +85,10 @@ def main(argv: list[str] | None = None) -> int:
         return run_verify(project=args.project)
 
     if args.command == "up":
-        return run_up(config_path=args.config, detach=args.detach, build=not args.no_build)
+        return run_up(config_path=args.config, detach=args.detach, build=not args.no_build, dev=args.dev)
 
     if args.command == "down":
-        return run_down(volumes=args.volumes)
+        return run_down(volumes=args.volumes, dev=args.dev, config_path=args.config)
 
     parser.print_help()
     return 0

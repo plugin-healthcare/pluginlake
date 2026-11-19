@@ -9,18 +9,21 @@ pluginlake uses separate containers for each concern:
 | Container | Dockerfile | Purpose |
 |-----------|-----------|---------|
 | **postgres** | `dhi.io/postgres:17-alpine3.24` (pre-built) | Dagster metadata + DuckLake catalog |
-| **dagster-webserver** | `dagster-webserver.Dockerfile` | Dagster web UI |
-| **dagster-daemon** | `dagster-webserver.Dockerfile` | Schedules, sensors, run queue |
-| **dagster-code-server** | `pluginlake.Dockerfile` | Asset definitions served via gRPC |
-| **pluginlake** | `pluginlake.Dockerfile` | FastAPI service |
-| **pluginlake-ui** | `ui.Dockerfile` (`APP=datastation`) | Datastation Streamlit dashboard |
-| **pluginlake-central** | `ui.Dockerfile` (`APP=central`) | Central aggregation dashboard |
+| **dagster-webserver** | `dagster-webserver.Dockerfile` (image `dagster-webserver`) | Dagster web UI |
+| **dagster-daemon** | `dagster-webserver.Dockerfile` (image `dagster-webserver`) | Schedules, sensors, run queue |
+| **dagster-code-server** | `api.Dockerfile` (image `api`) | Asset definitions served via gRPC |
+| **pluginlake** | `api.Dockerfile` (image `api`) | FastAPI service |
+| **dashboard-datastation** | `ui.Dockerfile` (`APP=datastation`, image `ui-datastation`) | Datastation Streamlit dashboard (profile `ui`) |
+| **pluginlake-central** | `ui.Dockerfile` (`APP=central`, image `ui-central`) | Central aggregation dashboard |
 | **prometheus** | `quay.io/prometheus/prometheus` (pre-built) | Metrics store, profile `monitoring` |
 | **postgres-exporter** | `quay.io/prometheuscommunity/postgres-exporter` (pre-built) | Postgres metrics, profile `monitoring` |
 | **cadvisor** | `ghcr.io/google/cadvisor` (pre-built) | Container metrics, profile `monitoring` |
 | **marquez-db** | `dhi.io/postgres:17-alpine3.24` (pre-built) | Marquez database (profile `lineage`) |
 | **marquez** | `marquezproject/marquez:0.51.1` (pre-built) | OpenLineage receiver API (profile `lineage`) |
 | **marquez-web** | `marquezproject/marquez-web:0.51.1` (pre-built) | Lineage web UI, host loopback only (profile `lineage`) |
+
+Every image in the compose files is pinned by digest (`name:tag@sha256:...`), and so is every base image in the Dockerfiles; Dependabot proposes updates for both.
+Our own four images are released to `ghcr.io/plugin-healthcare/pluginlake/<image>` by the release workflow, see [security](security.md).
 
 The monitoring services only start with `--profile monitoring` (or `[monitoring] enabled = true` with `pluginlake up`); see the [monitoring guide](monitoring.md).
 
@@ -39,28 +42,33 @@ This uses `deploy/compose/docker-compose.dev.yaml`. Source code is volume-mounte
 
 ### Production
 
+Stations run the production stack with the released images through `pluginlake up`, without a checkout; see [deploying a station](deploying-a-station.md).
+The stack is part of the package: `src/pluginlake/deploy/stack/docker-compose.yaml`, with the Prometheus and Marquez configuration next to it.
+It has no `build:` sections; our images are set through `PLUGINLAKE_IMAGE_*` variables from the images lock.
+
+To test the production stack with images built from a checkout:
+
 ```bash
-just up            # Build and start all production containers
-just down          # Stop and remove production containers
+just up            # Build the images and start the production stack
+just down          # Stop and remove the production containers
 ```
 
-This uses `deploy/compose/docker-compose.yaml`. Images are fully self-contained — no volume mounts for source code.
+This adds `deploy/compose/docker-compose.build.yaml` (the `build:` sections) and uses `deploy/compose/` as compose project directory, so it reads `deploy/compose/.env.production` and `deploy/compose/secrets/`.
 
 ### Building individual images
 
 ```bash
-# From the project root:
-docker build -f deploy/docker/pluginlake.Dockerfile -t pluginlake .
-docker build -f deploy/docker/dagster-webserver.Dockerfile -t dagster-webserver .
+just images        # api, dagster-webserver, ui-datastation and ui-central, tagged pluginlake/<image>:local
 ```
 
-The build context is always the project root (`../../` in the compose files) because Dockerfiles need access to `pyproject.toml`, `uv.lock`, `src/`, and `config/`.
+The build context is always the project root because the Dockerfiles need access to `pyproject.toml`, `uv.lock`, `src/`, and `config/`.
+The `Images` workflow builds the same four images on every pull request and push to main.
 
 ## Projects and database provisioning
 
 The development images (`pluginlake.dev.Dockerfile` and `dagster.dev.Dockerfile`) share the entrypoint `deploy/docker/entrypoint.sh`.
 It runs before the service starts and reads `PLUGINLAKE_PROJECTS`: whitespace-separated `uv pip install` arguments for the project packages to install.
-The production images used by `just up` do not run this entrypoint, so the variable has no effect there.
+The production images do not run this entrypoint, so the variable has no effect there: the production stack does not install projects yet.
 
 Projects register themselves through the `pluginlake.projects` entry point, so the core discovers their code locations and routers without importing project code (ADR-009).
 In development, point `PLUGINLAKE_PROJECTS` at a local editable checkout:
@@ -99,13 +107,14 @@ It publishes the same host ports as the dev stack, so stop `just dev-up` first i
 
 ## Hardened base images
 
-All Dockerfiles use hardened images from `dhi.io/` instead of the default Docker Hub images:
+All Dockerfiles use hardened images from `dhi.io/` instead of the default Docker Hub images, pinned by digest:
 
 ```dockerfile
-FROM dhi.io/python:3.13-debian13-dev AS builder    # Build stage
-FROM dhi.io/python:3.13-debian13                    # Runtime stage
-FROM dhi.io/postgres:17-alpine3.24                  # Database
+FROM dhi.io/python:3.13-debian13-dev@sha256:... AS builder    # Build stage
+FROM dhi.io/python:3.13-debian13@sha256:...                    # Runtime stage
 ```
+
+Postgres (`dhi.io/postgres:17-alpine3.24@sha256:...`) is pinned the same way in the compose files.
 
 **Why hardened images?**
 
@@ -113,7 +122,7 @@ Standard images from Docker Hub (e.g. `python:3.13-slim`) ship with the full ups
 
 **Prerequisites:**
 
-Hardened images are distributed through Docker Hub and require authentication to pull. Before building any of the project's Docker images:
+Hardened images are distributed through Docker Hub and require authentication to pull, also on a station (the Postgres image). Before building any of the project's Docker images:
 
 1. Create an account at [hub.docker.com](https://hub.docker.com) if you don't have one.
 2. Log in from the CLI:
@@ -139,7 +148,7 @@ Hardened images are distributed through Docker Hub and require authentication to
 The `uv` binary is similarly pulled from a hardened image rather than installed via curl:
 
 ```dockerfile
-COPY --from=dhi.io/uv:0-debian13-dev /usr/local/bin/uv /usr/local/bin/uvx /usr/local/bin/
+COPY --from=dhi.io/uv:0-debian13-dev@sha256:... /usr/local/bin/uv /usr/local/bin/uvx /usr/local/bin/
 ```
 
 ## Multi-stage builds
@@ -160,19 +169,22 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 COPY src/ src/
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --no-editable
 ```
 
-**Stage 2 — Runtime:** Copy only the virtual environment and source code into the minimal runtime image:
+The build stage also compiles the bytecode and installs the DuckDB extensions (`ducklake`, `postgres`), because the runtime cannot write files or download extensions.
+
+**Stage 2 — Runtime:** Copy only the virtual environment into the minimal runtime image and switch to the non-root user:
 
 ```dockerfile
 FROM dhi.io/python:3.13-debian13
 
 WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
-COPY --from=builder /app/src /app/src
+COPY --from=builder /app/.duckdb /app/.duckdb
 
-ENV PATH="/app/.venv/bin:$PATH"
+ENV PATH="/app/.venv/bin:$PATH" HOME=/app
+USER 65532:65532
 ```
 
 ### Why this matters
@@ -203,27 +215,38 @@ The one exception is Dagster: `dagster.yaml` can only read its storage password 
 
 ### Secrets
 
-Both compose files declare their passwords as environment-sourced secrets:
+The dev and production compose provide the secrets differently, because compose only supports file secrets in services with a read-only root filesystem (the production stack, see [security](security.md)).
+
+**Production: one file per secret.** The station directory has a `secrets/` directory with one file per password; compose bind-mounts each file read-only at `/run/secrets/<name>`:
 
 ```yaml
 services:
   postgres:
+    read_only: true
     environment:
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
     secrets:
-      - source: postgres_password
-        uid: "70"        # the user the service runs as
-        mode: 0400
+      - postgres_password
 
 secrets:
   postgres_password:
-    environment: POSTGRES_PASSWORD   # read by docker compose, not by the container
+    file: ./secrets/postgres_password   # relative to the station directory
 ```
 
-`docker compose` reads the value from its own environment (the shell or an `--env-file`) and copies it into the container as `/run/secrets/<name>`, owned by the service user with mode `0400`.
-The secrets env file is never passed to `env_file:`, so the value is not in any container's environment.
+Without Swarm, compose ignores `uid`/`gid`/`mode` for file secrets and the container sees the host file with its host permissions.
+The services run as other users than the operator, so the files are `0644` inside a `0700` directory: other host users cannot reach them, the containers read them through the bind mount, which does not cross the directory.
+`pluginlake up` checks this: it refuses a `secrets/` directory that other users can access and missing or empty secret files, and warns about files the containers cannot read.
 
-File-based secrets (`file: ./secrets/x`) are not used: without Swarm, compose bind-mounts the host file with its host permissions and ignores `uid`/`mode`, so the file would have to be world-readable for non-root containers.
+**Dev: environment-sourced secrets.** The dev compose keeps a writable root filesystem and declares its passwords as environment-sourced secrets:
+
+```yaml
+secrets:
+  postgres_password:
+    environment: POSTGRES_PASSWORD   # read by docker compose from deploy/compose/.env
+```
+
+`docker compose` reads the value from its own environment and copies it into the container as `/run/secrets/<name>`.
+The env file is never passed to `env_file:`, so the value is not in any container's environment.
 
 How each service reads its secret:
 
@@ -231,7 +254,8 @@ How each service reads its secret:
 |---------|-------------|-----|
 | pluginlake API, code server, Dagster (DuckLake) | `ducklake_pg_password` | `DuckLakeSettings` (pydantic `secrets_dir`) |
 | Dagster webserver, daemon, code server, `dagster dev` | `dagster_pg_password` | `DagsterPostgresSettings` (in `pluginlake.deploy.dagster_env`), exported as `DAGSTER_PG_PASSWORD` by that launcher |
-| postgres | `postgres_password` | `POSTGRES_PASSWORD_FILE`, native in the image |
+| postgres, marquez-db | `postgres_password`, `marquez_db_password` | `POSTGRES_PASSWORD_FILE`, native in the image |
+| marquez | `marquez_db_password` | Exported as `POSTGRES_PASSWORD` for the Marquez process only by its compose entrypoint (`marquez.yml` reads the environment) |
 | postgres-exporter | `postgres_exporter_password` | `DATA_SOURCE_PASS_FILE`, native in the image |
 | Prometheus | `prometheus_remote_write_password` | `basic_auth.password_file`, set by its entrypoint |
 
@@ -257,7 +281,7 @@ Telemetry is disabled in both files.
 
 The production compose rotates the log of every container (`x-logging` anchor): Docker's `json-file` driver with at most 5 files of 10 MB per container, so up to 50 MB is kept on the host.
 Without it, Docker keeps logs without limit for as long as the container exists.
-Step stdout/stderr ends up in the `dagster-code-server` log, and a `print(df)` there writes data rows; do not print data, and change the limits in `docker-compose.yaml` if the station needs a shorter or longer retention.
+Step stdout/stderr ends up in the `dagster-code-server` log, and a `print(df)` there writes data rows; do not print data, and change the limits in the stack's `docker-compose.yaml` if the station needs a shorter or longer retention.
 
 ### Development: `deploy/compose/.env`
 
@@ -278,26 +302,18 @@ The dev containers do not load the root `.env`; it is only for `just dev-local` 
 Container settings are set explicitly in the compose file; extra non-secret settings (e.g. for a project) can go in `deploy/compose/.env.containers`, or another file selected with `PLUGINLAKE_ENV_FILE`.
 The dev stack mounts its one `postgres_password` secret under the names the settings read (`dagster_pg_password`, `ducklake_pg_password`).
 
-### Production: `.env.production` and `.env.production.secrets`
+### Production: `.env.production` and `secrets/`
 
-Production splits configuration from secrets:
+Production splits configuration from secrets, both in the station directory (next to `pluginlake.toml`):
 
-| File | Read by | Contains |
+| Path | Read by | Contains |
 |------|---------|----------|
-| `.env.production` | containers (`env_file`) and compose | users, database names, hosts |
-| `.env.production.secrets` | compose only (`--env-file`) | `POSTGRES_PASSWORD`, `DAGSTER_PG_PASSWORD`, `DUCKLAKE_PG_PASSWORD`, `POSTGRES_EXPORTER_PASSWORD`, `PROMETHEUS_REMOTE_WRITE_PASSWORD` |
+| `.env.production` | containers (`env_file`) and compose | users, database names, hosts, ports |
+| `secrets/<name>` | the services that mount the secret | `postgres_password`, `dagster_pg_password`, `ducklake_pg_password`; with monitoring `postgres_exporter_password` and `prometheus_remote_write_password` (may be empty; `pluginlake up` creates it empty); with lineage `marquez_db_password` |
 
-```bash
-cp deploy/compose/.env.production.example deploy/compose/.env.production
-cp deploy/compose/.env.production.secrets.example deploy/compose/.env.production.secrets
-chmod 600 deploy/compose/.env.production deploy/compose/.env.production.secrets
-# Edit both with real values, then:
-just up
-```
-
-`just up` and `just down` pass both files with `--env-file`.
-When running compose by hand, pass them too; compose refuses to start a service whose secret variable is not set.
-`POSTGRES_EXPORTER_PASSWORD` and `PROMETHEUS_REMOTE_WRITE_PASSWORD` are only needed when the `monitoring` profile starts; the latter may be empty when remote write is not used.
+The template for `.env.production` is `src/pluginlake/deploy/stack/templates/env.production.example`; [deploying a station](deploying-a-station.md) shows how to create the secrets.
+Secrets of the same database user hold the same password: with the template, `postgres_password`, `dagster_pg_password` and `ducklake_pg_password` are all the password of `dagster`.
+For `just up` from a checkout, put both in `deploy/compose/` (gitignored).
 
 ### Comparison
 
@@ -306,11 +322,12 @@ When running compose by hand, pass them too; compose refuses to start a service 
 | `environment:` in compose | Compose file (committed) | Yes | No | Never use for real secrets |
 | `.env` + `${VAR}` in `environment:` | `.env` file (gitignored) | Yes | No | Not used for secrets |
 | `env_file:` | Separate file (gitignored) | Yes | No | Non-secret configuration |
-| Compose `secrets:` (environment source) | Compose-only env file, copied to `/run/secrets/` | No | No | Our dev and production compose |
+| Compose `secrets:` (environment source) | Compose-only env file, copied to `/run/secrets/` | No | No | Our dev compose |
+| Compose `secrets:` (file source) | One file per secret, bind-mounted at `/run/secrets/` | No | No | Our production stack (read-only containers) |
 | Swarm `secrets:` | Raft log (encrypted) | No | Yes | Swarm production |
 | External vault | Vault/KMS | No | Yes | Kubernetes / regulated environments |
 
-Compose secrets are not encrypted at rest on the host: protect the secrets env file with file permissions (`chmod 600`).
+Compose secrets are not encrypted at rest on the host: protect the secret files with the directory permissions (`chmod 700 secrets`).
 Kubernetes and Swarm mount secrets as files too, so the same `/run/secrets/<name>` files work with the platform's secret store.
 
 ### What goes where
@@ -321,40 +338,39 @@ Kubernetes and Swarm mount secrets as files too, so the same `/run/secrets/<name
 | `DAGSTER_MODULE` | No | Which Python module to load |
 | `DAGSTER_PG_HOST` | No | Service name within the Docker network |
 | `DAGSTER_PG_USER` | No | `.env.production` |
-| `POSTGRES_PASSWORD` | **Yes** | Secret `postgres_password` |
+| `POSTGRES_PASSWORD` | **Yes** | Secret `postgres_password` (production: `secrets/postgres_password`) |
 | `DAGSTER_PG_PASSWORD` | **Yes** | Secret `dagster_pg_password` (production; dev uses `postgres_password`) |
 | `DUCKLAKE_PG_PASSWORD` | **Yes** | Secret `ducklake_pg_password` (production; dev uses `postgres_password`) |
 | `POSTGRES_EXPORTER_PASSWORD` | **Yes** | Secret `postgres_exporter_password` (production; dev uses `postgres_password`) |
 | `PROMETHEUS_REMOTE_WRITE_PASSWORD` | **Yes** | Secret `prometheus_remote_write_password`; never in `.env.monitoring` |
+| `MARQUEZ_DB_PASSWORD` | **Yes** | Secret `marquez_db_password` (production; dev sets it in `deploy/compose/.env`) |
 
 ## File layout
 
 ```text
+src/pluginlake/deploy/stack/              # Production stack, shipped in the package
+├── docker-compose.yaml                   # Hardened, digest-pinned production compose
+├── images.json                           # Images lock, written by the release workflow
+├── marquez/marquez.yml                   # Marquez API config (profile `lineage`)
+├── monitoring/prometheus/                # Prometheus entrypoint, config and scrape jobs
+└── templates/                            # env.production.example, env.monitoring.example
 deploy/
 ├── compose/
-│   ├── .env                          # Dev compose env and secret values (gitignored)
-│   ├── .env.example                  # Template for dev (committed)
-│   ├── .env.containers               # Optional extra non-secret settings for dev containers (gitignored)
-│   ├── .env.production               # Prod config, no passwords (gitignored)
-│   ├── .env.production.example       # Template for prod config (committed)
-│   ├── .env.production.secrets       # Prod passwords, compose-only (gitignored)
-│   ├── .env.production.secrets.example # Template for prod passwords (committed)
-│   ├── .env.monitoring               # Prometheus remote-write URL and username (gitignored)
-│   ├── .env.monitoring.example       # Template for Prometheus settings (committed)
-│   ├── smoke.env / smoke.secrets.env # Throwaway config and secrets for the smoke test (committed)
-│   ├── docker-compose.dev.yaml       # Dev: single dagster container + postgres + pluginlake + UI
-│   ├── docker-compose.central.yaml   # Central dashboard (separate compose)
-│   └── docker-compose.yaml           # Prod: separate webserver, daemon, code-server
-├── docker/
-│   ├── dagster.dev.Dockerfile         # Dev all-in-one dagster (single stage)
-│   ├── dagster-webserver.Dockerfile   # Prod webserver + daemon (multi-stage)
-│   ├── pluginlake.dev.Dockerfile      # Dev FastAPI (single stage)
-│   ├── pluginlake.Dockerfile          # Prod FastAPI + code-server (multi-stage)
-│   ├── ui.dev.Dockerfile              # Dev dashboards, APP=datastation|central (hot reload)
-│   └── ui.Dockerfile                  # Prod dashboards, APP=datastation|central (multi-stage)
-└── monitoring/
-    └── prometheus/
-        ├── entrypoint.sh              # Renders the config (labels, cAdvisor, remote_write)
-        ├── prometheus.yml             # Global config
-        └── scrape.d/                  # One scrape job per file
+│   ├── .env                              # Dev compose env and secret values (gitignored)
+│   ├── .env.example                      # Template for dev (committed)
+│   ├── .env.containers                   # Optional extra non-secret settings for dev containers (gitignored)
+│   ├── .env.production, secrets/         # Only for `just up` from a checkout (gitignored)
+│   ├── .env.monitoring                   # Prometheus remote-write URL and username (gitignored)
+│   ├── smoke.env / smoke.secrets.env     # Throwaway config and secrets for the smoke test (committed)
+│   ├── docker-compose.dev.yaml           # Dev: single dagster container + postgres + pluginlake + UI
+│   ├── docker-compose.build.yaml         # Builds the production images for `just up`
+│   ├── docker-compose.smoke.yaml         # Isolated volumes for the smoke test
+│   └── docker-compose.central.yaml       # Central dashboard (separate compose)
+└── docker/
+    ├── api.Dockerfile                    # Image `api`: FastAPI + code-server (multi-stage)
+    ├── dagster-webserver.Dockerfile      # Image `dagster-webserver`: webserver + daemon (multi-stage)
+    ├── ui.Dockerfile                     # Images `ui-datastation`, `ui-central` (multi-stage)
+    ├── dagster.dev.Dockerfile            # Dev all-in-one dagster (single stage)
+    ├── pluginlake.dev.Dockerfile         # Dev FastAPI (single stage)
+    └── ui.dev.Dockerfile                 # Dev dashboards, APP=datastation|central (hot reload)
 ```

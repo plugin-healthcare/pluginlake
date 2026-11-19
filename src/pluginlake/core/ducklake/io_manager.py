@@ -2,14 +2,14 @@
 
 from typing import TYPE_CHECKING
 
+import duckdb
 import polars as pl
 from dagster import IOManager, TableColumn, TableSchema, io_manager
 
-from pluginlake.core.ducklake.setup import setup_ducklake
+from pluginlake.core.ducklake.setup import ResourceLimitError, limit_exceeded_message, setup_ducklake
 from pluginlake.utils.logger import get_logger
 
 if TYPE_CHECKING:
-    import duckdb
     from dagster import InitResourceContext, InputContext, OutputContext
 
 logger = get_logger(__name__)
@@ -105,6 +105,10 @@ class DuckLakeIOManager(IOManager):
         Args:
             context: Dagster output context containing the asset key.
             obj: The Polars DataFrame or LazyFrame to persist.
+
+        Raises:
+            ResourceLimitError: If writing needs more memory or temporary disk
+                space than the DuckDB limits allow.
         """
         path = list(context.asset_key.path)
         schema, _ = _schema_and_table(path)
@@ -117,6 +121,9 @@ class DuckLakeIOManager(IOManager):
             self._conn.execute(
                 f"CREATE OR REPLACE TABLE {ref} AS SELECT * FROM _data"  # noqa: S608
             )
+        except duckdb.OutOfMemoryException as exc:
+            msg = f"Writing {ref}: {limit_exceeded_message()}"
+            raise ResourceLimitError(msg) from exc
         finally:
             self._conn.unregister("_data")
 
@@ -166,6 +173,8 @@ def ducklake_io_manager(_init_context: "InitResourceContext") -> DuckLakeIOManag
     attach the DuckLake catalog, then wraps the connection in a
     :class:`DuckLakeIOManager`.
 
+    Returns:
+        The IO manager on the attached DuckLake catalog.
     """
     conn = setup_ducklake()
     return DuckLakeIOManager(conn)

@@ -1,4 +1,4 @@
-"""Consistency tests for the monitoring deploy config (``deploy/monitoring``, compose profile)."""
+"""Consistency tests for the monitoring deploy config (``stack/monitoring``, compose profile)."""
 
 from pathlib import Path
 
@@ -6,15 +6,16 @@ import pytest
 import yaml
 
 from pluginlake.api.config import MetricsSettings
+from pluginlake.deploy.images import PROD_COMPOSE_FILE, STACK_DIR
 
-DEPLOY_DIR = Path(__file__).resolve().parents[4] / "deploy"
-PROMETHEUS_DIR = DEPLOY_DIR / "monitoring" / "prometheus"
-COMPOSE_FILES = ["docker-compose.dev.yaml", "docker-compose.yaml"]
+DEV_COMPOSE_FILE = Path(__file__).resolve().parents[4] / "deploy" / "compose" / "docker-compose.dev.yaml"
+PROMETHEUS_DIR = STACK_DIR / "monitoring" / "prometheus"
+COMPOSE_FILES = [DEV_COMPOSE_FILE, PROD_COMPOSE_FILE]
 MONITORING_SERVICES = {"prometheus", "postgres-exporter", "cadvisor"}
 
 
-def _compose(name: str) -> dict:
-    return yaml.safe_load((DEPLOY_DIR / "compose" / name).read_text(encoding="utf-8"))
+def _compose(path: Path) -> dict:
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
 def _scrape_targets() -> dict[str, list[str]]:
@@ -39,8 +40,8 @@ def test_pluginlake_target_matches_metrics_port():
     assert _scrape_targets()["pluginlake"] == [f"pluginlake:{MetricsSettings().port}"]
 
 
-@pytest.mark.parametrize("compose_file", COMPOSE_FILES)
-def test_scrape_targets_exist_as_services(compose_file: str):
+@pytest.mark.parametrize("compose_file", COMPOSE_FILES, ids=lambda p: p.name)
+def test_scrape_targets_exist_as_services(compose_file: Path):
     services = _compose(compose_file)["services"]
     for job, targets in _scrape_targets().items():
         for target in targets:
@@ -49,15 +50,15 @@ def test_scrape_targets_exist_as_services(compose_file: str):
                 assert host in services, f"{job} target {host} missing in {compose_file}"
 
 
-@pytest.mark.parametrize("compose_file", COMPOSE_FILES)
-def test_monitoring_services_use_profile(compose_file: str):
+@pytest.mark.parametrize("compose_file", COMPOSE_FILES, ids=lambda p: p.name)
+def test_monitoring_services_use_profile(compose_file: Path):
     services = _compose(compose_file)["services"]
     for name in MONITORING_SERVICES:
         assert services[name]["profiles"] == ["monitoring"]
 
 
-@pytest.mark.parametrize("compose_file", COMPOSE_FILES)
-def test_metrics_not_published(compose_file: str):
+@pytest.mark.parametrize("compose_file", COMPOSE_FILES, ids=lambda p: p.name)
+def test_metrics_not_published(compose_file: Path):
     services = _compose(compose_file)["services"]
     port = str(MetricsSettings().port)
     assert port in services["pluginlake"]["expose"]
@@ -67,14 +68,14 @@ def test_metrics_not_published(compose_file: str):
     assert all(str(p).startswith("127.0.0.1:") for p in services["prometheus"]["ports"])
 
 
-@pytest.mark.parametrize("compose_file", COMPOSE_FILES)
-def test_postgres_exporter_skips_table_level_collectors(compose_file: str):
+@pytest.mark.parametrize("compose_file", COMPOSE_FILES, ids=lambda p: p.name)
+def test_postgres_exporter_skips_table_level_collectors(compose_file: Path):
     command = _compose(compose_file)["services"]["postgres-exporter"]["command"]
     assert "--no-collector.stat_user_tables" in command
     assert "--no-collector.statio_user_tables" in command
 
 
-@pytest.mark.parametrize("compose_file", COMPOSE_FILES)
-def test_cadvisor_does_not_store_container_labels(compose_file: str):
+@pytest.mark.parametrize("compose_file", COMPOSE_FILES, ids=lambda p: p.name)
+def test_cadvisor_does_not_store_container_labels(compose_file: Path):
     command = _compose(compose_file)["services"]["cadvisor"]["command"]
     assert "--store_container_labels=false" in command

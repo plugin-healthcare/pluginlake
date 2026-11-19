@@ -7,6 +7,7 @@ and auth placeholder behaviour.
 import logging
 from http import HTTPStatus
 
+import duckdb
 import pytest
 from fastapi import APIRouter, Depends
 from starlette.testclient import TestClient
@@ -106,6 +107,25 @@ def test_domain_error_returns_custom_status(app, client):
     resp = client.get("/domain-error")
     assert resp.status_code == HTTPStatus.NOT_FOUND
     assert resp.json() == {"detail": "Not found"}
+
+
+def test_duckdb_out_of_memory_returns_507_with_limits(app, client, monkeypatch):
+    monkeypatch.setenv("DUCKLAKE_MEMORY_LIMIT", "64MB")
+    router = APIRouter()
+
+    @router.get("/too-big")
+    def _too_big():
+        conn = duckdb.connect()
+        conn.execute("SET memory_limit = '32MB'")
+        conn.execute("SET temp_directory = ''")
+        conn.execute("SELECT i % 100000 AS g, list(i) FROM range(5000000) t(i) GROUP BY g").fetchall()
+
+    app.include_router(router)
+
+    resp = client.get("/too-big")
+    assert resp.status_code == HTTPStatus.INSUFFICIENT_STORAGE
+    assert "64MB of memory" in resp.json()["detail"]
+    assert "DUCKLAKE_MEMORY_LIMIT" in resp.json()["detail"]
 
 
 # ---------------------------------------------------------------------------

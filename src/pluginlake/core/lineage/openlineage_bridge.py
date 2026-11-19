@@ -200,6 +200,9 @@ def build_run_events(
 def create_client(settings: LineageSettings) -> OpenLineageClient:
     """Create an OpenLineage HTTP client for the configured backend.
 
+    Returns:
+        The client.
+
     Raises:
         ValueError: If no backend URL is configured.
     """

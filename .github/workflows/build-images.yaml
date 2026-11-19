@@ -1,0 +1,103 @@
+# Reusable: builds the four images without pushing and scans them with Trivy.
+# Called by images.yaml; the caller decides the permissions and the scan mode.
+name: Build images
+
+on:
+  workflow_call:
+    inputs:
+      report:
+        description: "Upload all fixable HIGH/CRITICAL findings to the Security tab instead of failing on CRITICAL."
+        type: boolean
+        required: true
+    secrets:
+      DHI_USERNAME:
+        required: false
+      DHI_TOKEN:
+        required: false
+
+# No permissions here: the job inherits them from the calling job in images.yaml
+# (contents: read for pull requests, plus security-events: write for the report).
+
+jobs:
+  build:
+    name: ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: api
+            dockerfile: deploy/docker/api.Dockerfile
+          - image: dagster-webserver
+            dockerfile: deploy/docker/dagster-webserver.Dockerfile
+          - image: ui-central
+            dockerfile: deploy/docker/ui.Dockerfile
+            build_args: |
+              APP=central
+              PORT=8502
+          - image: ui-datastation
+            dockerfile: deploy/docker/ui.Dockerfile
+            build_args: |
+              APP=datastation
+              PORT=8501
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # The base images come from Docker Hardened Images (dhi.io), which needs a Docker account.
+      - name: Log in to dhi.io
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: dhi.io
+          username: ${{ secrets.DHI_USERNAME }}
+          password: ${{ secrets.DHI_TOKEN }}
+
+      - name: Build ${{ matrix.image }}
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          build-args: ${{ matrix.build_args }}
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: pluginlake/${{ matrix.image }}:ci
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+      - name: Fail on critical vulnerabilities with a fix
+        if: ${{ !inputs.report }}
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.70.0
+          image-ref: pluginlake/${{ matrix.image }}:ci
+          scanners: vuln
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+
+      - name: Scan for the Security tab
+        if: ${{ inputs.report }}
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.70.0
+          image-ref: pluginlake/${{ matrix.image }}:ci
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "0"
+          format: sarif
+          output: trivy-${{ matrix.image }}.sarif
+
+      - name: Upload findings to the Security tab
+        if: ${{ inputs.report }}
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: trivy-${{ matrix.image }}.sarif
+          category: trivy-${{ matrix.image }}

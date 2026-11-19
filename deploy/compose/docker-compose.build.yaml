@@ -1,0 +1,33 @@
+# Builds the production images from this checkout instead of pulling the released ones.
+# Only for testing the packaged production stack locally (`just up`); stations run the
+# released, digest-pinned images through `pluginlake up`. The justfile sets
+# PLUGINLAKE_IMAGE_* to the local tags below.
+
+services:
+  dagster-webserver:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/dagster-webserver.Dockerfile
+
+  dagster-daemon:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/dagster-webserver.Dockerfile
+
+  dagster-code-server:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/api.Dockerfile
+
+  pluginlake:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/api.Dockerfile
+
+  dashboard-datastation:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/ui.Dockerfile
+      args:
+        APP: datastation
+        PORT: "8501"

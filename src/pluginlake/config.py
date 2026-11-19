@@ -57,7 +57,10 @@ def secrets_dir() -> Path | None:
     Compose mounts secrets as ``/run/secrets/<env_prefix><field>`` (lowercase), so a
     settings class with ``settings_config(..., secrets=True)`` reads e.g. ``DUCKLAKE_PG_PASSWORD``
     from ``/run/secrets/ducklake_pg_password``. Environment variables take precedence.
-    Returns ``None`` outside containers, where pydantic would warn about a missing directory.
+
+    Returns:
+        The secrets directory, or ``None`` outside containers (where pydantic would
+        warn about a missing directory).
     """
     return SECRETS_DIR if SECRETS_DIR.is_dir() else None
 

@@ -3,10 +3,11 @@
 import threading
 import time
 from functools import cache
+from pathlib import Path
 
 import duckdb
 
-from pluginlake.core.config import DuckLakeSettings
+from pluginlake.core.config import DuckDBLimitSettings, DuckLakeSettings
 from pluginlake.core.storage.base import StorageBackend
 from pluginlake.core.storage.local import LocalStorageBackend
 from pluginlake.utils import postgres
@@ -16,6 +17,51 @@ logger = get_logger(__name__)
 
 _ATTACH_ATTEMPTS = 3
 _shared_lock = threading.Lock()
+
+
+class ResourceLimitError(RuntimeError):
+    """A DuckDB query needed more memory or temporary disk space than allowed."""
+
+
+def limit_exceeded_message(limits: DuckDBLimitSettings | None = None) -> str:
+    """Explain a :class:`duckdb.OutOfMemoryException` to the user.
+
+    Args:
+        limits: The configured limits; loaded from the environment if None.
+
+    Returns:
+        A message with the limits and what to do, without query details.
+    """
+    limits = limits or DuckDBLimitSettings()
+    spill = (
+        f"{limits.max_temp_directory_size} of temporary disk space"
+        if limits.temp_directory
+        else "no temporary disk space (spilling is disabled)"
+    )
+    return (
+        f"The query needs more resources than this station allows: {limits.memory_limit} of memory and {spill}. "
+        "Narrow the query (filters, fewer columns, smaller batches), or ask the operator to raise "
+        "DUCKLAKE_MEMORY_LIMIT or DUCKLAKE_MAX_TEMP_DIRECTORY_SIZE."
+    )
+
+
+def apply_resource_limits(conn: duckdb.DuckDBPyConnection, limits: DuckDBLimitSettings | None = None) -> None:
+    """Set the memory and spill limits on a DuckDB connection.
+
+    Without a limit DuckDB takes 80% of the host memory, so a large query could get
+    the whole container killed instead of failing with a clear error.
+
+    Args:
+        conn: The connection to configure.
+        limits: The limits; loaded from the environment if None.
+    """
+    limits = limits or DuckDBLimitSettings()
+    conn.execute(f"SET memory_limit = '{limits.memory_limit}'")
+    if limits.temp_directory:
+        # DuckDB only creates the last path component itself.
+        Path(limits.temp_directory).mkdir(parents=True, exist_ok=True)
+    conn.execute(f"SET temp_directory = '{limits.temp_directory}'")
+    conn.execute(f"SET max_temp_directory_size = '{limits.max_temp_directory_size}'")
 
 
 def _resolve_storage_backend(settings: DuckLakeSettings) -> StorageBackend:
@@ -48,6 +94,7 @@ def ensure_database(settings: DuckLakeSettings) -> None:
 def _open_connection(backend: StorageBackend, *, pg_connection_cache: bool) -> duckdb.DuckDBPyConnection:
     """Open an in-memory DuckDB connection with DuckLake loaded and storage configured."""
     conn = duckdb.connect()
+    apply_resource_limits(conn)
     conn.execute("INSTALL ducklake")
     conn.execute("LOAD ducklake")
     if not pg_connection_cache:
@@ -77,6 +124,9 @@ def create_connection(
 
     Returns:
         A ready-to-use DuckDB connection with the ``ducklake`` catalog attached.
+
+    Raises:
+        duckdb.Error: If the catalog cannot be attached.
     """
     if backend is None:
         backend = _resolve_storage_backend(settings)
