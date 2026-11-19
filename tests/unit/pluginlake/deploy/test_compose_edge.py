@@ -238,22 +238,23 @@ def test_sign_in_returns_to_the_requested_page():
 def test_browser_applications_sign_out_a_user_without_the_role():
     http = _routes()
     assert http["middlewares"]["sso-forbidden"]["errors"]["statusRewrites"] == {"403": 302}
-    for app in ("console", "dagster", "marquez", "prometheus"):
+    for app in ("console", "dagster", "lineage", "prometheus"):
         assert "sso-forbidden" in http["routers"][app]["middlewares"], app
 
 
 def test_browser_applications_show_the_starting_page_on_server_errors():
     http = _routes()
     assert http["middlewares"]["sso-starting"]["errors"]["service"] in http["services"]
-    for app in ("console", "dagster", "marquez", "prometheus"):
+    for app in ("console", "dagster", "lineage", "prometheus"):
         assert http["routers"][app]["middlewares"][0] == "sso-starting", app
 
 
-def test_each_application_requires_the_role_with_its_own_name():
+def test_each_application_requires_its_existing_role():
     http = _routes()
     for app in BootstrapSettings().protected_subdomains:
         assert f"sso-auth-{app}" in http["routers"][app]["middlewares"], app
-        assert http["middlewares"][f"sso-auth-{app}"]["forwardAuth"]["address"].endswith(f"?allowed_groups={app}"), app
+        role = "marquez" if app == "lineage" else app
+        assert http["middlewares"][f"sso-auth-{app}"]["forwardAuth"]["address"].endswith(f"?allowed_groups={role}"), app
 
 
 def _bootstrap(responses: dict[str, dict], **settings) -> tuple[ZitadelBootstrap, list[tuple[str, str, dict]]]:

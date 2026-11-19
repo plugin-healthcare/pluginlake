@@ -311,7 +311,7 @@ class ZitadelBootstrap:
         response = self.client.post(f"{_API}/projects/{project_id}/roles/_search", json={})
         response.raise_for_status()
         existing = {role["key"] for role in response.json().get("result") or []}
-        created = [role for role in self.settings.protected_subdomains if role not in existing]
+        created = [role for role in self.settings.protected_roles if role not in existing]
         for role in created:
             self.client.post(
                 f"{_API}/projects/{project_id}/roles", json={"roleKey": role, "displayName": role}
@@ -391,7 +391,7 @@ class ZitadelBootstrap:
             new_roles: The roles that were created in this run.
         """
         admin_username = self.settings.admin_username
-        roles = self.settings.protected_subdomains
+        roles = self.settings.protected_roles
         query = {
             "queries": [
                 {"userNameQuery": {"userName": f"{admin_username}@", "method": "TEXT_QUERY_METHOD_STARTS_WITH"}}

@@ -107,7 +107,7 @@ flowchart LR
     traefik --> api[api. pluginlake]
     traefik --> dagster[dagster.]
     traefik --> dash[console.]
-    traefik --> marquez[marquez.]
+    traefik --> marquez[lineage.]
     traefik --> prom[prometheus.]
     zitadel --> pg[(Postgres)]
     api --> pg
@@ -120,7 +120,7 @@ flowchart LR
 | `api.<domain>` | pluginlake API | Yes |
 | `dagster.<domain>` | Dagster webserver | Yes |
 | `console.<domain>` | Start page: Streamlit console with the links to the other applications | Yes |
-| `marquez.<domain>` | Marquez web | Yes |
+| `lineage.<domain>` | Marquez web (role: `marquez`) | Yes |
 | `prometheus.<domain>` | Prometheus | Yes |
 
 `[node] domain` in `pluginlake.toml` sets the domain.

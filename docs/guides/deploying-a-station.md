@@ -60,7 +60,7 @@ just up -d
 This prepares the node data folder, builds the images and starts the stack.
 The production stack does not install the `[[projects]]` of `pluginlake.toml` yet, because its images are read-only and have no install step at start.
 Projects are installed by `pluginlake up`, which drives the development compose stack.
-Every application is reached on its own subdomain of `[node] domain` and sits behind the login, for example `https://console.<domain>`, `https://dagster.<domain>`, `https://marquez.<domain>` and `https://api.<domain>/docs`.
+Every application is reached on its own subdomain of `[node] domain` and sits behind the login, for example `https://console.<domain>`, `https://dagster.<domain>`, `https://lineage.<domain>` and `https://api.<domain>/docs`.
 The [Docker guide](docker.md#edge) describes the edge, the roles and the secrets.
 
 Verify that the configured projects conform to the plugin contract and are wired correctly:
@@ -77,7 +77,7 @@ Data stays in the node data folder and is never removed by stopping or restartin
 Every station runs [Marquez](https://marquezproject.ai) as the receiver for OpenLineage events (ADR-007).
 Core registers the `openlineage_sensor`, which sends one OpenLineage event per materialized asset: upstream assets as inputs, the DuckLake table as output, and the schema, row count and column lineage from the asset metadata.
 Events contain no data values, projects do not need to register anything, and a failed send only logs a warning.
-The Marquez UI is available at `https://marquez.<domain>` after login.
+The Marquez UI is available at `https://lineage.<domain>` after login.
 
 Give each node its own namespace, so jobs from different stations stay apart:
 

@@ -50,7 +50,7 @@ Its sidebar links to the other applications, and only shows the ones your roles 
 |-------------|---------|
 | Console | `https://console.pluginlake.localhost` |
 | Dagster | `https://dagster.pluginlake.localhost` |
-| Lineage (Marquez) | `https://marquez.pluginlake.localhost` |
+| Lineage (Marquez) | `https://lineage.pluginlake.localhost` |
 | Metrics (Prometheus) | `https://prometheus.pluginlake.localhost` |
 | API documentation | `https://api.pluginlake.localhost/docs` |
 

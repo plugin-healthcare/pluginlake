@@ -10,7 +10,7 @@ from config import DashboardSettings
 def visible_links(settings: DashboardSettings, groups: set[str]) -> dict[str, str]:
     """Return label and URL of each web interface the user has the role for."""
     return {
-        label: f"https://{name}.{settings.domain}/{'docs' if name == 'api' else ''}"
+        label: f"https://{'lineage' if name == 'marquez' else name}.{settings.domain}/{'docs' if name == 'api' else ''}"
         for name, label in {**settings.apps, "api": "API documentation"}.items()
         if name in groups
     }

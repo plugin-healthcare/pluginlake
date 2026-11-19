@@ -360,7 +360,7 @@ services:
 
   # ---------------------------------------------------------------------------
   # Lineage (ADR-007), part of every node. Marquez has no authentication of its own,
-  # so the web UI is only reachable at marquez.<domain> behind the proxy.
+  # so the web UI is only reachable at lineage.<domain> behind the proxy.
   # OpenLineage endpoint inside the compose network: http://marquez:5000/api/v1/lineage
   # ---------------------------------------------------------------------------
   marquez:

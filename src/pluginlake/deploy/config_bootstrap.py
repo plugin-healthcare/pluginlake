@@ -5,6 +5,8 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from pluginlake.deploy.routes import APPLICATIONS, application_role
+
 
 class BootstrapSettings(BaseSettings):
     """Settings for ``python -m pluginlake.deploy.bootstrap``.
@@ -16,7 +18,7 @@ class BootstrapSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="PLUGINLAKE_BOOTSTRAP_", extra="ignore")
 
     domain: str = "pluginlake.localhost"
-    protected_subdomains: list[str] = ["api", "console", "dagster", "marquez", "prometheus"]
+    protected_subdomains: list[str] = list(APPLICATIONS)
     zitadel_url: str = "http://zitadel-api:8080"
     admin_pat_file: Path = Path("/bootstrap/admin/admin.pat")
     admin_granted_file: Path = Path("/bootstrap/admin/admin-granted")
@@ -41,3 +43,8 @@ class BootstrapSettings(BaseSettings):
     def protected_hosts(self) -> list[str]:
         """Public hostnames that sit behind the forward-auth proxy."""
         return [self.domain, *(f"{name}.{self.domain}" for name in self.protected_subdomains)]
+
+    @property
+    def protected_roles(self) -> list[str]:
+        """Zitadel roles required by the configured public hosts."""
+        return [application_role(name) for name in self.protected_subdomains]

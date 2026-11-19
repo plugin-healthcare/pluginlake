@@ -48,7 +48,7 @@ class DashboardSettings(BaseSettings):
             "marquez": "Lineage (Marquez)",
             "prometheus": "Metrics (Prometheus)",
         },
-        description="Subdomain and label of each linked web interface. A user sees a link for each role they have.",
+        description="Zitadel role and label of each linked web interface.",
     )
     datastation_id: str = Field(
         default="ds-local-001",
