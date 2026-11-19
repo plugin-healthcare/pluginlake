@@ -73,16 +73,20 @@ The station directory holds:
 | `secrets/` | One file per password, see [secrets](docker.md#secrets) |
 
 `pluginlake up` prints the template path when `.env.production` is missing.
-Create the secrets (directory `0700`, files `0644`):
+Create the secrets (directory `0700`, files `0644`).
+The template uses one database user (`dagster`) for Postgres, Dagster and DuckLake, so the three files hold the same password; a different password per file fails with `password authentication failed for user "dagster"`.
 
 ```bash
 install -d -m 700 secrets
+password="$(openssl rand -base64 32 | tr -d '\n')"
 for name in postgres_password dagster_pg_password ducklake_pg_password; do
-  openssl rand -base64 32 | tr -d '\n' > "secrets/$name"
+  printf '%s' "$password" > "secrets/$name"
 done
 # With [monitoring]: postgres_exporter_password. With lineage: marquez_db_password.
 chmod 644 secrets/*
 ```
+
+Postgres only sets the password when it creates its volume: changing `secrets/postgres_password` later does not change the password of the database user.
 
 The images come from `ghcr.io/plugin-healthcare/pluginlake/` and the base images of Postgres from `dhi.io`; log in to the registries that are not public for your node (see [security](security.md#registries)).
 Then start the station:

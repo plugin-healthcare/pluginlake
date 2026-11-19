@@ -312,6 +312,7 @@ Production splits configuration from secrets, both in the station directory (nex
 | `secrets/<name>` | the services that mount the secret | `postgres_password`, `dagster_pg_password`, `ducklake_pg_password`; with monitoring `postgres_exporter_password` and `prometheus_remote_write_password` (may be empty; `pluginlake up` creates it empty); with lineage `marquez_db_password` |
 
 The template for `.env.production` is `src/pluginlake/deploy/stack/templates/env.production.example`; [deploying a station](deploying-a-station.md) shows how to create the secrets.
+Secrets of the same database user hold the same password: with the template, `postgres_password`, `dagster_pg_password` and `ducklake_pg_password` are all the password of `dagster`.
 For `just up` from a checkout, put both in `deploy/compose/` (gitignored).
 
 ### Comparison

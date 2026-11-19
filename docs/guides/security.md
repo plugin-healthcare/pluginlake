@@ -7,10 +7,10 @@ To report a vulnerability, see [SECURITY.md](https://github.com/plugin-healthcar
 
 | Area | Measure | Enforced by |
 |------|---------|-------------|
-| Source of images | Our images are built, scanned, signed and attested only by the release workflow, from a tag on `main` | `release.yaml` |
+| Source of images | Our images are built, scanned, signed and attested only by the release workflow, from a tag on `main` | `release.yaml`, tag ruleset for `v*` |
 | Image references | Every image a station runs is pinned by digest | Images lock, `test_compose_hardening.py` |
 | Base images | `dhi.io` hardened images, pinned by digest | `test_compose_hardening.py`, Dependabot |
-| CI | Actions pinned to full version tags, `permissions: {}` by default | `test_workflows.py`, zizmor/actionlint locally |
+| CI | Actions pinned to commit SHAs (version as comment), `permissions: {}` by default | `test_workflows.py`, zizmor/actionlint locally |
 | Vulnerabilities | Trivy on every pull request, on `main` and daily; `uv audit` daily | `images.yaml`, `security.yaml` |
 | Runtime | Read-only root filesystem, all capabilities dropped, `no-new-privileges`, non-root users | Shared `x-hardening` block, `test_compose_hardening.py` |
 | Network | Only the API on all interfaces; UIs on loopback; databases, code server and Marquez API not published | `test_compose_hardening.py` |
@@ -19,8 +19,9 @@ To report a vulnerability, see [SECURITY.md](https://github.com/plugin-healthcar
 
 ## Release pipeline
 
-A release starts with a tag `v<version>` on `main` that equals `project.version` in `pyproject.toml`; the workflow refuses other tags.
-It creates a draft GitHub Release with the changelog section as notes; a maintainer publishes it.
+A release starts with a tag `v<version>` on `main` that equals `project.version` in `pyproject.toml`; the workflow refuses a tag that is not on `main` or differs from the version.
+GitHub runs the workflow from the tagged commit, so someone who can create a `v*` tag could change that check in the tagged commit; a tag ruleset that lets only maintainers create `v*` tags is what makes "only from `main`" hold (see [one-time setup](../development/develop-guidelines.md#one-time-setup)).
+The workflow creates a draft GitHub Release with the changelog section as notes; a maintainer publishes it.
 Publishing runs these jobs, see [release process](../development/develop-guidelines.md#release-process):
 
 1. Each image is built from the tagged commit for `linux/amd64` and pushed **by digest only** to `ghcr.io/plugin-healthcare/pluginlake/<image>` (`api`, `dagster-webserver`, `ui-central`, `ui-datastation`).
@@ -30,6 +31,8 @@ Publishing runs these jobs, see [release process](../development/develop-guideli
 5. Only when every image passed, the promote job verifies each signature and tags the digest with the version. A tag that already exists must point at the same digest; the workflow never moves a tag. A re-run reuses tagged images instead of rebuilding them.
 6. The digests are written into the images lock of the package, and the wheel and sdist are built, attested and published to PyPI with trusted publishing: no API token exists that could leak.
 
+Every action in these jobs is pinned to a commit SHA, so a moved tag of an action cannot run code in the jobs that sign, attest or publish.
+
 `pluginlake up` only starts images from the images lock of the installed version, each referenced as `name:version@sha256:digest`, so the digest decides what runs, not the tag.
 
 ### Verify an image
@@ -37,9 +40,10 @@ Publishing runs these jobs, see [release process](../development/develop-guideli
 Operators can check that an image comes from this pipeline before running it:
 
 ```bash
+VERSION=<version from images.json>
 IMAGE=ghcr.io/plugin-healthcare/pluginlake/api@sha256:<digest from images.json>
 cosign verify "$IMAGE" \
-  --certificate-identity-regexp '^https://github.com/plugin-healthcare/pluginlake/.github/workflows/release.yaml@refs/tags/v' \
+  --certificate-identity "https://github.com/plugin-healthcare/pluginlake/.github/workflows/release.yaml@refs/tags/v${VERSION}" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 gh attestation verify "oci://$IMAGE" --repo plugin-healthcare/pluginlake                     # provenance
 gh attestation verify "oci://$IMAGE" --repo plugin-healthcare/pluginlake --predicate-type https://spdx.dev/Document/v2.3   # SBOM
@@ -118,11 +122,12 @@ pluginlake reads them through its settings; Postgres and the exporter through `*
 These are known gaps; they are documented here rather than hidden.
 
 - **API authentication** is not part of this release. Authentication and authorization follow in a separate step (ADR-006, ADR-008); until then, restrict access to port 8000 at the network level.
-- **cAdvisor runs as root with its default capabilities**, because it reads the Docker state of the host. It keeps a read-only filesystem and `no-new-privileges` and is on its own network. Switch it off with `[monitoring] cadvisor = false` when it is not needed.
+- **cAdvisor runs as root with its default capabilities and can reach the Docker socket**, because it reads the Docker state of the host. Its read-only mount of `/var/run` does not stop it from connecting to `/var/run/docker.sock`, so a compromised cAdvisor controls the Docker daemon and with that the host. It keeps a read-only filesystem and `no-new-privileges` and is on its own network, but treat it as host-level access. Switch it off with `[monitoring] cadvisor = false` when it is not needed.
 - **Dagster and Marquez need their database password in the process environment**: `dagster.yaml` and `marquez.yml` can only read it from there. A launcher exports it for that process only; it is not in the container configuration, but is visible in `/proc` to the same user inside that container.
 - **Secret files are world-readable inside their directory**, so the non-root container users can read them. The `0700` directory keeps other host users out; root on the host can read them, as with every Compose secret. They are not encrypted at rest.
 - **Tags in GHCR are not immutable at the registry level.** The release workflow never moves a tag, and stations run by digest, but a maintainer with write access to the packages could. Restrict package write access to the release workflow and maintainers.
-- **Actions are pinned to version tags, not commit SHAs**, so they stay readable and easy to update. A tag can be moved by the action's owner, as happened with `aquasecurity/trivy-action` in March 2026; a compromised tag would run in our workflows until noticed. Pinning to a commit SHA would rule that out at the cost of readability.
+- **Actions are pinned to commit SHAs**, so a moved tag (as happened with `aquasecurity/trivy-action` in March 2026) does not change what runs. A pinned commit can still contain a vulnerability or malicious code; Dependabot proposes new versions, and an update is reviewed like any other change.
+- **"Only from `main`" depends on the tag ruleset.** The workflow checks that the tag is on `main`, but it runs from the tagged commit, so someone who can create `v*` tags could remove that check. Restrict `v*` tag creation to maintainers.
 - **Trivy fails only on CRITICAL vulnerabilities that have a fix.** Unfixed and lower-severity findings are reported (HIGH on `main` and daily) but do not block a release.
 - **Only `linux/amd64`** images are built.
 - **Projects** cannot be installed in the production stack yet; it runs the core only. The dev stack (`pluginlake up --dev`) installs projects at start and is not hardened in the same way: it keeps a writable filesystem and runs some services as root (it does drop all capabilities and sets `no-new-privileges`).

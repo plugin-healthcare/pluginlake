@@ -18,10 +18,10 @@ Security fixes are made on `main` and released as a new version; only the latest
 The measures, how operators can verify them, and their known limitations are described in the documentation: [docs/guides/security.md](docs/guides/security.md).
 In short:
 
-- Releases come only from a tag on `main` that matches the package version. The release workflow builds the container images, scans them with Trivy, signs them with cosign (keyless) and attaches an SBOM and build provenance. Only after every check passes do the images get their version tag, and an existing tag is never moved.
+- Releases come from a `v*` tag that matches the package version. The release workflow refuses tags that are not on `main`; because it runs from the tagged commit, this relies on a tag ruleset that lets only maintainers create `v*` tags. The workflow builds the container images, scans them with Trivy, signs them with cosign (keyless) and attaches an SBOM and build provenance. Only after every check passes do the images get their version tag, and an existing tag is never moved.
 - Stations run the images pinned by digest, from the images lock in the installed package. The Python package is published to PyPI with trusted publishing and provenance attestations.
-- GitHub Actions are pinned to full version tags and run with minimal permissions. Images are scanned on every pull request, on `main` and daily.
-- Every service of the production stack runs with a read-only root filesystem, without Linux capabilities, with `no-new-privileges` and as a non-root user. cAdvisor is the documented exception.
-- Only the API is published on all interfaces. Databases, the Dagster code server and the Marquez API are not reachable from the host, and passwords are Docker secrets.
+- GitHub Actions are pinned to commit SHAs and run with minimal permissions. Images are scanned on every pull request, on `main` and daily.
+- Every service of the production stack runs with a read-only root filesystem, without Linux capabilities, with `no-new-privileges` and as a non-root user. cAdvisor is the documented exception: it can reach the Docker socket.
+- Only the API is published on all interfaces. Databases, the Dagster code server and the Marquez API are not published on host ports (local users on the host can still reach them on the container network, so they keep their passwords), and passwords are Docker secrets.
 
 The API has no authentication yet. Until it does, restrict access to the API port at the network level.

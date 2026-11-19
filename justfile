@@ -87,10 +87,10 @@ dev-local:
     uv run dg dev -f examples/titanic.py
 
 # Production stack (packaged in src/pluginlake/deploy/stack) with images built from this
-# checkout. Config from deploy/compose/.env.production, passwords (Docker secrets) from
-# deploy/compose/.env.production.secrets. Stations use `pluginlake up` with released images.
+# checkout. Config from deploy/compose/.env.production, passwords (Docker secrets) as one
+# file per secret in deploy/compose/secrets/. Stations use `pluginlake up` with released images.
 _prod_env := "PLUGINLAKE_STACK_DIR=" + justfile_directory() + "/src/pluginlake/deploy/stack PLUGINLAKE_IMAGE_API=pluginlake/api:local PLUGINLAKE_IMAGE_DAGSTER_WEBSERVER=pluginlake/dagster-webserver:local PLUGINLAKE_IMAGE_UI_DATASTATION=pluginlake/ui-datastation:local"
-_compose_prod := _prod_env + " docker compose --project-directory deploy/compose --env-file deploy/compose/.env.production --env-file deploy/compose/.env.production.secrets -f src/pluginlake/deploy/stack/docker-compose.yaml -f deploy/compose/docker-compose.build.yaml"
+_compose_prod := _prod_env + " docker compose --project-directory deploy/compose --env-file deploy/compose/.env.production -f src/pluginlake/deploy/stack/docker-compose.yaml -f deploy/compose/docker-compose.build.yaml"
 
 # Start production environment (built locally)
 up *args='':

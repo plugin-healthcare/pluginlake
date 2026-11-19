@@ -182,7 +182,7 @@ Fix a broken release with a new version, not by moving a tag.
 | Environment `pypi`, optionally with required reviewers and a tag rule `v*` | Repository settings, Environments |
 | Secrets `DHI_USERNAME` and `DHI_TOKEN`: a Docker account (access token, read-only) for the `dhi.io` base images | Repository or organisation secrets |
 | Package visibility: make the four packages public after the first release, or have nodes log in (see [security](../guides/security.md#registries)) | Organisation, Packages, package settings |
-| Branch protection on `main` and a tag ruleset for `v*` (only maintainers create or delete tags) | Repository settings, Rules |
+| Branch protection on `main` and a tag ruleset for `v*` (only maintainers create or delete tags). Required: the release workflow runs from the tagged commit, so its "tag is on `main`" check only holds when others cannot create `v*` tags | Repository settings, Rules |
 
 ### Changelog conventions
 
@@ -274,7 +274,7 @@ All pre-commit hooks are defined in the `.pre-commit-config.yaml` file and inclu
 
 We use GitHub Actions to automate our CI/CD pipeline. All workflows are defined in the `.github/workflows` directory.
 
-All actions are pinned to a full version tag (`actions/checkout@v7.0.1`, not `@v7` or a branch), so updating one is a one-line change; every workflow starts with `permissions: {}` and each job asks only for what it needs; `tests/unit/repo/test_workflows.py` enforces both.
+All actions are pinned to a full commit SHA with the version as comment (`actions/checkout@<sha> # v7.0.1`), because a tag can be moved by the action's owner; Dependabot updates the SHA and the comment together. Every workflow starts with `permissions: {}` and each job asks only for what it needs; `tests/unit/repo/test_workflows.py` enforces both.
 
 #### CI Workflow (`ci.yaml`)
 

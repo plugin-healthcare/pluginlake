@@ -264,7 +264,8 @@ services:
 
   # Exception to the hardening rules: cAdvisor reads the Docker state of the host,
   # which needs root and its default capabilities. It keeps a read-only root
-  # filesystem and no-new-privileges, and sits on its own network.
+  # filesystem and no-new-privileges, and sits on its own network. The read-only
+  # /var/run mount still lets it connect to docker.sock: treat it as host-level access.
   cadvisor:
     image: ghcr.io/google/cadvisor:v0.60.6@sha256:b8e7d1093144fd088f425ff003d75a4aa405de075db78dae3bc563730b1bd07a
     profiles: [monitoring]

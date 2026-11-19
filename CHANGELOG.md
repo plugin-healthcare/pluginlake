@@ -52,7 +52,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The production image `pluginlake` is renamed to `api` (`deploy/docker/api.Dockerfile`). The images run as user 65532, install the package non-editable with precompiled bytecode, and the `api` image contains the DuckDB extensions instead of downloading them at runtime.
 - Prometheus config moved from `deploy/monitoring/` and the Marquez config from `config/marquez/` into `src/pluginlake/deploy/stack/`; `just up` builds the production stack locally with `deploy/compose/docker-compose.build.yaml`.
 - Stricter linting: CI runs `ruff check --no-fix` and `ruff format --check`, the pydoclint rules (`DOC201`, `DOC202`, `DOC402`, `DOC403`, `DOC501`) check docstring sections, the dashboards no longer skip docstring rules, and ty warnings fail the check (`error-on-warning`).
-- All GitHub Actions are pinned to full version tags (e.g. `actions/checkout@v7.0.1`) and every workflow job declares minimal permissions.
+- All GitHub Actions are pinned to a commit SHA with the version as comment (e.g. `actions/checkout@<sha> # v7.0.1`) and every workflow job declares minimal permissions.
 
 ### Removed
 
