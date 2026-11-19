@@ -15,9 +15,9 @@ PROJECT = "project-1"
 BODY = json.dumps(
     {
         "user_grants": [
-            {"projectId": PROJECT, "roles": ["api", "dagster"]},
-            {"projectId": PROJECT, "roles": ["dagster"]},
-            {"projectId": "other-project", "roles": ["prometheus"]},
+            {"project_id": PROJECT, "roles": ["api", "dagster"]},
+            {"project_id": PROJECT, "roles": ["dagster"]},
+            {"project_id": "other-project", "roles": ["prometheus"]},
         ]
     }
 ).encode()

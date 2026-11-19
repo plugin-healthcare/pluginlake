@@ -67,7 +67,7 @@ def groups_from_payload(payload: dict, project_id: str) -> list[str]:
 
     Grants on other projects are ignored, so a role of the same name in an unrelated project gives no access.
     """
-    grants = [grant for grant in payload.get("user_grants") or [] if grant.get("projectId") == project_id]
+    grants = [grant for grant in payload.get("user_grants") or [] if grant.get("project_id") == project_id]
     roles = [role for grant in grants for role in grant.get("roles") or []]
     return list(dict.fromkeys(roles))
 
