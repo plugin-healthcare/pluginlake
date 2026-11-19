@@ -1,215 +1,75 @@
-# Getting started with pluginlake
+# Getting started
 
-This tutorial walks you through running the included Titanic example to get familiar with pluginlake's asset pipeline. By the end you'll have materialized your first assets, inspected the DuckLake catalog, and queried the data.
+This guide starts a complete pluginlake node on your own machine: the edge with Traefik, oauth2-proxy and Zitadel, plus Dagster, the API, lineage and monitoring.
+The node is an empty platform instance without data or assets of its own.
+A project adds its assets, routes and data on top, see [Deploying a station](deploying-a-station.md).
+To build assets with the development tooling, see the [Titanic tutorial](../development/titanic-tutorial.md).
 
 ## Prerequisites
 
-- Python 3.13+
-- [uv](https://docs.astral.sh/uv/) installed
-- Docker (for PostgreSQL)
+- [Docker](https://docs.docker.com/get-docker/) with Compose, for example Docker Desktop, Colima or Docker Engine
+- [just](https://github.com/casey/just)
+- [mkcert](https://github.com/FiloSottile/mkcert), only for a `.localhost` domain, to get a locally trusted certificate. You do not need it when you use your own domain with a certificate from a certificate authority.
+- A Docker Hub account with `docker login dhi.io` done once, because the images are built on hardened base images (see [Docker](docker.md#hardened-base-images))
 
-## 1. Clone and install
+On macOS with Colima, keep the checkout under your home folder, because Colima only shares that folder with the containers.
+The node data is stored in `.pluginlake/` inside the checkout (or in `PLUGINLAKE_HOME` when set).
+
+## 1. Start the node
 
 ```bash
 git clone https://github.com/plugin-healthcare/pluginlake.git
 cd pluginlake
-just init
+just up
 ```
 
-This installs all dependencies including Dagster, DuckDB, and Polars.
+`just up` prepares the node from `pluginlake.toml` (folders, secrets and `compose.env` in `.pluginlake/`), creates a certificate for the `.localhost` domain in `[node]`, then builds and starts all containers.
+The first start takes a few minutes, because the images are built and Zitadel is provisioned.
+Add `-d` to run it in the background.
 
-## 2. Start PostgreSQL
+While the node is starting, the console shows a start-up page that refreshes by itself.
 
-DuckLake stores its catalog metadata in PostgreSQL. Start the dev database:
+## 2. Sign in
+
+Open [https://console.pluginlake.localhost](https://console.pluginlake.localhost) and sign in as the first admin:
+
+| Field | Value |
+|-------|-------|
+| Login name | `admin@zitadel.auth.pluginlake.localhost` |
+| Password | `.pluginlake/secrets/zitadel_admin_password` |
+
+Zitadel asks you to choose a new password at the first sign-in.
+Store it in a password manager, because the file keeps the initial password only.
+
+## 3. Use the console
+
+The console is the start page of the node.
+Its sidebar links to the other applications, and only shows the ones your roles give access to.
+
+| Application | Address |
+|-------------|---------|
+| Console | `https://console.pluginlake.localhost` |
+| Dagster | `https://dagster.pluginlake.localhost` |
+| Lineage (Marquez) | `https://lineage.pluginlake.localhost` |
+| Metrics (Prometheus) | `https://prometheus.pluginlake.localhost` |
+| API documentation | `https://api.pluginlake.localhost/docs` |
+
+You sign in once for all of them.
+Use **Sign out** in the sidebar to end the session.
+
+## 4. Stop the node
 
 ```bash
-just dev-up -d postgres
+just down
 ```
 
-This starts a PostgreSQL 17 container on port 5432 using the Docker Compose dev stack.
+The data stays in `.pluginlake/`, so the next `just up` continues where you left off.
+To start from scratch, run `just down` and remove `.pluginlake/` afterwards.
+This deletes all data of the node.
 
-## 3. Configure environment
+## Production
 
-Copy the example env file and adjust if needed:
-
-```bash
-cp .env.example .env
-```
-
-The defaults connect to the Docker Compose PostgreSQL. The `ensure_database` function in `setup.py` will automatically create the `ducklake` database on first run. If your PostgreSQL user differs from the default, update the values in `.env`.
-
-## 4. Start the Dagster UI
-
-Run the Titanic example:
-
-```bash
-just dev-local
-```
-
-Or directly:
-
-```bash
-uv run dagster dev -f examples/titanic.py
-```
-
-Open [http://localhost:3000](http://localhost:3000) in your browser. You should see the Dagster UI.
-
-## 5. Explore the asset graph
-
-Navigate to **Assets** in the left sidebar, then switch to the **Lineage** tab. You'll see three assets connected in a graph:
-
-```text
-              ┌──▶ titanic_survival_by_class
-titanic_raw ──┤
-              └──▶ titanic_survivors
-```
-
-- **titanic_raw** — Downloads the Titanic passenger dataset as a Polars DataFrame
-- **titanic_survival_by_class** — Computes survival rate per passenger class (lazy read)
-- **titanic_survivors** — Filters to survived passengers only, demonstrating filter pushdown (lazy read)
-
-The arrows show dependencies: both downstream assets depend on `titanic_raw`.
-
-## 6. Materialize an asset
-
-Click on **titanic_raw** in the graph, then click **Materialize**. Dagster will:
-
-1. Run the `titanic_raw` function
-2. Download the Titanic CSV from GitHub
-3. Store the resulting DataFrame to DuckLake via the IO manager
-
-Once complete, you'll see a green checkmark on the asset.
-
-## 7. Materialize the downstream assets
-
-Now click **titanic_survival_by_class** and materialize it. This asset receives the output of `titanic_raw` as a lazy frame and computes survival statistics grouped by class.
-
-Do the same for **titanic_survivors** — it filters to survived passengers only, demonstrating how Polars filter predicates are pushed down to DuckDB.
-
-## 8. Run the job
-
-Instead of materializing assets one by one, you can run them together as a job.
-
-Go to **Jobs** in the left sidebar. You'll see **titanic_job**. Click **Launch Run**. This materializes all three assets in the correct order.
-
-## 9. Inspect the DuckLake catalog
-
-After materializing assets, you can query the DuckLake catalog to see what was written. Open a Python shell:
-
-```bash
-uv run python
-```
-
-Then connect and explore:
-
-```python
-from pluginlake.core.ducklake.setup import setup_ducklake
-
-conn = setup_ducklake()
-
-# List all tables in the catalog
-conn.sql("""
-    SELECT table_schema, table_name
-    FROM information_schema.tables
-    WHERE table_catalog = 'ducklake'
-""").show()
-
-# Preview the raw data
-conn.sql("SELECT * FROM ducklake.main.titanic_raw LIMIT 5").show()
-
-# Check the aggregated results
-conn.sql("SELECT * FROM ducklake.main.titanic_survival_by_class").show()
-
-# Check the filtered survivors
-conn.sql("SELECT * FROM ducklake.main.titanic_survivors").show()
-```
-
-You can also inspect the underlying Parquet files DuckLake created:
-
-```bash
-ls -R .data/lakehouse/
-```
-
-Each table has its own directory with one or more `ducklake-{uuid}.parquet` files.
-
-## 10. Understand the code
-
-Open `examples/titanic.py` to see how it all fits together:
-
-### Assets
-
-Assets are Python functions decorated with `@asset`. The function name becomes the asset name. Dependencies are declared via function parameters:
-
-```python
-@asset
-def titanic_raw() -> pl.DataFrame:
-    """No dependencies — this is a root asset."""
-    return pl.read_csv(TITANIC_CSV_URL)
-
-
-@asset
-def titanic_survival_by_class(titanic_raw: pl.LazyFrame) -> pl.DataFrame:
-    """Depends on titanic_raw — receives a LazyFrame with pushdown support."""
-    return titanic_raw.group_by("Pclass").agg(
-        pl.col("Survived").mean().alias("survival_rate"),
-        pl.col("Survived").count().alias("passenger_count"),
-    ).collect()
-
-
-@asset
-def titanic_survivors(titanic_raw: pl.LazyFrame) -> pl.DataFrame:
-    """Filters to survived passengers — filter is pushed down to DuckDB."""
-    return (
-        titanic_raw
-        .filter(pl.col("Survived") == 1)
-        .select("PassengerId", "Name", "Pclass", "Sex", "Age")
-        .collect()
-    )
-```
-
-### Jobs
-
-Jobs group assets for execution. `define_asset_job` creates a job from an asset selection:
-
-```python
-titanic_job = define_asset_job(
-    name="titanic_job",
-    selection=AssetSelection.assets(
-        titanic_raw, titanic_survival_by_class, titanic_survivors
-    ),
-)
-```
-
-### Definitions
-
-The `Definitions` object registers everything with Dagster, including the DuckLake IO manager:
-
-```python
-defs = Definitions(
-    assets=[titanic_raw, titanic_survival_by_class, titanic_survivors],
-    jobs=[titanic_job],
-    resources={"io_manager": ducklake_io_manager},
-)
-```
-
-## 11. Clean up
-
-Stop PostgreSQL when you're done:
-
-```bash
-just dev-down
-```
-
-To remove DuckLake data files:
-
-```bash
-rm -rf .data/lakehouse/
-```
-
-## Next steps
-
-- **Add your own assets** — Follow the patterns in `examples/titanic.py` to create new `@asset` functions, then register them in a `Definitions` object. See the [using as package](using-as-package.md) guide for the full pattern.
-- **Use pluginlake as a package** — Build your own data station on top of pluginlake's core assets. See the [using as package](using-as-package.md) guide.
-- **Run the full Docker stack** — Deploy Dagster + PostgreSQL + pluginlake together. See the [Docker guide](docker.md).
-- **Explore the API** — Query assets and trigger runs programmatically. See the [API overview](../reference/api.md) and the [interactive specification](../reference/api-specification.md).
-- **Explore Dagster** — Learn about schedules, sensors, resources, and more in the [Dagster docs](https://docs.dagster.io/).
+Set `domain` under `[node]` in `pluginlake.toml` to your own domain and run `just up`.
+For developing the platform itself, use the `just dev-*` recipes instead (see the [Docker guide](docker.md)).
+The stack does not provision a production certificate yet, so Traefik needs a certificate for your domain before oauth2-proxy can reach Zitadel.
+See the [Docker guide](docker.md#edge) for the edge, the roles and the secrets.

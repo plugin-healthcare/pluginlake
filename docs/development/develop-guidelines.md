@@ -153,33 +153,15 @@ We follow [Semantic Versioning](https://semver.org/):
 
 ### Release process
 
-1. Ensure `CHANGELOG.md` is up to date with an `[Unreleased]` section describing all changes since the last release.
-2. Update the version in `pyproject.toml`.
-3. Rename `[Unreleased]` to `[x.y.z] — YYYY-MM-DD` in the changelog (use today's date — the release date is when you tag, not when the code was merged).
-4. Add a fresh empty `[Unreleased]` section above it.
-5. Commit the version bump (can be part of the feature PR that completes the milestone, or a separate small PR).
-6. Merge to `main` via PR.
-7. Tag the merge commit: `git tag vx.y.z && git push --tags`.
-8. Create a GitHub Release from the tag (copies changelog entry as release notes).
+1. Make sure `CHANGELOG.md` has an `[Unreleased]` section describing all changes since the last release.
+2. Update the version in `pyproject.toml`, rename `[Unreleased]` to `[x.y.z] — YYYY-MM-DD` (the date you tag) and add a fresh empty `[Unreleased]` above it.
+3. Merge to `main` via PR (the version bump can be part of the feature PR that completes the milestone).
+4. Tag the merge commit with `git tag vx.y.z && git push --tags` and create a GitHub Release from the tag.
 
 ### Changelog conventions
 
-We follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Use these categories:
-
-- **Added** for new features or files.
-- **Changed** for changes in existing functionality.
-- **Deprecated** for soon-to-be removed features.
-- **Removed** for removed features or files.
-- **Fixed** for bug fixes.
-- **Security** for vulnerability fixes.
-
-Write entries from the user's perspective. Reference ADRs or PRs where helpful.
-
-**Workflow:**
-
-- Add entries to `[Unreleased]` as you merge PRs (in the PR itself, or right after).
-- When releasing, move entries from `[Unreleased]` into the new version section.
-- The tag should point to the commit that contains the changelog update, so the tagged state is self-documenting.
+We follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) with the categories Added, Changed, Deprecated, Removed, Fixed and Security.
+Write entries from the user's perspective and add them to `[Unreleased]` in the PR itself.
 
 ## AI-assisted contributions
 
@@ -193,94 +175,33 @@ We follow the [Linux Foundation policy on generative AI](https://www.linuxfounda
 
 ### Agent configuration
 
-- Agent-agnostic coding instructions live in [`AGENTS.md`](../../AGENTS.md) at the repository root.
-- GitHub Copilot-specific configuration is in [`.github/copilot-instructions.md`](../../.github/copilot-instructions.md), which references `AGENTS.md`.
-- Other AI tools (Cursor, Claude, etc.) should follow `AGENTS.md` directly.
+Agent-agnostic instructions live in [`AGENTS.md`](../../AGENTS.md), and [`.github/copilot-instructions.md`](../../.github/copilot-instructions.md) references it.
+Keep `AGENTS.md` short and state hard rules and project facts an agent cannot infer from the code.
+Link to detailed instruction files instead of repeating docs, and leave out anything that is in `pyproject.toml`, the linter config or the code.
 
-### Writing good agent instructions
+## Development stack
 
-Keep `AGENTS.md` short and precise (under 50 lines). Long instruction files dilute signal because agents lose focus when given too much context at once.
+`just up` is the production stack that every node runs, also on a laptop with a `.localhost` domain, and it is the right choice for trying out a project or an asset.
+The development stack is for changing the platform itself:
 
-**Principles:**
+- `just dev-up` starts the dev compose with source mounts, so the API reloads with `uvicorn --reload` and Dagster runs `dagster dev`.
+- `just dev-up-headless` does the same without the dashboards, and `just dev-down` stops it.
+- `just dev-local` runs the Titanic example without Docker, see the [Titanic tutorial](titanic-tutorial.md).
 
-- State hard rules (what to always/never do), not tutorials.
-- Include project-specific facts an agent cannot infer from code alone (e.g., "use `uv`, not `pip`" or "always read `pyproject.toml` for linting settings").
-- Use hierarchical linking: a top-level file links to domain-specific instruction files that load contextually.
-- Prefer showing one correct example over explaining in prose.
-
-**What to include in the top-level file:**
-
-- What the project is (one sentence).
-- Repository layout (condensed tree).
-- Hard rules (5-10 bullet points max).
-- Links to detailed instruction files.
-
-**What belongs in separate instruction files** (e.g., `.github/instructions/*.md`):
-
-- Language conventions with examples (Python style, type annotations).
-- Framework-specific patterns (Dagster assets, pipeline structure).
-- Deployment and infrastructure context (secrets, known issues).
-
-These files can use `applyTo` patterns so agents only load them when relevant (e.g., Python rules only when editing `*.py`).
-
-**What NOT to put in agent instructions:**
-
-- Anything the agent can infer from `pyproject.toml`, linter config, or existing code.
-- Full API documentation or runbooks. Link to docs instead.
-- Frequently changing information (versions, URLs) that goes stale fast.
+Do not use the development stack to run a station.
+It has no login in front of the applications and keeps its data in Docker volumes.
 
 ## CI/CD
 
 ### Pre-commit hooks
 
-For local development, we use pre-commit to run linters and formatters before each commit. This helps maintain code quality and consistency. To set up pre-commit hooks, run:
-
-```bash
-pre-commit install
-```
-
-All pre-commit hooks are defined in the `.pre-commit-config.yaml` file and include:
-
-- Trailing whitespace removal
-- End-of-file fixer
-- YAML/TOML validation
-- Large file checks
-- Ruff linting and formatting
-- ty type checking
+Run `pre-commit install` once to run the hooks from `.pre-commit-config.yaml` (whitespace, YAML/TOML validation, Ruff, ty) before each commit.
 
 ### GitHub Actions
 
-We use GitHub Actions to automate our CI/CD pipeline. All workflows are defined in the `.github/workflows` directory.
+Workflows are in `.github/workflows`:
 
-#### CI Workflow (`ci.yaml`)
-
-Runs on every pull request to `main`:
-
-- **Ruff check**: linting only (no auto-fixing)
-- **ty check**: static type checking
-- **Pytest**: unit tests with coverage (`--cov=pluginlake`)
-
-#### Security Workflow (`security.yaml`)
-
-- Runs **daily at 06:00 UTC** on the default branch
-- Can also be triggered manually via workflow dispatch
-- Checks for security vulnerabilities using `uv-secure`
-
-#### Docker Build Workflow (`docker-build.yaml.disabled`)
-
-A disabled scaffold for building and pushing the production images to Azure Container Registry. It is kept with a `.disabled` extension so GitHub does not run it, and needs auth configured (OIDC recommended for a public repo) before being enabled. When enabled it will:
-
-- Trigger on push to `main` when `src/`, `deploy/docker/`, `pyproject.toml`, or `uv.lock` change
-- Build all images (`pluginlake/pluginlake`, `pluginlake/dagster-webserver`, `pluginlake/ui-central`, `pluginlake/ui-datastation`)
-- Tag: `latest` and commit SHA
-- Include SLSA provenance and SBOM attestations
-
-#### Dependabot
-
-Dependabot is configured to check daily for updates to:
-
-- Python dependencies
-- GitHub Actions versions
-- Docker base images
-
-All update PRs target the `main` branch.
+- **`ci.yaml`** runs on every pull request to `main`: Ruff check, ty check and pytest with coverage.
+- **`security.yaml`** runs daily at 06:00 UTC and on demand, and checks for vulnerabilities with `uv-secure`.
+- **`docker-build.yaml.disabled`** is a scaffold for pushing the production images to Azure Container Registry. It needs auth configured before it is enabled.
+- **Dependabot** checks daily for updates to Python dependencies, GitHub Actions and Docker base images, with PRs against `main`.

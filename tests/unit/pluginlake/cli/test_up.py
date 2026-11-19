@@ -156,16 +156,8 @@ def test_up_with_monitoring(tmp_path: Path, override_calls: list[dict]):
     assert override["services"]["prometheus"]["environment"] == {
         "PROMETHEUS_STATION_ID": "ds-001",
         "PROMETHEUS_SCRAPE_CADVISOR": "true",
+        "PROMETHEUS_RETENTION": "15d",
     }
-
-
-def test_up_with_remote_write(tmp_path: Path, override_calls: list[dict]):
-    url = "https://central.example.org/api/v1/write"
-    config = _config(tmp_path, f'[monitoring]\nenabled = true\nremote_write_url = "{url}"\n')
-    up.run_up(config)
-    env = override_calls[0]["override"]["services"]["prometheus"]["environment"]
-    assert env["PROMETHEUS_REMOTE_WRITE_URL"] == url
-    assert not any("PASSWORD" in key for key in env)
 
 
 def test_up_without_cadvisor_scales_it_to_zero(tmp_path: Path, override_calls: list[dict]):
@@ -178,7 +170,7 @@ def test_up_without_cadvisor_scales_it_to_zero(tmp_path: Path, override_calls: l
 
 
 def test_up_invalid_monitoring_config(tmp_path: Path, override_calls: list[dict], capsys: pytest.CaptureFixture[str]):
-    config = _config(tmp_path, '[monitoring]\nremote_write_url = "not-a-url"\n')
+    config = _config(tmp_path, '[monitoring]\nstation_id = "not valid"\n')
     assert up.run_up(config) == 1
     assert not override_calls
     assert "Invalid station config" in capsys.readouterr().err
@@ -189,28 +181,3 @@ def test_down_always_includes_monitoring(override_calls: list[dict]):
     cmd = override_calls[0]["cmd"]
     assert "monitoring" in _profiles_in(cmd)
     assert cmd[-1] == "down"
-
-
-def test_compose_env_untouched_without_monitoring(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.delenv(up.REMOTE_WRITE_SECRET_VAR, raising=False)
-    assert up._compose_env(tmp_path, monitoring=False) is None
-
-
-def test_compose_env_defaults_remote_write_password_to_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.delenv(up.REMOTE_WRITE_SECRET_VAR, raising=False)
-    (tmp_path / ".env").write_text("POSTGRES_PASSWORD=x\n", encoding="utf-8")
-    env = up._compose_env(tmp_path, monitoring=True)
-    assert env is not None
-    assert env[up.REMOTE_WRITE_SECRET_VAR] == ""
-
-
-@pytest.mark.parametrize("line", ["PROMETHEUS_REMOTE_WRITE_PASSWORD=s3cret", "PROMETHEUS_REMOTE_WRITE_PASSWORD="])
-def test_compose_env_keeps_password_from_dotenv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, line: str):
-    monkeypatch.delenv(up.REMOTE_WRITE_SECRET_VAR, raising=False)
-    (tmp_path / ".env").write_text(f"{line}\n", encoding="utf-8")
-    assert up._compose_env(tmp_path, monitoring=True) is None
-
-
-def test_compose_env_keeps_password_from_shell(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv(up.REMOTE_WRITE_SECRET_VAR, "s3cret")
-    assert up._compose_env(tmp_path, monitoring=True) is None

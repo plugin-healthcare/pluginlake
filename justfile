@@ -63,12 +63,6 @@ dev-up-headless *args='':
 dev-down *args='':
     {{ _compose }} --profile ui --profile lineage down {{ args }}
 
-_compose_central := "docker compose -f deploy/compose/docker-compose.central.yaml"
-
-# Start central dashboard (separate compose)
-dev-central *args='':
-    {{ _compose_central }} up --build {{ args }}
-
 _smoke-compose := 'env -i HOME="$HOME" PATH="$PATH" PLUGINLAKE_ENV_FILE=smoke.env docker compose --env-file deploy/compose/smoke.env --env-file deploy/compose/smoke.secrets.env -f deploy/compose/docker-compose.dev.yaml -f deploy/compose/docker-compose.smoke.yaml'
 
 # Run smoke test against running stack
@@ -84,16 +78,55 @@ smoke-test-full:
 dev-local:
     uv run dg dev -f examples/titanic.py
 
-# Production compose: config from .env.production, passwords (Docker secrets) from .env.production.secrets
-_compose_prod := "docker compose --env-file deploy/compose/.env.production --env-file deploy/compose/.env.production.secrets -f deploy/compose/docker-compose.yaml"
+# Production compose: the node data folder (secrets, compose.env) is prepared by `pluginlake setup`
+home := env("PLUGINLAKE_HOME", justfile_directory() / ".pluginlake")
+_compose_prod := "docker compose --env-file " + quote(home / "compose.env") + " -f deploy/compose/docker-compose.yaml"
 
-# Start production environment
+# Prepare the node from pluginlake.toml (folders, secrets, compose.env) in a container as the host user. A domain below .localhost gets an mkcert certificate
+setup *args='':
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # The checkout is the Docker build context, and only .pluginlake/ is kept out of it.
+    case "$(realpath -m "{{ home }}")/" in
+        "$(realpath "{{ justfile_directory() }}")/.pluginlake/") ;;
+        "$(realpath "{{ justfile_directory() }}")"/*) echo "PLUGINLAKE_HOME must be .pluginlake or outside the checkout, so no image can contain its secrets" >&2; exit 1 ;;
+    esac
+    # Created here so docker does not create the mount source as root.
+    mkdir -p "{{ home }}"
+    chmod 700 "{{ home }}"
+    docker build --quiet -f deploy/docker/pluginlake.Dockerfile -t pluginlake-setup . > /dev/null
+    domain="$(docker run --rm --user "$(id -u):$(id -g)" --network none --cap-drop ALL --read-only \
+        -v "{{ justfile_directory() }}/pluginlake.toml:/pluginlake.toml:ro" pluginlake-setup \
+        python -c 'import tomllib; print(tomllib.load(open("/pluginlake.toml", "rb")).get("node", {}).get("domain") or "")')"
+    # The same lock as `pluginlake setup`, so concurrent runs do not mix the files of two certificates.
+    command -v flock > /dev/null || { echo "flock (util-linux) is required for just setup" >&2; exit 1; }
+    exec 9>> "{{ home }}/.setup.lock"
+    flock 9
+    if [[ "$domain" == "localhost" || "$domain" == *.localhost ]]; then
+        command -v mkcert > /dev/null || { echo "mkcert is required for a .localhost domain: https://github.com/FiloSottile/mkcert" >&2; exit 1; }
+        mkdir -p "{{ home }}/tls" "{{ home }}/ca"
+        chmod 700 "{{ home }}/tls"
+        if [[ ! -f "{{ home }}/tls/cert.pem" || ! -f "{{ home }}/tls/key.pem" || ! -f "{{ home }}/ca/ca.pem" || "$(cat "{{ home }}/tls/cert.domain" 2>/dev/null)" != "$domain" ]]; then
+            mkcert -install
+            mkcert -cert-file "{{ home }}/tls/cert.pem" -key-file "{{ home }}/tls/key.pem" "$domain" "*.$domain"
+            cp "$(mkcert -CAROOT)/rootCA.pem" "{{ home }}/ca/ca.pem"
+            echo "$domain" > "{{ home }}/tls/cert.domain"
+        fi
+    fi
+    exec 9>&-
+    docker run --rm --user "$(id -u):$(id -g)" --network none --cap-drop ALL --read-only \
+        -v "{{ home }}:/pluginlake-home" -v "{{ justfile_directory() }}/pluginlake.toml:/pluginlake.toml:ro" \
+        pluginlake-setup pluginlake setup --config /pluginlake.toml --home /pluginlake-home --host-home "{{ home }}" {{ args }}
+
+# Start the production stack
 up *args='':
+    just setup
     {{ _compose_prod }} up --build {{ args }}
 
-# Stop production environment
+# Stop the production stack
+# Variables added after a node's last setup are set here, so its older compose.env can still stop the stack.
 down *args='':
-    {{ _compose_prod }} down {{ args }}
+    CADVISOR_REPLICAS="${CADVISOR_REPLICAS:-0}" PLUGINLAKE_SECRETS_REVISION="${PLUGINLAKE_SECRETS_REVISION:-down}" {{ _compose_prod }} down {{ args }}
 
 # --- Infrastructure (OpenTofu) ---
 

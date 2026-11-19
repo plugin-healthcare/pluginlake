@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="refresh" content="5">
+  <title>Starting up</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f7fbfd; color: #053c5c; font-family: system-ui, sans-serif; }
+    main { max-width: 32rem; padding: 2rem; text-align: center; }
+    h1 { margin: 0 0 .75rem; font-size: 1.75rem; }
+    p { margin: 0; line-height: 1.5; }
+    .bar { height: 4px; margin: 1.5rem auto 0; width: 8rem; border-radius: 2px; background: #d4e8f0; overflow: hidden; }
+    .bar::after { content: ""; display: block; height: 100%; width: 40%; background: #0588a6; animation: slide 1.2s ease-in-out infinite; }
+    @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>The data station is starting up</h1>
+    <p>This page refreshes by itself.</p>
+    <div class="bar"></div>
+  </main>
+</body>
+</html>

@@ -2,12 +2,9 @@
 #
 # Rendered at container start by entrypoint.sh, which:
 #   - drops scrape.d/cadvisor.yml when PROMETHEUS_SCRAPE_CADVISOR=false;
-#   - limits cAdvisor to this compose project's containers;
-#   - appends a `remote_write` block when PROMETHEUS_REMOTE_WRITE_URL is set, so a
-#     central Prometheus (e.g. vantage6-ops on plugin.dhd.nl) receives the metrics
-#     over an outbound connection only.
+#   - limits cAdvisor to this compose project's containers.
 #
-# A central Prometheus can alternatively federate from /federate on this instance.
+# Metrics stay on the station. A central Prometheus could federate from /federate on this instance.
 global:
   scrape_interval: 30s
   scrape_timeout: 10s

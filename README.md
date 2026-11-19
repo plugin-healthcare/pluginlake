@@ -26,7 +26,7 @@ just dev-local
 
 Open [http://localhost:3000](http://localhost:3000), find `titanic_raw` in the asset graph, and click **Materialize**.
 
-See [docs/guides/getting-started.md](docs/guides/getting-started.md) for a full walkthrough.
+See [docs/development/titanic-tutorial.md](docs/development/titanic-tutorial.md) for a full walkthrough.
 
 ## Development
 
@@ -83,7 +83,7 @@ Start the stack with `uv run pluginlake up -d` (`just dev-up` does not start the
 | Marquez web UI             | [http://127.0.0.1:3001](http://127.0.0.1:3001) (loopback only) |
 | Marquez API (via UI proxy) | `http://127.0.0.1:3001/api/v1/namespaces`                  |
 
-In the UI, select your namespace to browse jobs and datasets (named after DuckLake tables, e.g. `ducklake.omop.person`). See [docs/guides/deploying-a-station.md](docs/guides/deploying-a-station.md#lineage-with-marquez-optional) for details.
+In the UI, select your namespace to browse jobs and datasets (named after DuckLake tables, e.g. `ducklake.omop.person`). See [docs/guides/deploying-a-station.md](docs/guides/deploying-a-station.md#lineage-with-marquez) for details.
 
 ### Quality checks
 
@@ -129,7 +129,8 @@ Data stations with custom assets can import pluginlake and extend it. See [docs/
 
 ## Documentation
 
-- [Getting started](docs/guides/getting-started.md) — Tutorial with the Titanic example
+- [Getting started](docs/guides/getting-started.md) — Run a node on your own machine
+- [Titanic tutorial](docs/development/titanic-tutorial.md) — Build your first assets with the development tooling
 - [Using as a package](docs/guides/using-as-package.md) — Extend pluginlake in your own repo
 - [Docker guide](docs/guides/docker.md) — Images, builds, and secrets management
 - [Development guidelines](docs/development/develop-guidelines.md) — Coding standards and workflow

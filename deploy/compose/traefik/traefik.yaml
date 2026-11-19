@@ -1,0 +1,28 @@
+# Traefik static configuration. The routing and the certificate are rendered by `pluginlake setup`.
+
+# Backends trust X-Auth-Request-* headers, so client headers that alias them are dropped.
+global:
+  aliasHeadersStrategy: delete
+
+log:
+  level: INFO
+accessLog: {}
+ping: {}
+
+providers:
+  file:
+    directory: /etc/traefik/dynamic
+
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+  websecure:
+    address: ":443"
+    http:
+      tls: {}

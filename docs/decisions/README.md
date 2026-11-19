@@ -14,3 +14,4 @@ This directory contains Architecture Decision Records (ADRs) for the pluginlake 
 | [ADR-008](adr-008-dataspace-protocol-authz-authc-rbac.md) | DSP, authentication, and authorization architecture | Proposed | 2026-05-28 |
 | [ADR-009](adr-009-core-project-plugin-architecture.md) | Core platform and project plugin architecture | Proposed | 2026-07-08 |
 | [ADR-010](adr-010-station-monitoring-prometheus.md) | Station monitoring with Prometheus | Proposed | 2026-11-03 |
+| [ADR-011](adr-011-identity-provider.md) | Identity provider | Proposed | 2026-11-10 |

@@ -236,7 +236,7 @@ These hold across all phases, including the placeholder middleware used while st
 
 ### Can resolve during implementation
 
-11. **OIDC provider selection** — Keycloak (mature, heavy) vs Authentik (lighter, Python-based) as bundled identity provider for boundary 1. Must support upstream IdP federation (SURFconext, Entra ID) and direct login.
+11. **OIDC provider selection** — Keycloak (mature, heavy) vs Authentik (lighter, Python-based) as bundled identity provider for boundary 1 (see [ADR-011](adr-011-identity-provider.md), which chooses Zitadel with Keycloak as the fallback). Must support upstream IdP federation (SURFconext, Entra ID) and direct login.
 12. ODRL profile extensions (versioned, additive)
 13. Discovery service definition (JSON, ship as default)
 14. Negotiation timeout (operational decision)

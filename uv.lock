@@ -2063,6 +2063,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "python-multipart" },
     { name = "requests" },
+    { name = "uvicorn" },
 ]
 
 [package.optional-dependencies]
@@ -2142,6 +2143,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.14.2" },
     { name = "python-multipart", specifier = ">=0.0.31" },
     { name = "requests", specifier = ">=2.32.0" },
+    { name = "uvicorn", specifier = ">=0.30" },
 ]
 provides-extras = ["infra", "azure"]
 

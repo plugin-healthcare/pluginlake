@@ -10,7 +10,7 @@ from pluginlake.api.config import MetricsSettings
 DEPLOY_DIR = Path(__file__).resolve().parents[4] / "deploy"
 PROMETHEUS_DIR = DEPLOY_DIR / "monitoring" / "prometheus"
 COMPOSE_FILES = ["docker-compose.dev.yaml", "docker-compose.yaml"]
-MONITORING_SERVICES = {"prometheus", "postgres-exporter", "cadvisor"}
+MONITORING_SERVICES = {"prometheus", "postgres-exporter", "cadvisor", "docker-socket-proxy"}
 
 
 def _compose(name: str) -> dict:
@@ -49,11 +49,14 @@ def test_scrape_targets_exist_as_services(compose_file: str):
                 assert host in services, f"{job} target {host} missing in {compose_file}"
 
 
-@pytest.mark.parametrize("compose_file", COMPOSE_FILES)
-def test_monitoring_services_use_profile(compose_file: str):
-    services = _compose(compose_file)["services"]
+def test_monitoring_is_optional_in_dev_and_core_in_production():
+    dev = _compose("docker-compose.dev.yaml")["services"]
+    production = _compose("docker-compose.yaml")["services"]
     for name in MONITORING_SERVICES:
-        assert services[name]["profiles"] == ["monitoring"]
+        assert dev[name]["profiles"] == ["monitoring"]
+        assert "profiles" not in production[name]
+    for name in ("cadvisor", "docker-socket-proxy"):
+        assert production[name]["deploy"]["replicas"] == "${CADVISOR_REPLICAS:?set by just setup}"
 
 
 @pytest.mark.parametrize("compose_file", COMPOSE_FILES)
@@ -64,7 +67,8 @@ def test_metrics_not_published(compose_file: str):
     assert not any(port in str(p) for p in services["pluginlake"].get("ports", []))
     for name in MONITORING_SERVICES - {"prometheus"}:
         assert "ports" not in services[name]
-    assert all(str(p).startswith("127.0.0.1:") for p in services["prometheus"]["ports"])
+    allowed = ("127.0.0.1:", "${PROMETHEUS_PUBLISH:?")
+    assert all(str(p).startswith(allowed) for p in services["prometheus"].get("ports", []))
 
 
 @pytest.mark.parametrize("compose_file", COMPOSE_FILES)

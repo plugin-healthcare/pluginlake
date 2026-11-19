@@ -1,88 +1,71 @@
 # Docker guide
 
-This guide covers how pluginlake uses Docker for development and production, including image strategy, multi-stage builds, and secrets management.
+This is the background and reference page for how pluginlake runs in Docker: the containers, the ways to run them, where each setting lives, and how secrets and data are handled.
+To start a node, follow [Getting started](getting-started.md).
 
 ## Container architecture
 
-pluginlake uses separate containers for each concern:
+The production compose (`deploy/compose/docker-compose.yaml`) has one container per concern.
 
-| Container | Dockerfile | Purpose |
-|-----------|-----------|---------|
-| **postgres** | `dhi.io/postgres:17-alpine3.24` (pre-built) | Dagster metadata + DuckLake catalog |
-| **dagster-webserver** | `dagster-webserver.Dockerfile` | Dagster web UI |
-| **dagster-daemon** | `dagster-webserver.Dockerfile` | Schedules, sensors, run queue |
-| **dagster-code-server** | `pluginlake.Dockerfile` | Asset definitions served via gRPC |
-| **pluginlake** | `pluginlake.Dockerfile` | FastAPI service |
-| **pluginlake-ui** | `ui.Dockerfile` (`APP=datastation`) | Datastation Streamlit dashboard |
-| **pluginlake-central** | `ui.Dockerfile` (`APP=central`) | Central aggregation dashboard |
-| **prometheus** | `quay.io/prometheus/prometheus` (pre-built) | Metrics store, profile `monitoring` |
-| **postgres-exporter** | `quay.io/prometheuscommunity/postgres-exporter` (pre-built) | Postgres metrics, profile `monitoring` |
-| **cadvisor** | `ghcr.io/google/cadvisor` (pre-built) | Container metrics, profile `monitoring` |
-| **marquez-db** | `dhi.io/postgres:17-alpine3.24` (pre-built) | Marquez database (profile `lineage`) |
-| **marquez** | `marquezproject/marquez:0.51.1` (pre-built) | OpenLineage receiver API (profile `lineage`) |
-| **marquez-web** | `marquezproject/marquez-web:0.51.1` (pre-built) | Lineage web UI, host loopback only (profile `lineage`) |
+| Group | Containers | Image |
+|-------|-----------|-------|
+| Platform | `pluginlake` (API), `dagster-webserver`, `dagster-daemon`, `dagster-code-server`, `dashboard-datastation` (the console) | Built from `deploy/docker/` (`pluginlake.Dockerfile`, `dagster-webserver.Dockerfile`, `ui.Dockerfile`) |
+| Data | `postgres` (Dagster metadata and DuckLake catalog), `pluginlake-db-init` (roles and databases) | `dhi.io/postgres:17-alpine3.24`, built init image |
+| Lineage | `marquez`, `marquez-web` | `marquezproject/marquez` and `marquez-web` 0.51.1 |
+| Monitoring | `prometheus`, `postgres-exporter`, `cadvisor` (Compose only, can be switched off) | Upstream images pinned by digest, see the [monitoring guide](monitoring.md) |
+| Edge | `traefik`, `oauth2-proxy`, `zitadel-init`, `zitadel-api`, `zitadel-login`, `zitadel-groups-hook`, `pluginlake-init`, `starting-page` | See [Edge](#edge) |
 
-The monitoring services only start with `--profile monitoring` (or `[monitoring] enabled = true` with `pluginlake up`); see the [monitoring guide](monitoring.md).
+Prometheus and Marquez are core components and always start with the production compose.
+`[station]` and `[monitoring]` in `pluginlake.toml` set the lineage namespace, the station label, cAdvisor and the retention.
 
-In development, `dagster.dev.Dockerfile` replaces the webserver, daemon, and code-server with a single all-in-one container running `dagster dev`. The UI containers use `ui.dev.Dockerfile` with hot reload. Both dashboards share one Dockerfile; the build arguments `APP` (`datastation` or `central`) and `PORT` (8501 or 8502) select the dashboard.
+The development compose (`docker-compose.dev.yaml`) is smaller.
+`dagster.dev.Dockerfile` replaces the Dagster webserver, daemon and code server with 1 container running `dagster dev`, the API runs with `uvicorn --reload`, and source code is mounted into the containers.
+Monitoring and lineage are compose profiles (`monitoring`, `lineage`), and there is no edge.
+The dashboard is built by `ui.Dockerfile`.
 
-## Building and running
+## Running options
 
-### Development
+| Recipe | Compose file | What it does |
+|--------|-------------|--------------|
+| `just up` | `docker-compose.yaml` | Runs `pluginlake setup`, then builds and starts the production stack |
+| `just down` | `docker-compose.yaml` | Stops the production stack, the data stays in `PLUGINLAKE_HOME` |
+| `just setup` | none | Prepares the data folder, secrets, `compose.env` and the local certificate without starting anything |
+| `just dev-up` | `docker-compose.dev.yaml` | Platform development stack with the dashboards |
+| `just dev-up-headless` | `docker-compose.dev.yaml` | The same without the dashboards |
+| `just dev-down` | `docker-compose.dev.yaml` | Stops the development stack, all profiles |
+| `just dev-local` | none | Titanic example without Docker, see the [Titanic tutorial](../development/titanic-tutorial.md) |
+| `just smoke-test-full` | dev and smoke override | Starts an isolated stack, runs the smoke test and removes it with its volumes |
 
-```bash
-just dev-up        # Build and start all dev containers
-just dev-down      # Stop and remove dev containers
-```
+Production images are self-contained, with no source mounts.
+The build context is always the project root, for example `docker build -f deploy/docker/pluginlake.Dockerfile -t pluginlake .`.
 
-This uses `deploy/compose/docker-compose.dev.yaml`. Source code is volume-mounted into the containers, so changes are picked up immediately without rebuilding.
+## Where settings live
 
-### Production
-
-```bash
-just up            # Build and start all production containers
-just down          # Stop and remove production containers
-```
-
-This uses `deploy/compose/docker-compose.yaml`. Images are fully self-contained — no volume mounts for source code.
-
-### Building individual images
-
-```bash
-# From the project root:
-docker build -f deploy/docker/pluginlake.Dockerfile -t pluginlake .
-docker build -f deploy/docker/dagster-webserver.Dockerfile -t dagster-webserver .
-```
-
-The build context is always the project root (`../../` in the compose files) because Dockerfiles need access to `pyproject.toml`, `uv.lock`, `src/`, and `config/`.
+| What | Production | Development |
+|------|-----------|-------------|
+| Node settings (domain, first admin, projects, monitoring) | `pluginlake.toml` | Compose environment in the dev compose file |
+| uid, gid, data folder and domain for compose | `${PLUGINLAKE_HOME}/compose.env`, written by `pluginlake setup` | Not needed |
+| Secrets | One file per secret in `${PLUGINLAKE_HOME}/secrets/` | `deploy/compose/.env`, mounted as the same secret names |
+| Extra non-secret settings for a project | `[[projects]]` in `pluginlake.toml` | `deploy/compose/.env.containers` or `PLUGINLAKE_ENV_FILE` |
+| Data | Bind mounts below `PLUGINLAKE_HOME` | Docker volumes |
 
 ## Projects and database provisioning
 
-The development images (`pluginlake.dev.Dockerfile` and `dagster.dev.Dockerfile`) share the entrypoint `deploy/docker/entrypoint.sh`.
-It runs before the service starts and reads `PLUGINLAKE_PROJECTS`: whitespace-separated `uv pip install` arguments for the project packages to install.
-The production images used by `just up` do not run this entrypoint, so the variable has no effect there.
-
-Projects register themselves through the `pluginlake.projects` entry point, so the core discovers their code locations and routers without importing project code (ADR-009).
-In development, point `PLUGINLAKE_PROJECTS` at a local editable checkout:
+The dev images share the entrypoint `deploy/docker/entrypoint.sh`, which installs the packages in `PLUGINLAKE_PROJECTS` (whitespace-separated `uv pip install` arguments) before the service starts.
+The production images do not run it.
+Projects register through the `pluginlake.projects` entry point, so the core finds their code locations and routers without importing project code.
 
 ```bash
-PLUGINLAKE_PROJECTS="-e /opt/projects/my-project"
+PLUGINLAKE_PROJECTS="-e /opt/projects/my-project"                                  # local editable checkout
+PLUGINLAKE_PROJECTS="my-project@git+https://github.com/org/my-project@v1.2.3"      # pinned spec
 ```
 
-As an alternative to an editable checkout, use a pinned spec:
-
-```bash
-PLUGINLAKE_PROJECTS="my-project@git+https://github.com/org/my-project@v1.2.3"
-```
-
-Projects are installed with `--no-sources`, so the `[tool.uv.sources]` table of a project is ignored inside the image.
-The dev Dagster container creates its own database on start when it does not exist yet (`dagster_env --ensure-db`, see [secrets](#secrets)); DuckLake creates its catalog database the same way.
-The databases are currently created with the Postgres superuser; per-component roles are tracked in #224.
+Projects are installed with `--no-sources`, so their `[tool.uv.sources]` table is ignored.
+The dev Dagster container and DuckLake create their own databases on start when they do not exist yet.
 
 ## Smoke test
 
-The smoke test checks the core stack only, without any project installed.
-It verifies that the API and Dagster answer, that the core API routers respond, that every Dagster code location loads, and that a generic file upload through `POST /api/v1/ingest` is stored.
+The smoke test checks the core stack without any project: the API and Dagster answer, the core routers respond, every code location loads and a file upload through `POST /api/v1/ingest` is stored.
 Project pipelines are tested in their own repositories.
 
 ```bash
@@ -90,271 +73,195 @@ just smoke-test        # Run against an already running stack
 just smoke-test-full   # Start an isolated stack, run the test, tear it down (removes volumes)
 ```
 
-`smoke-test-full` reads `deploy/compose/smoke.env` and `deploy/compose/smoke.secrets.env`, so it does not depend on your local `.env`.
-`smoke.env` holds non-secret settings: it is passed to compose with `--env-file` for interpolation and loaded into the containers through `PLUGINLAKE_ENV_FILE=smoke.env`.
-`smoke.secrets.env` holds the throwaway passwords and is only passed with `--env-file`, like `deploy/compose/.env` in normal dev.
-`PLUGINLAKE_ENV_FILE` (default `deploy/compose/.env.containers`, optional) is the only env file the dev containers load; never put passwords in it.
-
-It publishes the same host ports as the dev stack, so stop `just dev-up` first if a port is already in use.
+`smoke-test-full` uses its own throwaway config in `deploy/compose/smoke.env` and `smoke.secrets.env`, so it does not depend on your `.env`.
+It publishes the same host ports as the dev stack, so stop `just dev-up` first.
 
 ## Hardened base images
 
-All Dockerfiles use hardened images from `dhi.io/` instead of the default Docker Hub images:
+All Dockerfiles use hardened images from `dhi.io/` (Python, Postgres and `uv`) instead of the default Docker Hub images.
+They are rebuilt with security fixes, carry no unnecessary packages and come with an SBOM, which reduces the attack surface in healthcare environments.
+The `-dev` variants include compilers and are only used in build stages.
 
-```dockerfile
-FROM dhi.io/python:3.13-debian13-dev AS builder    # Build stage
-FROM dhi.io/python:3.13-debian13                    # Runtime stage
-FROM dhi.io/postgres:17-alpine3.24                  # Database
-```
-
-**Why hardened images?**
-
-Standard images from Docker Hub (e.g. `python:3.13-slim`) ship with the full upstream package set and default configurations. Hardened images are rebuilt with security fixes applied, unnecessary packages removed, and restrictive defaults set. This reduces the attack surface and helps meet compliance requirements in healthcare environments.
-
-**Prerequisites:**
-
-Hardened images are distributed through Docker Hub and require authentication to pull. Before building any of the project's Docker images:
-
-1. Create an account at [hub.docker.com](https://hub.docker.com) if you don't have one.
-2. Log in from the CLI:
-
-   ```bash
-   docker login dhi.io
-   ```
-
-3. Browse the available hardened images at the [Docker Hub Hardened Images Catalog](https://hub.docker.com/hardened-images/catalog). Note that not all images are free — some require a Docker Pro, Team, or Business subscription.
-
-**What `dhi.io/` provides:**
-
-- Vulnerability patching on a regular cadence
-- Stripped-down package set (no compilers, shells, or debug tools in runtime images)
-- Non-root default user where possible
-- SBOM (Software Bill of Materials) for auditability
-
-**Dev vs runtime variants:**
-
-- `dhi.io/python:3.13-debian13-dev` — includes build tools (gcc, headers) needed to compile Python packages with C extensions. Used only in the build stage.
-- `dhi.io/python:3.13-debian13` — minimal runtime. No compilers, no pip, no development headers.
-
-The `uv` binary is similarly pulled from a hardened image rather than installed via curl:
-
-```dockerfile
-COPY --from=dhi.io/uv:0-debian13-dev /usr/local/bin/uv /usr/local/bin/uvx /usr/local/bin/
-```
+Pulling them requires a Docker Hub account and a one-time `docker login dhi.io`.
+Not all images in the [catalog](https://hub.docker.com/hardened-images/catalog) are free.
 
 ## Multi-stage builds
 
-Production Dockerfiles use multi-stage builds to keep final images small and secure.
+Production Dockerfiles build in 2 stages.
+The first stage uses the `-dev` Python image to run `uv sync --frozen --no-dev` and compile dependencies.
+The second stage is the minimal runtime image, which only receives `/app/.venv` and `src/` from the first, so it has no compilers, pip or uv.
+That makes images smaller, leaves fewer vulnerabilities (build tools are the most common source of CVEs) and speeds up deploys.
 
-### How it works
+Dev Dockerfiles use a single stage, because they need the full toolchain for hot reload, debugging and `dagster dev`.
 
-**Stage 1 — Build:** Install dependencies and compile the project using the dev image (which has compilers and build tools):
+## Edge
 
-```dockerfile
-FROM dhi.io/python:3.13-debian13-dev AS builder
+The production compose publishes only the ports 80 and 443 of Traefik.
+Traefik terminates TLS and sends every application host through oauth2-proxy forward auth, with Zitadel as identity provider.
 
-COPY --from=dhi.io/uv:0-debian13-dev /usr/local/bin/uv /usr/local/bin/uvx /usr/local/bin/
-
-WORKDIR /app
-COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
-
-COPY src/ src/
-RUN uv sync --frozen --no-dev
+```mermaid
+flowchart LR
+    user([Browser]) --> traefik[Traefik 80/443]
+    traefik -- forward auth --> proxy[oauth2-proxy]
+    proxy -- OIDC --> zitadel[Zitadel + login UI]
+    traefik --> api[api. pluginlake]
+    traefik --> dagster[dagster.]
+    traefik --> dash[console.]
+    traefik --> marquez[lineage.]
+    traefik --> prom[prometheus.]
+    zitadel --> pg[(Postgres)]
+    api --> pg
 ```
 
-**Stage 2 — Runtime:** Copy only the virtual environment and source code into the minimal runtime image:
+| Host | Service | Protected |
+|------|---------|-----------|
+| `<domain>` | Redirects to `console.<domain>` | No |
+| `auth.<domain>` | Zitadel and its login UI | No (it is the sign-in) |
+| `api.<domain>` | pluginlake API | Yes |
+| `dagster.<domain>` | Dagster webserver | Yes |
+| `console.<domain>` | Start page: Streamlit console with the links to the other applications | Yes |
+| `lineage.<domain>` | Marquez web (role: `marquez`) | Yes |
+| `prometheus.<domain>` | Prometheus | Yes |
 
-```dockerfile
-FROM dhi.io/python:3.13-debian13
+`[node] domain` in `pluginlake.toml` sets the domain.
+A domain below `.localhost`, such as the default `pluginlake.localhost`, resolves to the local machine in browsers, so `just setup` creates a certificate for it with [mkcert](https://github.com/FiloSottile/mkcert) in `tls/` of the data folder.
+Install mkcert first; setup runs `mkcert -install` once so browsers trust it, and oauth2-proxy trusts the same root CA.
+Firefox and Chrome need `certutil` for that (`libnss3-tools` on Debian and Ubuntu), so install it before the first `just setup`, or run `mkcert -install` again afterwards.
 
-WORKDIR /app
-COPY --from=builder /app/.venv /app/.venv
-COPY --from=builder /app/src /app/src
+Traefik reads its certificate from `tls/tls.yaml` in the data folder.
+For a real domain, put your own `tls.yaml` with `certFile` and `keyFile` entries (paths below `/tls`) and the certificate files there; setup does not overwrite it.
 
-ENV PATH="/app/.venv/bin:$PATH"
-```
+On first start `pluginlake-init` waits for Zitadel, creates the project and the OIDC application with the Management API and writes the oauth2-proxy configuration to the `bootstrap` folder, so there are no manual steps.
+The first admin is `ZITADEL_ADMIN_USERNAME` with the generated password in `secrets/zitadel_admin_password`.
+Zitadel always forces a new password at the first login.
+All other users, passwords and access are managed in Zitadel.
+The choice of Zitadel, with Keycloak as the fallback, is described in [ADR-011](../decisions/adr-011-identity-provider.md).
 
-### Why this matters
+All protected hosts share one oauth2-proxy and one session cookie on `.<domain>`, so you sign in once, for example on the console, and open every application without signing in again.
+All applications behind the proxy therefore trust the same session.
+oauth2-proxy refreshes the session with Zitadel every 5 minutes, so a removed role takes effect within those minutes.
+The session at the edge ends after 30 minutes without use, and at the latest 12 hours after signing in, because `pluginlake-init` sets the lifetime of refresh tokens in Zitadel to 12 hours.
+oauth2-proxy then sends the user to Zitadel.
+After 30 minutes without use Zitadel signs them in again without a password, and after 12 hours they enter their password again, because `pluginlake-init` also limits the sign-in at Zitadel to 12 hours.
+This limit is set on the default login policy of the instance; an organization that gets a login policy of its own in the Zitadel console needs the same check lifetimes.
+A silent sign-in just before the 12 hours end gives a new refresh token, so in that case a session lasts at most almost 24 hours.
+A browser tab that polls in the background, such as the Dagster UI, keeps its session in use, so for that tab only the 12 hours apply.
+Change the 12 hours with `PLUGINLAKE_BOOTSTRAP_SESSION_MAX_AGE` (for example `PT8H`) on `pluginlake-init`, and the 30 minutes with `--cookie-expire` of oauth2-proxy in a local override file.
 
-- **Smaller images:** The runtime image doesn't contain compilers, headers, pip, or uv — only what's needed to run.
-- **Fewer vulnerabilities:** Build tools are the most common source of CVEs. They never make it into the final image.
-- **Faster deploys:** Smaller images push and pull faster.
+Access is per application.
+`pluginlake-init` creates a Zitadel project role for each application (`api`, `console`, `dagster`, `marquez`, `prometheus`) and gives the first admin all of them.
+A user only opens an application when they have the role with that name, otherwise Traefik answers 403, and the sidebar of the console only shows the links the user has a role for.
+Grant roles to other users as user grants on the project `pluginlake` in the Zitadel console.
 
-### Dev images skip multi-stage
+The roles reach oauth2-proxy as a `groups` claim.
+While Zitadel builds the token and the userinfo, it calls the service `zitadel-groups-hook` (an Actions v2 call target that `pluginlake-init` creates), which answers with the roles of the project `pluginlake`.
+The target fails closed: when the hook is down or the signature check fails, Zitadel issues no token and nobody can sign in.
+The hook checks the signature with a key that `pluginlake-init` writes to the `bootstrap` folder.
+Zitadel blocks targets in private address ranges by default, so `zitadel-api` has `ZITADEL_HTTPCLIENT_DENYLIST` set to the default list without `172.16.0.0/12`, the range of the Docker networks.
+Adjust that list when your Docker networks use another private range.
+In Zitadel the loginname is `<username>@<organisation>.auth.<domain>`, for example `admin@zitadel.auth.pluginlake.localhost`.
 
-Dev Dockerfiles use a single stage because they need the full toolchain for hot reload, debugging, and `dagster dev`:
-
-```dockerfile
-FROM dhi.io/python:3.13-debian13-dev
-# ... install everything in one stage
-CMD dagster dev -h 0.0.0.0 -p 3000 -m "$DAGSTER_MODULE"
-```
+Traefik uses the file provider and has no access to the Docker socket.
+Postgres and the other databases are only on the internal network `db-net`.
+Nuts and DPoP endpoints are not routed yet; they will bypass forward auth when the Nuts work is done (#127).
 
 ## Environment variables and secrets
 
-### The problem
+### Overview
 
-Containers need configuration (database host, ports) and secrets (passwords, API keys). These should not be hardcoded in Dockerfiles or compose files, and secrets must never be committed to version control.
-
-Configuration is passed as environment variables. Passwords are Docker Compose secrets, mounted as files under `/run/secrets/`.
-They are not part of any container's configuration (`docker inspect`) or env file, and pluginlake reads them straight into its settings, so they are not in the environment of the API or the code server either.
-The one exception is Dagster: `dagster.yaml` can only read its storage password from `DAGSTER_PG_PASSWORD`, so the Dagster processes have it in their environment (see below).
+Configuration is passed as environment variables.
+Passwords are Docker Compose secrets, mounted as files under `/run/secrets/`, so they are not in `docker inspect` or any env file.
+Only Dagster has its storage password in the environment, because `dagster.yaml` can only read it from `DAGSTER_PG_PASSWORD`.
 
 ### Secrets
 
-Both compose files declare their passwords as environment-sourced secrets:
-
-```yaml
-services:
-  postgres:
-    environment:
-      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
-    secrets:
-      - source: postgres_password
-        uid: "70"        # the user the service runs as
-        mode: 0400
-
-secrets:
-  postgres_password:
-    environment: POSTGRES_PASSWORD   # read by docker compose, not by the container
-```
-
-`docker compose` reads the value from its own environment (the shell or an `--env-file`) and copies it into the container as `/run/secrets/<name>`, owned by the service user with mode `0400`.
-The secrets env file is never passed to `env_file:`, so the value is not in any container's environment.
-
-File-based secrets (`file: ./secrets/x`) are not used: without Swarm, compose bind-mounts the host file with its host permissions and ignores `uid`/`mode`, so the file would have to be world-readable for non-root containers.
+The dev compose fills its secrets from the compose-only `deploy/compose/.env`.
+The production compose uses one file per secret in `${PLUGINLAKE_HOME}/secrets`, generated by `pluginlake setup`.
+Compose bind-mounts these files with their host owner and mode, and every container runs as the host user that owns them (mode `0400`), so nobody else can read them.
 
 How each service reads its secret:
 
 | Service | Secret file | How |
 |---------|-------------|-----|
-| pluginlake API, code server, Dagster (DuckLake) | `ducklake_pg_password` | `DuckLakeSettings` (pydantic `secrets_dir`) |
-| Dagster webserver, daemon, code server, `dagster dev` | `dagster_pg_password` | `DagsterPostgresSettings` (in `pluginlake.deploy.dagster_env`), exported as `DAGSTER_PG_PASSWORD` by that launcher |
-| postgres | `postgres_password` | `POSTGRES_PASSWORD_FILE`, native in the image |
-| postgres-exporter | `postgres_exporter_password` | `DATA_SOURCE_PASS_FILE`, native in the image |
-| Prometheus | `prometheus_remote_write_password` | `basic_auth.password_file`, set by its entrypoint |
+| pluginlake API, code server, Dagster (DuckLake) | `ducklake_pg_password` | pydantic `secrets_dir` |
+| Dagster | `dagster_pg_password` | `pluginlake.deploy.dagster_env` exports it as `DAGSTER_PG_PASSWORD` for the Dagster process |
+| postgres, postgres-exporter | `postgres_password`, `postgres_exporter_password` | `*_FILE` variables of the image |
+| Zitadel | `zitadel_masterkey`, `zitadel_config.yaml`, `zitadel_admin_password`, `zitadel_steps.yaml` | `--masterkeyFile`, `--config`, `--steps` |
+| Zitadel login UI, Marquez | `zitadel_cookie_secret`, `marquez_db_password` | The entrypoint exports it from the file |
 
-pluginlake settings classes set `secrets_dir=secrets_dir()` (`pluginlake.config`), which is `/run/secrets` when it exists.
-pydantic then reads a field from the file named after its environment variable in lowercase, e.g. `DUCKLAKE_PG_PASSWORD` from `/run/secrets/ducklake_pg_password`.
-Environment variables and `.env` take precedence over secret files, so keep passwords out of every env file a container loads; locally, without `/run/secrets`, the settings read the root `.env` as before.
+`pluginlake secrets list --home <data folder>` shows the name, origin and presence of every secret without values, and exits with 1 when a secret is missing.
+`pluginlake secrets get <name> --home <data folder>` prints one value and logs the access without the value.
+`pluginlake setup` generates every secret that does not exist yet.
+A secret manager can supply a value instead by writing the same file before the first `just up`, and then owns its rotation.
 
-`pluginlake.deploy.dagster_env` is the image entrypoint of the production Dagster webserver/daemon, wraps the production code server and wraps `dagster dev` in the dev image.
-The code server needs the password too: runs execute there (`DefaultRunLauncher` with a gRPC code location) and write their events to the Dagster instance.
-It loads `DagsterPostgresSettings`, sets `DAGSTER_PG_PASSWORD` for the Dagster process only and `exec`s the command; with `--ensure-db` it first creates the Dagster database if it is missing.
-The launcher only depends on pydantic-settings, so the production webserver/daemon image does not install pluginlake: it installs the `dagster-webserver` dependency group and runs the launcher as a single file (`python /app/dagster_env.py`).
-`--ensure-db` needs pluginlake and is only used in the dev image.
+The Zitadel master key encrypts the Zitadel database and is never rotated, so keep `secrets/zitadel_masterkey` in the backup of the data folder.
 
-### Dagster instance config and run logs
+Environment variables and `.env` take precedence over secret files, so keep passwords out of every env file a container loads.
+Extra non-secret settings (e.g. for a project) can go in `deploy/compose/.env.containers`, or another file selected with `PLUGINLAKE_ENV_FILE`.
 
-The dev stack uses `config/dagster/dagster.yaml`; the production webserver/daemon image uses `config/dagster/dagster.production.yaml` as its `dagster.yaml`.
-The daemon passes this instance config to runs, so the code server needs no copy of its own.
-The two files differ only in compute logs: production uses `NoOpComputeLogManager`, because capturing stdout/stderr needs `tail`, which the hardened runtime images lack.
-In production, `context.log` messages are stored in Postgres and shown in the Dagster UI; stdout/stderr of steps only appear in the code-server container log (`docker compose logs dagster-code-server`).
-Telemetry is disabled in both files.
+### Production: `pluginlake.toml` and the data folder
 
-### Container logs
+The production compose has no defaults and no env files.
+Node settings (domain, first admin name) are in the `[node]` section of `pluginlake.toml`, and fixed names such as the database roles are constants in the compose file.
 
-The production compose rotates the log of every container (`x-logging` anchor): Docker's `json-file` driver with at most 5 files of 10 MB per container, so up to 50 MB is kept on the host.
-Without it, Docker keeps logs without limit for as long as the container exists.
-Step stdout/stderr ends up in the `dagster-code-server` log, and a `print(df)` there writes data rows; do not print data, and change the limits in `docker-compose.yaml` if the station needs a shorter or longer retention.
+| What | Where | Created by |
+|------|-------|------------|
+| Node settings | `[node]` in `pluginlake.toml` | You |
+| uid, gid, data folder and domain for compose | `${PLUGINLAKE_HOME}/compose.env` | `pluginlake setup`, run by `just up` |
+| Secrets | `${PLUGINLAKE_HOME}/secrets/` (one file per secret, mode `0400`) | `pluginlake setup`. The secrets, their kind and the services that mount them are listed in `src/pluginlake/deploy/secrets.toml` |
+| Database roles and databases | Postgres | `pluginlake-db-init` (`python -m pluginlake.deploy.init_databases`) |
+
+Compose reads the host user, the data folder and the domain before any container runs.
+`just up` therefore first runs `pluginlake setup` in a container as the host user, without network and with a read-only root file system.
+It creates the folders and the secrets that do not exist yet and writes `compose.env`, and it can also run on the host (`uv run pluginlake setup --home .pluginlake`).
+Existing secrets are never overwritten, so `just up` is safe to run again.
+Do not rotate secrets by deleting files: removing a database password file without changing it in Postgres locks the service out.
+
+`pluginlake-db-init` is the only service besides Postgres that uses the Postgres superuser.
+It creates a role and a database per service (`dagster`, `ducklake`, `zitadel`) and a read-only `pg_monitor` role for postgres-exporter, each with its own generated password.
+
+### Data folder and host user
+
+All containers run as the host user and keep their data in bind mounts below `PLUGINLAKE_HOME` (default `.pluginlake`; set the environment variable before `just up` to use another folder).
+There are no named volumes, so `docker compose down -v` and `docker volume prune` do not remove data.
+Back the folder up as a whole.
+
+```text
+.pluginlake/
+├── compose.env    # uid, gid, home and domain for compose
+├── secrets/       # mode 0700
+├── bootstrap/     # one folder per consumer (admin, login, hook, proxy) with tokens and oauth2-proxy config, mode 0700
+├── ca/            # root certificate of a local node, trusted by oauth2-proxy
+├── postgres/      # database cluster
+├── prometheus/    # metrics
+├── data/          # DuckLake storage and Dagster state
+└── passwd         # passwd entry for the host user, mounted into the Postgres containers
+```
+
+Run this on Linux.
+Docker Desktop on macOS maps the ownership of bind mounts, which makes Postgres refuse its data folder.
+
+### Dagster instance config and logs
+
+The dev stack uses `config/dagster/dagster.yaml` and production uses `dagster.production.yaml`.
+They differ only in compute logs: production uses `NoOpComputeLogManager`, because capturing stdout/stderr needs `tail`, which the hardened images lack.
+In production, `context.log` messages go to Postgres and the Dagster UI, and stdout/stderr of steps only to the `dagster-code-server` container log, so do not print data there.
+
+The production compose rotates every container log (5 files of 10 MB each); change the limits in the `x-logging` anchor if a station needs another retention.
 
 ### Development: `deploy/compose/.env`
 
-Docker Compose automatically loads `.env` from the directory of the compose file, for interpolation and as the source of the secrets.
-Only compose reads it; the containers never load it.
+Compose loads `.env` from the directory of the compose file for interpolation and as the source of the secrets.
+Containers never load it.
+Copy it from `deploy/compose/.env.example`.
 
 ```dotenv
-# deploy/compose/.env (from deploy/compose/.env.example)
 POSTGRES_USER=dagster
 POSTGRES_PASSWORD=dagster
-PROMETHEUS_REMOTE_WRITE_PASSWORD=
 ```
 
-The dev stack uses the Postgres superuser for every service, so `POSTGRES_PASSWORD` is the only database secret.
-`pluginlake up` passes an empty `PROMETHEUS_REMOTE_WRITE_PASSWORD` when monitoring is enabled and the variable is not defined.
+The dev stack uses the Postgres superuser for every service and mounts the one `postgres_password` secret under the names the settings read (`dagster_pg_password`, `ducklake_pg_password`).
+The root `.env` is only for `just dev-local` (no Docker).
 
-The dev containers do not load the root `.env`; it is only for `just dev-local` (no Docker) and keeps its passwords for that.
-Container settings are set explicitly in the compose file; extra non-secret settings (e.g. for a project) can go in `deploy/compose/.env.containers`, or another file selected with `PLUGINLAKE_ENV_FILE`.
-The dev stack mounts its one `postgres_password` secret under the names the settings read (`dagster_pg_password`, `ducklake_pg_password`).
-
-### Production: `.env.production` and `.env.production.secrets`
-
-Production splits configuration from secrets:
-
-| File | Read by | Contains |
-|------|---------|----------|
-| `.env.production` | containers (`env_file`) and compose | users, database names, hosts |
-| `.env.production.secrets` | compose only (`--env-file`) | `POSTGRES_PASSWORD`, `DAGSTER_PG_PASSWORD`, `DUCKLAKE_PG_PASSWORD`, `POSTGRES_EXPORTER_PASSWORD`, `PROMETHEUS_REMOTE_WRITE_PASSWORD` |
-
-```bash
-cp deploy/compose/.env.production.example deploy/compose/.env.production
-cp deploy/compose/.env.production.secrets.example deploy/compose/.env.production.secrets
-chmod 600 deploy/compose/.env.production deploy/compose/.env.production.secrets
-# Edit both with real values, then:
-just up
-```
-
-`just up` and `just down` pass both files with `--env-file`.
-When running compose by hand, pass them too; compose refuses to start a service whose secret variable is not set.
-`POSTGRES_EXPORTER_PASSWORD` and `PROMETHEUS_REMOTE_WRITE_PASSWORD` are only needed when the `monitoring` profile starts; the latter may be empty when remote write is not used.
-
-### Comparison
-
-| Approach | Where secrets live | Visible in `docker inspect` | Encryption | Best for |
-|----------|-------------------|----------------------------|------------|----------|
-| `environment:` in compose | Compose file (committed) | Yes | No | Never use for real secrets |
-| `.env` + `${VAR}` in `environment:` | `.env` file (gitignored) | Yes | No | Not used for secrets |
-| `env_file:` | Separate file (gitignored) | Yes | No | Non-secret configuration |
-| Compose `secrets:` (environment source) | Compose-only env file, copied to `/run/secrets/` | No | No | Our dev and production compose |
-| Swarm `secrets:` | Raft log (encrypted) | No | Yes | Swarm production |
-| External vault | Vault/KMS | No | Yes | Kubernetes / regulated environments |
-
-Compose secrets are not encrypted at rest on the host: protect the secrets env file with file permissions (`chmod 600`).
+Compose secrets are not encrypted at rest, so protect them with file permissions.
 Kubernetes and Swarm mount secrets as files too, so the same `/run/secrets/<name>` files work with the platform's secret store.
-
-### What goes where
-
-| Variable | Secret? | Notes |
-|----------|---------|-------|
-| `DAGSTER_HOME` | No | Always `/app/config/dagster`, set in Dockerfile |
-| `DAGSTER_MODULE` | No | Which Python module to load |
-| `DAGSTER_PG_HOST` | No | Service name within the Docker network |
-| `DAGSTER_PG_USER` | No | `.env.production` |
-| `POSTGRES_PASSWORD` | **Yes** | Secret `postgres_password` |
-| `DAGSTER_PG_PASSWORD` | **Yes** | Secret `dagster_pg_password` (production; dev uses `postgres_password`) |
-| `DUCKLAKE_PG_PASSWORD` | **Yes** | Secret `ducklake_pg_password` (production; dev uses `postgres_password`) |
-| `POSTGRES_EXPORTER_PASSWORD` | **Yes** | Secret `postgres_exporter_password` (production; dev uses `postgres_password`) |
-| `PROMETHEUS_REMOTE_WRITE_PASSWORD` | **Yes** | Secret `prometheus_remote_write_password`; never in `.env.monitoring` |
-
-## File layout
-
-```text
-deploy/
-├── compose/
-│   ├── .env                          # Dev compose env and secret values (gitignored)
-│   ├── .env.example                  # Template for dev (committed)
-│   ├── .env.containers               # Optional extra non-secret settings for dev containers (gitignored)
-│   ├── .env.production               # Prod config, no passwords (gitignored)
-│   ├── .env.production.example       # Template for prod config (committed)
-│   ├── .env.production.secrets       # Prod passwords, compose-only (gitignored)
-│   ├── .env.production.secrets.example # Template for prod passwords (committed)
-│   ├── .env.monitoring               # Prometheus remote-write URL and username (gitignored)
-│   ├── .env.monitoring.example       # Template for Prometheus settings (committed)
-│   ├── smoke.env / smoke.secrets.env # Throwaway config and secrets for the smoke test (committed)
-│   ├── docker-compose.dev.yaml       # Dev: single dagster container + postgres + pluginlake + UI
-│   ├── docker-compose.central.yaml   # Central dashboard (separate compose)
-│   └── docker-compose.yaml           # Prod: separate webserver, daemon, code-server
-├── docker/
-│   ├── dagster.dev.Dockerfile         # Dev all-in-one dagster (single stage)
-│   ├── dagster-webserver.Dockerfile   # Prod webserver + daemon (multi-stage)
-│   ├── pluginlake.dev.Dockerfile      # Dev FastAPI (single stage)
-│   ├── pluginlake.Dockerfile          # Prod FastAPI + code-server (multi-stage)
-│   ├── ui.dev.Dockerfile              # Dev dashboards, APP=datastation|central (hot reload)
-│   └── ui.Dockerfile                  # Prod dashboards, APP=datastation|central (multi-stage)
-└── monitoring/
-    └── prometheus/
-        ├── entrypoint.sh              # Renders the config (labels, cAdvisor, remote_write)
-        ├── prometheus.yml             # Global config
-        └── scrape.d/                  # One scrape job per file
-```
