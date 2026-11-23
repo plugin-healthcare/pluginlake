@@ -73,7 +73,7 @@ This is the route Zitadel documents for oauth2-proxy.
 - The price of Zitadel is the extra `zitadel-groups-hook`: about 100 lines of our own code and 1 more container to run, monitor and keep available, because nobody can sign in while it is down. Keycloak has a built-in groups mapper and needs neither.
 - A customer or auditor may still reject the AGPL, and then we switch to Keycloak: a realm import instead of the provisioning in `pluginlake-init`, new compose services and users re-created.
 - Users and their access live in Zitadel, and later also in contracts. Our configuration holds no user data, only a first admin with a generated password that is forced to change at the first login.
-- This ADR describes the edge for Docker Compose. Who owns the edge (proxy, TLS, domain and sign-in) on Kubernetes and on a managed cluster, and how the network around it is limited, is not decided here.
+- This ADR describes the edge for Docker Compose. Who owns the edge (proxy, TLS, domain and sign-in) on Kubernetes and on a managed cluster, and how the network around it is limited, is an open question in [ADR-012](adr-012-core-platform-and-deployment.md).
 - Fine-grained access follows the data contracts in our own layer (DSP, ODRL), with the provider supplying identities, groups and claims.
 - Access starts per service or application, and profiles follow later on top of that.
 

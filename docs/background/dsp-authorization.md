@@ -2,7 +2,7 @@
 
 Design specification for how the Eclipse Dataspace Protocol, Nuts identity, and ODRL authorization map onto pluginlake's existing components (FastAPI, Dagster, DuckLake).
 
-This document is the implementation companion to [ADR-008](../decisions/adr-008-dataspace-protocol-authz-authc-rbac.md) (the decision record).
+This document is the implementation companion to the DSP decisions and risks notes in the handbook vault.
 
 ---
 
@@ -1552,7 +1552,7 @@ This ensures the catalog always reflects what the station is actually willing to
 
 ### Nuts constraints and design considerations
 
-For detailed Nuts integration constraints (one node per instance, Discovery Service, DPoP validation, FHIR credential model, `localParameters` limitations, scope granularity), see [ADR-006: Nuts Node Integration](../decisions/adr-006-nuts-node-decentralized-auth.md#nuts-constraints-and-design-considerations).
+For detailed Nuts integration constraints (one node per instance, Discovery Service, DPoP validation, FHIR credential model, `localParameters` limitations, scope granularity), see the Nuts integration notes in the handbook vault.
 
 **Key principle for this ADR:** Nuts handles organizational membership only. Per-dataset access control is not achievable at the Nuts layer. Fine-grained per-user permissions belong in the PluginlakeAccessCredential (VC with ODRL profile), not in Nuts credentials.
 

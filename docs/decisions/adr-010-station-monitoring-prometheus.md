@@ -42,7 +42,7 @@ We run a full Prometheus rather than an Alloy agent like vantage6-ops: the stati
 ### Choices per runtime
 
 The components above are what a node on Docker Compose needs, because a bare-metal VM has no cloud provider that supplies container metrics or a metrics store.
-Other runtimes make some of them unnecessary:
+Other runtimes make some of them unnecessary (the runtime tiers are described in [ADR-012](adr-012-core-platform-and-deployment.md)):
 
 | Component | Docker Compose (VM) | Kubernetes (self-hosted or managed) |
 |---|---|---|

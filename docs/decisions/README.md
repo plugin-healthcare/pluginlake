@@ -9,9 +9,10 @@ This directory contains Architecture Decision Records (ADRs) for the pluginlake 
 | [ADR-003](adr-003-ducklake-data-catalog.md)     | DuckLake integration with Dagster + logging      | Proposed | 2026-02-23 |
 | [ADR-004](adr-004-data-organization.md)         | Data organization and naming conventions         | Proposed | 2026-02-24 |
 | [ADR-005](adr-005-fastapi-gateway.md)           | FastAPI as unified API gateway                   | Proposed | 2026-03-05 |
-| [ADR-006](adr-006-nuts-node-decentralized-auth.md) | Nuts Node integration for decentralized identity | Accepted | 2026-03-19 |
+| [ADR-006](adr-006-organisational-identity-and-access-between-instances.md) | Organisational identity and access between instances | Proposed | 2026-03-19 |
 | [ADR-007](adr-007-column-level-lineage.md)         | Column-level lineage strategy                  | Proposed | 2026-04-12 |
-| [ADR-008](adr-008-dataspace-protocol-authz-authc-rbac.md) | DSP, authentication, and authorization architecture | Proposed | 2026-05-28 |
 | [ADR-009](adr-009-core-project-plugin-architecture.md) | Core platform and project plugin architecture | Proposed | 2026-07-08 |
 | [ADR-010](adr-010-station-monitoring-prometheus.md) | Station monitoring with Prometheus | Proposed | 2026-11-03 |
 | [ADR-011](adr-011-identity-provider.md) | Identity provider | Proposed | 2026-11-10 |
+| [ADR-012](adr-012-core-platform-and-deployment.md) | Core platform and deployment | Proposed | 2026-11-17 |
+| [ADR-013](adr-013-dbt-sql-on-fhir.md) | dbt and SQL on FHIR in project pipelines | Proposed | 2026-11-19 |

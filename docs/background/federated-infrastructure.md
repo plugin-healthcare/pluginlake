@@ -10,7 +10,7 @@ pluginlake is a federated data lakehouse where each hospital runs its own data s
 Stations exchange data and query each other without a central identity provider.
 The data layer is DuckDB/DuckLake, with OMOP CDM for clinical data modeling and FHIR ingestion managed by Dagster.
 A FastAPI gateway exposes query and data access endpoints.
-Authentication and authorization will be handled by a Nuts Node sidecar (W3C DIDs, Verifiable Credentials, OAuth2 token exchange), as documented in [ADR-006](../decisions/adr-006-nuts-node-decentralized-auth.md).
+Authentication and authorization will be handled by a Nuts Node sidecar (W3C DIDs, Verifiable Credentials, OAuth2 token exchange), as described in the Nuts integration notes in the handbook vault.
 
 ## 1. Scope and method
 
@@ -52,7 +52,7 @@ It provides the trust layer that pluginlake will use for inter-station authentic
 | **Healthcare** | Purpose-built for Dutch healthcare: NEN 7510/7512/7513, AVG/GDPR, Wegiz, Wabvpz. Production deployments across Dutch vendors. |
 | **Stack** | Go binary. REST API (OpenAPI 3.0) + gRPC. Docker sidecar (~200 MB). 256 MB RAM, 1 vCPU typical. GPLv3. |
 
-Nuts is the selected auth backbone for pluginlake (see [ADR-006](../decisions/adr-006-nuts-node-decentralized-auth.md)).
+Nuts is the leading candidate for the auth backbone of pluginlake (see [ADR-006](../decisions/adr-006-organisational-identity-and-access-between-instances.md)).
 It is not a computation platform; it complements federated learning frameworks by providing trust.
 
 #### How the Nuts network works
@@ -742,7 +742,7 @@ Applies from December 2027. Medical devices excluded from CRA but EHDS requires 
 ## 10. Operational design for federated query dispatch
 
 This section documents the operational design for executing federated queries across multiple datastations, covering async dispatch, result management, failure handling, versioning, rate limiting, and monitoring.
-These concerns are referenced by [ADR-006](../decisions/adr-006-nuts-node-decentralized-auth.md) (architecture) and Epic E6 in the [Epics & Stories](../decisions/epics-analytics.md) (implementation).
+These concerns are referenced by [ADR-006](../decisions/adr-006-organisational-identity-and-access-between-instances.md) (architecture) and Epic E6 in the [Epics & Stories](../decisions/epics-analytics.md) (implementation).
 
 ### 10.1 Async dispatch via Dagster
 

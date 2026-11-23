@@ -15,7 +15,7 @@ This ADR draws one line precisely, because we kept blurring it: a **project** an
   Nothing more.
   It carries no governance, no contracts, no permits.
   A project maps to one DuckLake catalog and one asset-URN namespace.
-- A **federation/collaboration** (defined in [ADR-006](adr-006-nuts-node-decentralized-auth.md) and [ADR-008](adr-008-dataspace-protocol-authz-authc-rbac.md)) is the governance and access unit: the organizations, contracts, and per-user permits that decide who may do what with which data.
+- A **federation/collaboration** (defined in [ADR-006](adr-006-organisational-identity-and-access-between-instances.md)) is the governance and access unit: the organizations, contracts, and per-user permits that decide who may do what with which data.
 
 The two are orthogonal and relate many-to-many.
 A federation can span multiple projects, and a project can serve multiple federations.

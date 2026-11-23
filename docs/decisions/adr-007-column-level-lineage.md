@@ -18,7 +18,7 @@ This ADR evaluates the available tooling and approaches for adding column-level 
 
 pluginlake's architecture imposes specific constraints on any lineage solution:
 
-1. **No dbt.** Transformations are Dagster assets with Polars/DuckDB, not dbt SQL models (ADR-001).
+1. **Lineage must work without dbt.** Existing Dagster assets use Polars or DuckDB; [ADR-013](adr-013-dbt-sql-on-fhir.md) proposes evaluating dbt for project-owned SQL models.
 2. **Runtime, not build-time.** `can_subset=True`, `diagonal_relaxed`, `SELECT *`, polymorphic FHIR data, and custom data station assets mean column mappings can only be fully determined at materialization time (ADR-001, ADR-003).
 3. **DuckLake is the catalog.** All data and metadata flows through DuckLake (ADR-003). A lineage solution that stores results outside the catalog fragments the metadata layer.
 4. **Extensibility.** Data stations add custom assets (ADR-001). Lineage must work for assets pluginlake has never seen, not only for a pre-defined set.
@@ -168,7 +168,7 @@ This covers all SQL in pluginlake: IO manager writes, asset queries, vocabulary 
 
 The extension only supports HTTP transport. Network-isolated environments need a local OpenLineage-compatible endpoint.
 
-If data stations adopt dbt, column lineage from dbt models comes for free via `openlineage-dbt` (which supports the `duckdb` adapter).
+For dbt models, `openlineage-dbt` supports the `duckdb` adapter, but the emitted column mappings and their catalog identities still need verification on a station.
 
 ### Polars/Python lineage: the gap and the direction
 
