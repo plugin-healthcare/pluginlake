@@ -100,9 +100,11 @@ services:
             for path in sorted(fhir.glob("*.ndjson")):
                 if path.name not in ("Patient.ndjson", "Medication.ndjson", "Organization.ndjson"):
                     keep(path, linked)
+            # Medication lines carry no id, so only a share of them is kept.
+            unlinked = itertools.count()
             for name in ("Medication.ndjson", "Organization.ndjson"):
                 if (fhir / name).exists():
-                    keep(fhir / name, lambda line: json.loads(line)["id"] in referenced)
+                    keep(fhir / name, lambda line: json.loads(line).get("id") in referenced or ("id" not in json.loads(line) and next(unlinked) < limit))
         print("demo data ready")
     networks: [demo-egress]
     restart: "no"
