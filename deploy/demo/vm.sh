@@ -103,7 +103,7 @@ case "${1:-}" in
     certs) certs ;;
     serve) serve ;;
     up) up ;;
-    data) compose --profile data run --rm demo-data ;;
+    data) compose --profile data run --rm --pull "$([[ "$DEMO_PULL" == 0 ]] && echo never || echo always)" demo-data ;;
     down) compose down ;;
     ps) compose ps -a --format '{{.Service}}\t{{.Status}}' ;;
     logs) compose logs --no-color --tail 200 "${@:2}" ;;
