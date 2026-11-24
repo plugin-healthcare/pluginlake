@@ -17,6 +17,11 @@ services:
   dagster-code-server:
     <<: *demo-image
     restart: unless-stopped
+    healthcheck:
+      # The health check CLI alone takes several seconds on a small VM.
+      timeout: 30s
+      interval: 15s
+      start_period: 120s
     environment:
       # Synthea test data ships without OMOP vocabularies.
       OMOP_VALIDATE_CONCEPTS: "false"
