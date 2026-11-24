@@ -1,0 +1,65 @@
+# Demo override for the production stack on a tailnet-only VM.
+# Images come from the registry, Traefik listens only on the VM's loopback interface,
+# and Tailscale Services forward HTTPS for each subdomain to it (see deploy/demo/README.md).
+
+x-demo-image: &demo-image
+  image: ${DEMO_REGISTRY:-ghcr.io/plugin-healthcare}/pluginlake-ehds-demo:${DEMO_TAG:-demo}
+  build: !reset null
+  pull_policy: always
+
+services:
+  pluginlake-db-init: *demo-image
+  pluginlake: *demo-image
+  zitadel-groups-hook: *demo-image
+  pluginlake-init: *demo-image
+  dagster-code-server:
+    <<: *demo-image
+    environment:
+      # Synthea test data ships without OMOP vocabularies.
+      OMOP_VALIDATE_CONCEPTS: "false"
+      OMOP_VOCABULARY_AUTO_LOAD: "false"
+  dagster-webserver: &webserver
+    image: ${DEMO_REGISTRY:-ghcr.io/plugin-healthcare}/pluginlake-dagster-webserver:${DEMO_TAG:-demo}
+    build: !reset null
+    pull_policy: always
+  dagster-daemon: *webserver
+  dashboard-datastation:
+    image: ${DEMO_REGISTRY:-ghcr.io/plugin-healthcare}/pluginlake-ui:${DEMO_TAG:-demo}
+    build: !reset null
+    pull_policy: always
+
+  traefik:
+    ports: !override
+      - "127.0.0.1:443:443"
+
+  oauth2-proxy:
+    environment:
+      # Trusts the VM's own CA for the internal call to the identity provider.
+      SSL_CERT_FILE: /ca/ca.pem
+
+  # Loads the Synthea test data once; the ehds-demo sensors then ingest it.
+  demo-data:
+    <<: *demo-image
+    profiles: [data]
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
+    volumes:
+      - ${PLUGINLAKE_HOME:?run just setup}/data:/app/.data
+    tmpfs: [/tmp]
+    command:
+      - python
+      - -c
+      - |
+        from pathlib import Path
+        from pluginlake.utils.download import download_and_extract
+        base = "https://github.com/plugin-healthcare/pluginlake-testdata/releases/download"
+        download_and_extract(f"{base}/synthea1k-v1/synthea1k.tar.gz", Path(".data/raw/omop"))
+        download_and_extract(f"{base}/synthea-fhir-ndjson-v1/synthea_fhir_ndjson.tar.gz", Path(".data/raw/fhir"))
+        print("demo data ready")
+    networks: [demo-egress]
+    restart: "no"
+
+networks:
+  demo-egress: {}

@@ -1,0 +1,15 @@
+# Demo node config. `deploy/demo/vm.sh up` renders it to pluginlake.toml on the VM with DEMO_DOMAIN.
+# The ehds-demo project is installed in the demo image, so no [[projects]] entry is needed.
+
+[station]
+endpoint_url = "https://api.@DOMAIN@"
+lineage = true
+lineage_namespace = "ds-demo-001"
+
+[monitoring]
+enabled = true
+station_id = "ds-demo-001"
+cadvisor = false
+
+[node]
+domain = "@DOMAIN@"
