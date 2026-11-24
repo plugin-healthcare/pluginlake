@@ -9,11 +9,14 @@ x-demo-image: &demo-image
 
 services:
   pluginlake-db-init: *demo-image
-  pluginlake: *demo-image
+  pluginlake:
+    <<: *demo-image
+    restart: unless-stopped
   zitadel-groups-hook: *demo-image
   pluginlake-init: *demo-image
   dagster-code-server:
     <<: *demo-image
+    restart: unless-stopped
     environment:
       # Synthea test data ships without OMOP vocabularies.
       OMOP_VALIDATE_CONCEPTS: "false"
@@ -22,11 +25,18 @@ services:
     image: ${DEMO_REGISTRY:-ghcr.io/plugin-healthcare}/pluginlake-dagster-webserver:${DEMO_TAG:-demo}
     build: !reset null
     pull_policy: always
+    restart: unless-stopped
   dagster-daemon: *webserver
   dashboard-datastation:
     image: ${DEMO_REGISTRY:-ghcr.io/plugin-healthcare}/pluginlake-ui:${DEMO_TAG:-demo}
     build: !reset null
     pull_policy: always
+    restart: unless-stopped
+
+  # Bring the whole stack back when the VM starts.
+  postgres: {restart: unless-stopped}
+  marquez: {restart: unless-stopped}
+  marquez-web: {restart: unless-stopped}
 
   traefik:
     ports: !override

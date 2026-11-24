@@ -56,7 +56,7 @@ just demo-vm data        # once: loads the Synthea test data
 Open `https://console.<tailnet domain>` on a tailnet device.
 The first administrator signs in with the password in `.pluginlake/secrets/zitadel_admin_password` on the VM and changes it when asked.
 Afterwards, `just demo-vm ps`, `just demo-vm logs <service>` and `just demo-vm down` help, and `just demo-vm-power stop` stops the VM.
-The VM also stops every evening, and after `just demo-vm-power start` the stack needs `just demo-vm up` again (with `DEMO_PULL=0` when the images were copied).
+The VM also stops every evening, and after `just demo-vm-power start` the whole stack and the Tailscale Services come back by themselves.
 
 ## Images
 
