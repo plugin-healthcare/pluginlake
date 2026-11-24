@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # Runs the pluginlake demo on a tailnet-only VM. Called from a workstation through `just demo-vm <command>`.
 #
-#   bootstrap  add the user to the docker group (once, needs sudo)
+#   bootstrap  add the user to the docker group and make it the Tailscale operator (once, asks for the sudo password)
 #   certs      create the VM-only CA and the wildcard certificate Traefik serves behind Tailscale
-#   serve      advertise the Tailscale Services that forward HTTPS to Traefik (needs sudo)
+#   serve      advertise the Tailscale Services that forward HTTPS to Traefik
 #   up         render pluginlake.toml, prepare the node and start the stack from the registry images
 #   data       download the Synthea test data that the ehds-demo sensors ingest
 #   down | ps | logs [service]
 #
-# Environment: DEMO_DOMAIN (the tailnet domain, e.g. example.ts.net), DEMO_REGISTRY and DEMO_TAG (optional).
+# Environment: DEMO_DOMAIN (the tailnet domain, e.g. example.ts.net), DEMO_REGISTRY and DEMO_TAG (optional),
+# DEMO_PULL=0 to use images copied with `just demo-images-copy` instead of pulling them.
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
@@ -24,6 +25,7 @@ echo "# $(date -Is) vm.sh $* (log: $LOG)"
 
 export DEMO_REGISTRY="${DEMO_REGISTRY:-ghcr.io/plugin-healthcare}"
 export DEMO_TAG="${DEMO_TAG:-demo}"
+DEMO_PULL="${DEMO_PULL:-1}"
 compose() {
     docker compose --env-file "$HOME_DIR/compose.env" \
         -f deploy/compose/docker-compose.yaml -f deploy/demo/docker-compose.demo.yaml "$@"
@@ -32,6 +34,8 @@ domain() { echo "${DEMO_DOMAIN:?set DEMO_DOMAIN to the tailnet domain, e.g. exam
 
 bootstrap() {
     id -nG | grep -qw docker || { sudo usermod -aG docker "$USER"; echo "Added $USER to the docker group: log in again."; }
+    # As operator, the user runs `tailscale serve` without sudo.
+    sudo tailscale set --operator="$USER"
     docker compose version
 }
 
@@ -68,7 +72,7 @@ serve() {
     # Tailscale keeps the original Host header, which Traefik routes on. The target is an IP so no SNI is sent:
     # Traefik refuses a request whose SNI differs from its Host header.
     for s in "${SERVICES[@]}"; do
-        sudo tailscale serve --service="svc:$s" --https=443 https+insecure://127.0.0.1:443
+        tailscale serve --service="svc:$s" --https=443 https+insecure://127.0.0.1:443
     done
     tailscale serve status
 }
@@ -79,13 +83,13 @@ up() {
     certs
     # Rendered outside the checkout, where pluginlake.toml is a tracked file.
     sed "s/@DOMAIN@/$d/g" deploy/demo/pluginlake.toml.template > "$HOME_DIR/pluginlake.toml"
-    docker pull --quiet "$image" > /dev/null
+    [[ "$DEMO_PULL" == 0 ]] || docker pull --quiet "$image" > /dev/null
     docker run --rm --user "$(id -u):$(id -g)" --network none --cap-drop ALL --read-only \
         -v "$HOME_DIR:/pluginlake-home" -v "$HOME_DIR/pluginlake.toml:/pluginlake.toml:ro" \
         "$image" pluginlake setup --config /pluginlake.toml --home /pluginlake-home --host-home "$HOME_DIR"
-    compose pull --quiet
+    [[ "$DEMO_PULL" == 0 ]] || compose pull --quiet
     local rc=0
-    compose up -d --no-build --wait --wait-timeout 900 || rc=$?
+    compose up -d --no-build --pull "$([[ "$DEMO_PULL" == 0 ]] && echo missing || echo always)" --wait --wait-timeout 900 || rc=$?
     compose ps -a --format '{{.Service}}\t{{.Status}}'
     if (( rc != 0 )); then
         echo "compose up failed (exit $rc); see \`just demo-vm logs <service>\`." >&2

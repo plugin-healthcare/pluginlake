@@ -254,6 +254,22 @@ demo-vm-power action="status":
     esac
     scw instance server get "$id" zone=fr-par-1 -o json | jq -r '"\(.name): \(.state)"'
 
+# Copy the demo images and Postgres (dhi.io needs a login) to the VM over SSH, for use with DEMO_PULL=0
+demo-images-copy:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{ _demo_env }}
+    mkdir -p .agents/logs
+    log=".agents/logs/demo-images-copy-$(date +%Y%m%dT%H%M%S).log"
+    tag="${DEMO_TAG:-demo}" reg="${DEMO_REGISTRY:-ghcr.io/plugin-healthcare}" pg="$(grep -o -m1 'dhi.io/postgres:[^ "]*' deploy/compose/docker-compose.yaml)"
+    {
+        docker pull --quiet --platform linux/amd64 "$pg"
+        docker save --platform linux/amd64 "$reg/pluginlake:$tag" "$reg/pluginlake-dagster-webserver:$tag" "$reg/pluginlake-ui:$tag" \
+            "$reg/pluginlake-ehds-demo:$tag" "$pg" | gzip -1 | ssh "${DEMO_SSH:?set DEMO_SSH}" 'gunzip | docker load'
+        # Restore the image for this machine's own architecture.
+        docker pull --quiet "$pg" > /dev/null
+    } 2>&1 | tee "$log"
+
 # Check out DEMO_REF (a pushed branch or tag) on the VM and run deploy/demo/vm.sh there, e.g. `just demo-vm up` (bootstrap, certs, serve, up, data, down, ps, logs)
 [positional-arguments]
 demo-vm *args:
@@ -270,4 +286,4 @@ demo-vm *args:
         git fetch --quiet origin $(printf %q "$ref")
         git checkout --quiet --detach FETCH_HEAD
         echo \"pluginlake $(printf %q "$ref") at \$(git rev-parse --short HEAD)\"
-        DEMO_DOMAIN=$(printf %q "${DEMO_DOMAIN:?set DEMO_DOMAIN}") DEMO_REGISTRY=$(printf %q "${DEMO_REGISTRY:-ghcr.io/plugin-healthcare}") DEMO_TAG=$(printf %q "${DEMO_TAG:-demo}") deploy/demo/vm.sh $(printf '%q ' "$@")"
+        DEMO_DOMAIN=$(printf %q "${DEMO_DOMAIN:?set DEMO_DOMAIN}") DEMO_REGISTRY=$(printf %q "${DEMO_REGISTRY:-ghcr.io/plugin-healthcare}") DEMO_TAG=$(printf %q "${DEMO_TAG:-demo}") DEMO_PULL=$(printf %q "${DEMO_PULL:-1}") deploy/demo/vm.sh $(printf '%q ' "$@")"
