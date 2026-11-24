@@ -53,8 +53,11 @@ DEMO_PULL=0 just demo-vm up
 just demo-vm data        # once: loads the Synthea test data
 ```
 
+Define the Services in the admin console before `serve`.
+When a Service page still says it has no hosts, restart Tailscale on the VM with `sudo systemctl restart tailscaled` so it advertises them again.
+
 Open `https://console.<tailnet domain>` on a tailnet device.
-The first administrator signs in with the password in `.pluginlake/secrets/zitadel_admin_password` on the VM and changes it when asked.
+The first administrator signs in as `admin@zitadel.auth.<tailnet domain>` with the password in `.pluginlake/secrets/zitadel_admin_password` on the VM and changes it when asked.
 Afterwards, `just demo-vm ps`, `just demo-vm logs <service>` and `just demo-vm down` help, and `just demo-vm-power stop` stops the VM.
 The VM also stops every evening, and after `just demo-vm-power start` the whole stack and the Tailscale Services come back by themselves.
 
