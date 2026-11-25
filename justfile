@@ -286,4 +286,4 @@ demo-vm *args:
         git fetch --quiet origin $(printf %q "$ref")
         git checkout --quiet --detach FETCH_HEAD
         echo \"pluginlake $(printf %q "$ref") at \$(git rev-parse --short HEAD)\"
-        DEMO_DOMAIN=$(printf %q "${DEMO_DOMAIN:?set DEMO_DOMAIN}") DEMO_REGISTRY=$(printf %q "${DEMO_REGISTRY:-ghcr.io/plugin-healthcare}") DEMO_TAG=$(printf %q "${DEMO_TAG:-demo}") DEMO_PULL=$(printf %q "${DEMO_PULL:-1}") deploy/demo/vm.sh $(printf '%q ' "$@")"
+        DEMO_DOMAIN=$(printf %q "${DEMO_DOMAIN:?set DEMO_DOMAIN}") DEMO_REGISTRY=$(printf %q "${DEMO_REGISTRY:-ghcr.io/plugin-healthcare}") DEMO_TAG=$(printf %q "${DEMO_TAG:-demo}") DEMO_PULL=$(printf %q "${DEMO_PULL:-1}") DEMO_FHIR_PATIENTS=$(printf %q "${DEMO_FHIR_PATIENTS:-1000}") deploy/demo/vm.sh $(printf '%q ' "$@")"
