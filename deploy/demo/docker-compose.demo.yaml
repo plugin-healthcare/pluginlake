@@ -1,0 +1,113 @@
+# Demo override for the production stack on a tailnet-only VM.
+# Images come from the registry, Traefik listens only on the VM's loopback interface,
+# and Tailscale Services forward HTTPS for each subdomain to it (see deploy/demo/README.md).
+
+x-demo-image: &demo-image
+  image: ${DEMO_REGISTRY:-ghcr.io/plugin-healthcare}/pluginlake-ehds-demo:${DEMO_TAG:-demo}
+  build: !reset null
+  pull_policy: always
+
+services:
+  pluginlake-db-init: *demo-image
+  pluginlake:
+    <<: *demo-image
+    restart: unless-stopped
+  zitadel-groups-hook: *demo-image
+  pluginlake-init: *demo-image
+  dagster-code-server:
+    <<: *demo-image
+    restart: unless-stopped
+    healthcheck:
+      # The health check CLI alone takes several seconds on a small VM.
+      timeout: 30s
+      interval: 15s
+      start_period: 120s
+    environment:
+      # Synthea test data ships without OMOP vocabularies.
+      OMOP_VALIDATE_CONCEPTS: "false"
+      OMOP_VOCABULARY_AUTO_LOAD: "false"
+  dagster-webserver: &webserver
+    image: ${DEMO_REGISTRY:-ghcr.io/plugin-healthcare}/pluginlake-dagster-webserver:${DEMO_TAG:-demo}
+    build: !reset null
+    pull_policy: always
+    restart: unless-stopped
+  dagster-daemon: *webserver
+  dashboard-datastation:
+    image: ${DEMO_REGISTRY:-ghcr.io/plugin-healthcare}/pluginlake-ui:${DEMO_TAG:-demo}
+    build: !reset null
+    pull_policy: always
+    restart: unless-stopped
+
+  # Bring the whole stack back when the VM starts.
+  postgres: {restart: unless-stopped}
+  marquez: {restart: unless-stopped}
+  marquez-web: {restart: unless-stopped}
+
+  traefik:
+    ports: !override
+      - "127.0.0.1:443:443"
+
+  oauth2-proxy:
+    environment:
+      # Trusts the VM's own CA for the internal call to the identity provider.
+      SSL_CERT_FILE: /ca/ca.pem
+
+  # Loads the Synthea test data once; the ehds-demo sensors then ingest it.
+  demo-data:
+    <<: *demo-image
+    profiles: [data]
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
+    volumes:
+      - ${PLUGINLAKE_HOME:?run just setup}/data:/app/.data
+    tmpfs: [/tmp]
+    environment:
+      # Patients kept from the FHIR set; all 51k (2.8 GB) do not fit in memory on a small VM. 0 keeps all.
+      DEMO_FHIR_PATIENTS: ${DEMO_FHIR_PATIENTS:-1000}
+    command:
+      - python
+      - -c
+      - |
+        import itertools, json, os, re
+        from pathlib import Path
+        from pluginlake.utils.download import download_and_extract
+        base = "https://github.com/plugin-healthcare/pluginlake-testdata/releases/download"
+        download_and_extract(f"{base}/synthea1k-v1/synthea1k.tar.gz", Path(".data/raw/omop"))
+        download_and_extract(f"{base}/synthea-fhir-ndjson-v1/synthea_fhir_ndjson.tar.gz", Path(".data/raw/fhir"))
+
+        def keep(path, predicate):
+            tmp = path.with_suffix(".tmp")
+            with path.open() as src, tmp.open("w") as dst:
+                dst.writelines(line for line in src if predicate(line))
+            tmp.replace(path)
+
+        # Keep the first patients and every resource that references them, so references stay intact.
+        limit, fhir, uuid = int(os.environ["DEMO_FHIR_PATIENTS"]), Path(".data/raw/fhir"), re.compile(r"urn:uuid:([0-9a-f-]+)")
+        if limit:
+            with (fhir / "Patient.ndjson").open() as f:
+                patients = list(itertools.islice(f, limit))
+            (fhir / "Patient.ndjson").write_text("".join(patients))
+            ids = {json.loads(line)["id"] for line in patients}
+            referenced = set()
+            def linked(line):
+                refs = set(uuid.findall(line))
+                if refs & ids:
+                    referenced.update(refs)
+                    return True
+                return False
+            for path in sorted(fhir.glob("*.ndjson")):
+                if path.name not in ("Patient.ndjson", "Medication.ndjson", "Organization.ndjson"):
+                    keep(path, linked)
+            # Medication lines carry no id, so only a share of them is kept.
+            unlinked = itertools.count()
+            for name in ("Medication.ndjson", "Organization.ndjson"):
+                if (fhir / name).exists():
+                    keep(fhir / name, lambda line: json.loads(line).get("id") in referenced or ("id" not in json.loads(line) and next(unlinked) < limit))
+        print("demo data ready")
+    networks: [demo-egress]
+    restart: "no"
+
+networks:
+  demo-egress: {}

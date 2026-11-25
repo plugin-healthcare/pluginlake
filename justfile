@@ -94,9 +94,16 @@ setup *args='':
     # Created here so docker does not create the mount source as root.
     mkdir -p "{{ home }}"
     chmod 700 "{{ home }}"
-    docker build --quiet -f deploy/docker/pluginlake.Dockerfile -t pluginlake-setup . > /dev/null
+    # PLUGINLAKE_SETUP_IMAGE uses a prebuilt pluginlake image instead of building one.
+    image="${PLUGINLAKE_SETUP_IMAGE:-}"
+    if [[ -n "$image" ]]; then
+        docker pull --quiet "$image" > /dev/null
+    else
+        image=pluginlake-setup
+        docker build --quiet -f deploy/docker/pluginlake.Dockerfile -t "$image" . > /dev/null
+    fi
     domain="$(docker run --rm --user "$(id -u):$(id -g)" --network none --cap-drop ALL --read-only \
-        -v "{{ justfile_directory() }}/pluginlake.toml:/pluginlake.toml:ro" pluginlake-setup \
+        -v "{{ justfile_directory() }}/pluginlake.toml:/pluginlake.toml:ro" "$image" \
         python -c 'import tomllib; print(tomllib.load(open("/pluginlake.toml", "rb")).get("node", {}).get("domain") or "")')"
     # The same lock as `pluginlake setup`, so concurrent runs do not mix the files of two certificates.
     command -v flock > /dev/null || { echo "flock (util-linux) is required for just setup" >&2; exit 1; }
@@ -116,7 +123,7 @@ setup *args='':
     exec 9>&-
     docker run --rm --user "$(id -u):$(id -g)" --network none --cap-drop ALL --read-only \
         -v "{{ home }}:/pluginlake-home" -v "{{ justfile_directory() }}/pluginlake.toml:/pluginlake.toml:ro" \
-        pluginlake-setup pluginlake setup --config /pluginlake.toml --home /pluginlake-home --host-home "{{ home }}" {{ args }}
+        "$image" pluginlake setup --config /pluginlake.toml --home /pluginlake-home --host-home "{{ home }}" {{ args }}
 
 # Start the production stack
 up *args='':
@@ -179,3 +186,104 @@ infra-show:
 # Format all .tf files
 infra-fmt:
     cd {{ infra_dir }} && tofu fmt -recursive
+
+# --- Scaleway demo VM (OpenTofu, state encrypted in Scaleway Object Storage) ---
+
+demo_infra_dir := "deploy/infra/scaleway-demo"
+
+# Run tofu for the demo VM, e.g. `just demo-tofu plan`. Reads deploy/infra/scaleway-demo/.env and the scw CLI profile
+[positional-arguments]
+demo-tofu *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{ demo_infra_dir }}"
+    [[ -f .env ]] || { echo "Copy {{ demo_infra_dir }}/.env.example to .env and fill it in" >&2; exit 1; }
+    set -a; source ./.env; set +a
+    # The S3 backend reads AWS variables; the Scaleway API key works for Object Storage.
+    export AWS_ACCESS_KEY_ID="$(scw config get access-key)"
+    export AWS_SECRET_ACCESS_KEY="$(scw config get secret-key)"
+    if [[ "${1:-}" == "init" ]]; then
+        tofu "$@" -backend-config="bucket=${TOFU_STATE_BUCKET:?set TOFU_STATE_BUCKET in .env}"
+    else
+        tofu "$@"
+    fi
+
+demo_registry := env("DEMO_REGISTRY", "ghcr.io/plugin-healthcare")
+demo_ehds_dir := env("DEMO_EHDS_DIR", justfile_directory() / ".." / "pluginlake-ehds-demo")
+demo_wheels_dir := env("DEMO_WHEELS_DIR", justfile_directory() / ".agents" / "runbook" / "demo" / "wheels")
+
+# Build the demo images for linux/amd64 and tag them `demo` and with the commit; `just demo-images push` also pushes them
+demo-images mode="load":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [[ "{{ mode }}" == load || "{{ mode }}" == push ]] || { echo "mode must be load or push" >&2; exit 1; }
+    sha="$(git rev-parse --short HEAD)$([[ -z "$(git status --porcelain -- src pyproject.toml uv.lock deploy/docker deploy/demo)" ]] || echo -dirty)"
+    ehds_sha="$(git -C "{{ demo_ehds_dir }}" rev-parse --short HEAD)"
+    mkdir -p .agents/logs "{{ demo_wheels_dir }}"; log=".agents/logs/demo-images-$(date +%Y%m%dT%H%M%S).log"
+    echo "pluginlake ${sha}, ehds-demo ${ehds_sha}, log ${log}"
+    build() {
+        local name="$1"; shift
+        echo "== ${name}" | tee -a "$log"
+        docker buildx build --platform linux/amd64 --"{{ mode }}" \
+            --label org.opencontainers.image.source=https://github.com/plugin-healthcare/pluginlake \
+            -t "{{ demo_registry }}/${name}:demo" -t "{{ demo_registry }}/${name}:${sha}" "$@" . >>"$log" 2>&1 \
+            || { echo "build of ${name} failed, see ${log}" >&2; tail -20 "$log" >&2; exit 1; }
+    }
+    build pluginlake -f deploy/docker/pluginlake.Dockerfile
+    build pluginlake-dagster-webserver -f deploy/docker/dagster-webserver.Dockerfile
+    build pluginlake-ui -f deploy/docker/ui.Dockerfile
+    build pluginlake-ehds-demo -f deploy/demo/ehds-demo.Dockerfile --build-context ehds="{{ demo_ehds_dir }}" \
+        --build-context wheels="{{ demo_wheels_dir }}" --label "org.pluginlake.ehds-demo.revision=${ehds_sha}"
+    echo "done: {{ demo_registry }}/*:demo and :${sha}"
+
+# --- Demo VM operations from a workstation (reads deploy/demo/.env, reaches the VM over Tailscale) ---
+
+_demo_env := 'set -a; source deploy/demo/.env 2>/dev/null || { echo "Copy deploy/demo/.env.example to deploy/demo/.env and fill it in" >&2; exit 1; }; set +a'
+
+# Start, stop or show the demo VM: `just demo-vm-power start|stop|status`
+demo-vm-power action="status":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{ _demo_env }}
+    id="$(scw instance server list name="${DEMO_VM_NAME:-pluginlake-demo}" zone=fr-par-1 -o json | jq -r '.[0].id')"
+    case "{{ action }}" in
+        start) scw instance server start "$id" zone=fr-par-1 --wait > /dev/null ;;
+        stop) scw instance server stop "$id" zone=fr-par-1 --wait > /dev/null ;;
+        status) ;;
+        *) echo "action must be start, stop or status" >&2; exit 1 ;;
+    esac
+    scw instance server get "$id" zone=fr-par-1 -o json | jq -r '"\(.name): \(.state)"'
+
+# Copy the demo images and Postgres (dhi.io needs a login) to the VM over SSH, for use with DEMO_PULL=0
+demo-images-copy:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{ _demo_env }}
+    mkdir -p .agents/logs
+    log=".agents/logs/demo-images-copy-$(date +%Y%m%dT%H%M%S).log"
+    tag="${DEMO_TAG:-demo}" reg="${DEMO_REGISTRY:-ghcr.io/plugin-healthcare}" pg="$(grep -o -m1 'dhi.io/postgres:[^ "]*' deploy/compose/docker-compose.yaml)"
+    {
+        docker pull --quiet --platform linux/amd64 "$pg"
+        docker save --platform linux/amd64 "$reg/pluginlake:$tag" "$reg/pluginlake-dagster-webserver:$tag" "$reg/pluginlake-ui:$tag" \
+            "$reg/pluginlake-ehds-demo:$tag" "$pg" | gzip -1 | ssh "${DEMO_SSH:?set DEMO_SSH}" 'gunzip | docker load'
+        # Restore the image for this machine's own architecture.
+        docker pull --quiet "$pg" > /dev/null
+    } 2>&1 | tee "$log"
+
+# Check out DEMO_REF (a pushed branch or tag) on the VM and run deploy/demo/vm.sh there, e.g. `just demo-vm up` (bootstrap, certs, serve, up, data, down, ps, logs)
+[positional-arguments]
+demo-vm *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{ _demo_env }}
+    repo="${DEMO_REPO:-https://github.com/plugin-healthcare/pluginlake.git}" ref="${DEMO_REF:?set DEMO_REF to a pushed branch or tag that contains deploy/demo}"
+    # The VM only gets what is pushed, so warn when the local commit is not on the remote ref.
+    git fetch --quiet origin "$ref" 2>/dev/null && [[ "$(git rev-parse HEAD)" == "$(git rev-parse FETCH_HEAD)" ]] \
+        || echo "Note: the VM runs origin/$ref, which differs from your local HEAD." >&2
+    ssh -t "${DEMO_SSH:?set DEMO_SSH}" "set -e
+        [ -d pluginlake/.git ] || git clone --quiet $(printf %q "$repo") pluginlake
+        cd pluginlake
+        git fetch --quiet origin $(printf %q "$ref")
+        git checkout --quiet --detach FETCH_HEAD
+        echo \"pluginlake $(printf %q "$ref") at \$(git rev-parse --short HEAD)\"
+        DEMO_DOMAIN=$(printf %q "${DEMO_DOMAIN:?set DEMO_DOMAIN}") DEMO_REGISTRY=$(printf %q "${DEMO_REGISTRY:-ghcr.io/plugin-healthcare}") DEMO_TAG=$(printf %q "${DEMO_TAG:-demo}") DEMO_PULL=$(printf %q "${DEMO_PULL:-1}") DEMO_FHIR_PATIENTS=$(printf %q "${DEMO_FHIR_PATIENTS:-1000}") deploy/demo/vm.sh $(printf '%q ' "$@")"
