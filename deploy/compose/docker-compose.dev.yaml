@@ -192,7 +192,7 @@ services:
   # Only the read-only Docker API calls cAdvisor needs; everything else, such as reading files from a container,
   # is refused.
   docker-socket-proxy:
-    image: wollomatic/socket-proxy:1.13.2@sha256:ff95d6ff6c27853005ef85eb8f4ab5923dc3d2f1e055f98fb6aeeaceec3fe848
+    image: wollomatic/socket-proxy:1.14.0@sha256:fead157c4de4092461267092be49c993c2e6dd296a54c89ed04b8c870016b045
     profiles: [monitoring]
     # Root, without capabilities, to open the socket, which is owned by root and the docker group of the host.
     user: "0:0"
