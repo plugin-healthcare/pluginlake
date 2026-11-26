@@ -322,7 +322,7 @@ services:
       replicas: ${CADVISOR_REPLICAS:?set by just setup}
     <<: *hardening
     logging: *default-logging
-    image: ghcr.io/google/cadvisor:v0.60.6@sha256:b8e7d1093144fd088f425ff003d75a4aa405de075db78dae3bc563730b1bd07a
+    image: ghcr.io/google/cadvisor:v0.61.1@sha256:4929b70e82079d001d0028b85d6a4dd25ad4666b719455c9542b983489963916
     command:
       - --docker=tcp://docker-socket-proxy:2375
       - --docker_only=true
