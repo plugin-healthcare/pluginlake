@@ -543,7 +543,7 @@ services:
     <<: *hardening
     logging: *default-logging
     user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
-    image: ghcr.io/zitadel/zitadel-login:v4.20.2@sha256:09c1a6ea523818401f0740cca0991fc09166e5c2f15c6999f2806d2b5f4845eb
+    image: ghcr.io/zitadel/zitadel-login:v4.20.6@sha256:5f35f65e30011f23250c40cc80300eb0e15259c135b088639a60f35a600e7f5b
     # The login UI reads its cookie secret only from the environment: the entrypoint exports it from the secret file.
     entrypoint:
       - sh
