@@ -468,7 +468,7 @@ services:
     <<: *hardening
     logging: *default-logging
     user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
-    image: ghcr.io/zitadel/zitadel:v4.20.2@sha256:d7ffdecfe037940beeae24c8bb32a420b2adc67fab7bc51554bdae58f9624ef3
+    image: ghcr.io/zitadel/zitadel:v4.20.6@sha256:169179455987c52d89c6c719bcd2871d6797e8a8df7c44396cd96d34eec56363
     command: init zitadel --config /run/secrets/zitadel_config.yaml
     secrets:
       - zitadel_config.yaml
@@ -484,7 +484,7 @@ services:
     <<: *hardening
     logging: *default-logging
     user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
-    image: ghcr.io/zitadel/zitadel:v4.20.2@sha256:d7ffdecfe037940beeae24c8bb32a420b2adc67fab7bc51554bdae58f9624ef3
+    image: ghcr.io/zitadel/zitadel:v4.20.6@sha256:169179455987c52d89c6c719bcd2871d6797e8a8df7c44396cd96d34eec56363
     # Database password (--config) and admin password (--steps) come from secret files, not the environment.
     command:
       - start-from-setup
