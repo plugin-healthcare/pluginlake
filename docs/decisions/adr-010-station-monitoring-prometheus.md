@@ -8,16 +8,18 @@
 
 Each data station runs its own Prometheus as the compose profile `monitoring`, switched on with `[monitoring] enabled = true` in `pluginlake.toml`.
 It scrapes the pluginlake API (`/metrics` on an internal port), Postgres (via postgres-exporter) and the station's containers (via cAdvisor).
-Metrics leave the station only over an outbound `remote_write` to a central Prometheus, matching the vantage6-ops monitoring setup (vantage6-ops ADR 002).
+Metrics stay on the station.
+Central monitoring is out of scope for now, and the mechanism by which a station would send metrics is decided together with the processing hub and Nuts work.
 Labels are bounded by design, so neither patient data nor free user input can end up in a metric.
+The compose profile is the choice for a node that runs Docker Compose, see [Choices per runtime](#choices-per-runtime) for other runtimes.
 
 ## Context
 
-Operators need to see whether a station is healthy without logging in to the host, and the metrics must later feed the central monitoring of vantage6-ops on `plugin.dhd.nl`.
+Operators need to see whether a station is healthy without logging in to the host, and the metrics may later feed a central monitoring.
 
 vantage6-ops (ADR 002, ADR 004 in DutchHospitalData/vantage6-ops) sets the constraints we follow:
 
-- Hospital firewalls only allow outbound HTTPS, so the central Prometheus cannot scrape a node; nodes push with `remote_write` and basic auth.
+- Hospital firewalls only allow outbound HTTPS, so a central Prometheus cannot scrape a node.
 - Exporters are only reachable on the local Docker network, never via host ports.
 - Every sample carries host-identifying external labels (`agb`, `host` there) so the central side can tell nodes apart.
 - cAdvisor is trimmed: no container labels are shipped, and only the stack's own containers are reported.
@@ -35,7 +37,21 @@ vantage6-ops (ADR 002, ADR 004 in DutchHospitalData/vantage6-ops) sets the const
 
 Upstream images are used because the hardened `dhi.io/prometheus` image has no shell (needed for the config entrypoint) and trails upstream.
 
-We run a full Prometheus rather than an Alloy agent like vantage6-ops: the station keeps a local, queryable history (default 15 days) that also works when no central monitoring is connected, and Prometheus' own `remote_write` produces the same wire format the central receiver already accepts.
+We run a full Prometheus rather than an Alloy agent like vantage6-ops: the station keeps a local, queryable history (default 15 days) that also works when no central monitoring is connected, and it can later forward or be federated when central monitoring is decided.
+
+### Choices per runtime
+
+The components above are what a node on Docker Compose needs, because a bare-metal VM has no cloud provider that supplies container metrics or a metrics store.
+Other runtimes make some of them unnecessary:
+
+| Component | Docker Compose (VM) | Kubernetes (self-hosted or managed) |
+|---|---|---|
+| API metrics and postgres-exporter | Scraped by the station Prometheus | Same endpoints, scraped by the cluster Prometheus |
+| Container metrics | Our `cadvisor` container, only for Compose | The kubelet already serves cAdvisor metrics, so no container of ours |
+| Local Prometheus | Optional, switched on with `[monitoring] enabled`, gives local history without central monitoring | A self-hosted cluster runs its own Prometheus, a managed cluster can use the provider's monitoring |
+
+The `cadvisor` service is therefore part of the Compose deployment only, and a Kubernetes deployment scrapes the kubelet instead.
+An agent such as Grafana Alloy can replace the local Prometheus where no local history is needed, but it runs the same cAdvisor code and needs the same host access, so it does not remove the cAdvisor privileges.
 
 ### API metrics
 
@@ -54,11 +70,9 @@ An entrypoint script renders the final config at container start:
 - `station` external label from `PROMETHEUS_STATION_ID` (`[monitoring] station_id`).
 - `scrape.d/cadvisor.yml` is dropped when `PROMETHEUS_SCRAPE_CADVISOR=false`, for hosts that already run cAdvisor (such as a vantage6 host stack).
 - cAdvisor series are kept only for containers of this compose project.
-- A `remote_write` block with basic auth is appended when `PROMETHEUS_REMOTE_WRITE_URL` is set. The password is the Docker secret `/run/secrets/prometheus_remote_write_password`, referenced as `password_file`; it is never in the Prometheus environment. Only `https://` URLs are accepted, URLs with embedded credentials are rejected, and only the scheme and host are logged.
 
-The URL can be set in `pluginlake.toml`; the remote-write username lives in `deploy/compose/.env.monitoring`, read by Prometheus only.
-The remote-write and postgres-exporter passwords are Docker Compose secrets (see the [Docker guide](../guides/docker.md#secrets)): mounted under `/run/secrets/` in their own service only, never in a container environment.
-A central Prometheus that can reach the station may alternatively federate from `/federate`.
+The remote-less setup means the only monitoring secret is the postgres-exporter password, a Docker Compose secret (see the [Docker guide](../guides/docker.md#secrets)): mounted under `/run/secrets/` in its own service only, never in a container environment.
+A central Prometheus that can reach the station may federate from `/federate`.
 
 ### No patient data, no free input in labels
 
@@ -68,7 +82,7 @@ A central Prometheus that can reach the station may alternatively federate from 
 
 ## Consequences
 
-- Operators get station health locally (`http://127.0.0.1:9090`) and centrally once `remote_write_url` and credentials are set.
+- Operators get station health locally (`http://127.0.0.1:9090`). A host address on a private network can be set with `[monitoring] publish`, and the endpoint has no authentication of its own, so it must not face the internet.
 - cAdvisor needs read access to host paths and `/dev/kmsg`, like in vantage6-ops; it can be switched off with `[monitoring] cadvisor = false`. Its access to the Docker socket makes it host-privileged, so it runs on a separate `monitoring` network that only Prometheus joins.
 - The central side should add `agb`/`host` labels per station if it needs them; the station only sends `station`.
 - Dagster metrics are not collected yet; this can be added as another `scrape.d` job.

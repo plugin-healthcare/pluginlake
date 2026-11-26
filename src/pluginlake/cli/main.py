@@ -5,8 +5,11 @@ import sys
 from pathlib import Path
 
 from pluginlake.cli.init import run_init
+from pluginlake.cli.secrets import run_secrets_get, run_secrets_list
 from pluginlake.cli.up import run_down, run_up
 from pluginlake.cli.verify import run_verify
+from pluginlake.deploy.setup import run_setup
+from pluginlake.utils.logger import setup_logging
 
 _DEFAULT_CONFIG = Path("pluginlake.toml")
 
@@ -53,6 +56,23 @@ def _build_parser() -> argparse.ArgumentParser:
     up_parser.add_argument("-d", "--detach", action="store_true", help="Run containers in the background.")
     up_parser.add_argument("--no-build", action="store_true", help="Do not rebuild images before starting.")
 
+    setup_parser = subparsers.add_parser(
+        "setup",
+        parents=[config_parent],
+        help="Prepare a production node: folders, secrets and compose.env (run before docker compose).",
+    )
+    setup_parser.add_argument("--home", type=Path, default=Path(".pluginlake"), help="Data folder (must exist).")
+    setup_parser.add_argument(
+        "--host-home", type=Path, default=None, help="The data folder as the Docker host sees it (inside a container)."
+    )
+
+    secrets_parser = subparsers.add_parser("secrets", help="List or read the secrets of a node.")
+    secrets_parser.add_argument("--home", type=Path, default=Path(".pluginlake"), help="Data folder.")
+    secrets_sub = secrets_parser.add_subparsers(dest="secrets_command", required=True)
+    secrets_sub.add_parser("list", help="Show name, origin and presence of each secret, without values.")
+    secrets_get = secrets_sub.add_parser("get", help="Print the value of one secret (needs read access to the file).")
+    secrets_get.add_argument("name", help="Name of the secret.")
+
     down_parser = subparsers.add_parser("down", help="Stop the station stack (all profiles).")
     down_parser.add_argument("-v", "--volumes", action="store_true", help="Also remove named volumes.")
 
@@ -68,27 +88,25 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         Process exit code.
     """
+    setup_logging()
     parser = _build_parser()
     args = parser.parse_args(argv)
 
-    if not args.command:
+    handlers = {
+        "init": lambda: run_init(name=args.name, dest=args.dest, force=args.force),
+        "verify": lambda: run_verify(project=args.project),
+        "up": lambda: run_up(config_path=args.config, detach=args.detach, build=not args.no_build),
+        "setup": lambda: run_setup(config_path=args.config, home=args.home, host_home=args.host_home),
+        "secrets": lambda: (
+            run_secrets_list(args.home) if args.secrets_command == "list" else run_secrets_get(args.home, args.name)
+        ),
+        "down": lambda: run_down(volumes=args.volumes),
+    }
+    handler = handlers.get(args.command)
+    if handler is None:
         parser.print_help()
         return 0
-
-    if args.command == "init":
-        return run_init(name=args.name, dest=args.dest, force=args.force)
-
-    if args.command == "verify":
-        return run_verify(project=args.project)
-
-    if args.command == "up":
-        return run_up(config_path=args.config, detach=args.detach, build=not args.no_build)
-
-    if args.command == "down":
-        return run_down(volumes=args.volumes)
-
-    parser.print_help()
-    return 0
+    return handler()
 
 
 if __name__ == "__main__":

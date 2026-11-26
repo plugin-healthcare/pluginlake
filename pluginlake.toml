@@ -7,22 +7,27 @@
 
 [station]
 endpoint_url = "http://localhost:8000"
-# Marquez as OpenLineage receiver (compose profile `lineage`, ADR-007).
-# Web UI on http://127.0.0.1:3001 (host loopback only).
+# Marquez is the OpenLineage receiver and part of every node (ADR-007); `just up` always starts it.
+# `lineage` only controls the development flow of `pluginlake up`.
 lineage = true
 # OpenLineage namespace for this node's jobs in Marquez; unique per node.
 lineage_namespace = "ds-local-001"
 
-# Prometheus + exporters (compose profile `monitoring`, ADR-010). Remote-write
-# credentials go in deploy/compose/.env.monitoring, never in this file.
+# Prometheus + exporters (ADR-010), part of every node.
 [monitoring]
 enabled = true
 station_id = "ds-local-001"
 # cadvisor = false  # when the host already runs cAdvisor (e.g. a vantage6 host stack)
-# remote_write_url = "https://plugin.dhd.nl/prometheus/api/v1/write"
+# retention = "15d"
+
+# Production stack (`just up`, see docs/guides/docker.md). A domain below .localhost runs locally with an mkcert certificate.
+[node]
+domain = "pluginlake.localhost"  # production: your own domain, e.g. pluginlake.example.org
+# admin_username = "admin"
 
 [[projects]]
 name = "ehds-demo"
+# Installed by `pluginlake up` (development stack); `just up` does not install projects yet.
 # Dev: local sibling checkout, mounted and editable-installed into the images.
 path = "../pluginlake-ehds-demo"
 # Prod alternative (pinned, no local checkout needed):

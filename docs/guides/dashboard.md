@@ -1,6 +1,6 @@
 # Dashboard
 
-pluginlake includes two Streamlit dashboards: a **datastation dashboard** for monitoring a single data station, and a **central dashboard** for aggregating data across multiple stations.
+pluginlake includes a Streamlit **datastation dashboard** for monitoring a single data station.
 
 ## Datastation dashboard
 
@@ -19,19 +19,17 @@ It connects to the FastAPI API and displays pipeline status, data catalog conten
 | **FHIR** | FHIR resource statistics. |
 | **Upload Data** | Upload OMOP CSV or FHIR NDJSON files through the API. |
 
-### Running locally
+### Running
+
+In a node the dashboard is the console at `https://console.<domain>` (see the [Getting started](getting-started.md)).
+For development:
 
 ```bash
-# With Docker (recommended)
 just dev-up          # Starts all services including the dashboard
 just dev-up-headless # Starts backend services only (no dashboard)
-
-# Without Docker
-cd src/pluginlake-ui/datastation
-streamlit run app.py
 ```
 
-The dashboard is available at `http://localhost:8501`.
+The dev dashboard is available at `http://localhost:8501`.
 
 ### Configuration
 
@@ -41,54 +39,13 @@ The dashboard uses pydantic-settings with the `DASHBOARD_` environment prefix:
 |----------|---------|-------------|
 | `DASHBOARD_API_URL` | `http://pluginlake:8000` | pluginlake API base URL |
 | `DASHBOARD_API_TIMEOUT` | `30` | API request timeout in seconds |
-| `DASHBOARD_DAGSTER_URL` | `http://localhost:3000/asset-groups` | Link to the Dagster UI |
-| `DASHBOARD_DATASTATION_ID` | `ds-local-001` | Unique identifier for this station |
-| `DASHBOARD_DATASTATION_NAME` | `demo-1` | Display name shown in the sidebar |
+| `DASHBOARD_DOMAIN` | `pluginlake.localhost` | Domain of the node; the sidebar links to the other web interfaces on its subdomains, for each role the user has. A deployed node gets `[node] domain` from `pluginlake.toml` through `just setup` |
+| `DASHBOARD_DATASTATION_ID` | `ds-local-001` | Unique identifier for this station. The default is a development value; set it for each deployed node |
+| `DASHBOARD_DATASTATION_NAME` | `demo-1` | Display name shown in the sidebar. The default is a development value; set it for each deployed node |
 | `DASHBOARD_ASSETS_DIR` | `/app/assets` | Path to brand assets (logo, images) |
 
 ### Architecture
 
-The dashboard follows a layered structure:
-
-```text
-src/pluginlake-ui/datastation/
-├── app.py              # Streamlit entrypoint, navigation, sidebar
-├── client.py           # HTTP client wrapping the pluginlake API
-├── config.py           # Pydantic settings
-├── backend/            # Data fetching functions per domain
-│   ├── catalog.py
-│   ├── fhir.py
-│   ├── ingestion.py
-│   ├── metadata.py
-│   ├── pipelines.py
-│   └── statistics.py
-├── components/         # Reusable UI components
-│   ├── catalog_detail.py
-│   ├── data_flow.py
-│   ├── fhir_charts.py
-│   ├── ingestion_form.py
-│   ├── metadata_view.py
-│   ├── omop_charts.py
-│   └── status.py
-└── pages/              # Streamlit multipage app pages
-    ├── 0_Introductie.py
-    ├── 1_Overview.py
-    ├── 1_Data_Catalog.py
-    ├── 2_Pipelines.py
-    ├── 2_OMOP_Statistics.py
-    ├── 4_FHIR.py
-    └── 5_Data_Ingestion.py
-```
-
-All data flows through the FastAPI API. The dashboard never accesses DuckLake or Dagster directly.
-
-## Central dashboard
-
-The central dashboard aggregates information from multiple data stations.
-It is a separate Streamlit app under `src/pluginlake-ui/central/`.
-
-```bash
-just dev-central
-```
-
-The central dashboard is available at `http://localhost:8502`.
+The dashboard code lives in `src/pluginlake-ui/datastation/`: `app.py` (entrypoint, navigation, sidebar), `client.py` (HTTP client), `config.py` (settings), `backend/` (data fetching), `components/` (reusable UI) and `pages/`.
+All data flows through the FastAPI API.
+The dashboard never accesses DuckLake or Dagster directly.

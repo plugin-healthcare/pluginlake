@@ -22,6 +22,14 @@ compute_logs:
   module: dagster._core.storage.noop_compute_log_manager
   class: NoOpComputeLogManager
 
+# Default IO manager output and schedule state go to the writable data mount of the code
+# server, because $DAGSTER_HOME is inside the read-only image.
+local_artifact_storage:
+  module: dagster._core.storage.root
+  class: LocalArtifactStorage
+  config:
+    base_dir: /app/.data/dagster
+
 run_launcher:
   module: dagster
   class: DefaultRunLauncher
