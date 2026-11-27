@@ -423,7 +423,7 @@ services:
     <<: *hardening
     logging: *default-logging
     user: "${PLUGINLAKE_UID:?run just setup}:${PLUGINLAKE_GID:?run just setup}"
-    image: traefik:v3.7@sha256:f4bb143d1135a579b630ed491e17ec50f6f7c9c6a30585ff3d385471d2a86f5a
+    image: traefik:v3.8@sha256:00c9734983e74ae35a1fc18eaee9e9da13f3dde95c4e45b3b8c3b60e0dbd2d17
     read_only: true
     cap_add: [NET_BIND_SERVICE]
     ports:
